@@ -23,6 +23,8 @@ from database import engine, Base
 from db import tables as _  # noqa: F401 — 注册 ORM 模型到 Base.metadata
 from api.health import router as health_router
 from api.master_data import router as master_router
+from api.ai_config import router as ai_router
+from api.agent_config import router as agent_router
 
 
 def _init_db():
@@ -64,6 +66,8 @@ def _init_db():
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化，关闭时清理"""
     _init_db()
+    from services.agent_init import init_agent_workspaces
+    init_agent_workspaces()
     url = f"http://{HOST}:{PORT}"
     print(f"账房先生已启动 → {url}")
     webbrowser.open(url)
@@ -85,6 +89,8 @@ app.add_middleware(
 # ── 注册路由 ──
 app.include_router(health_router, prefix="/api")
 app.include_router(master_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")
+app.include_router(agent_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──
