@@ -255,3 +255,104 @@ class AgentConfigOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────
+# 手工流水 — 字段池
+# ──────────────────────────────────────────
+class ManualFieldPoolOut(BaseModel):
+    id: int
+    field_code: str
+    field_name_cn: str
+    data_type: str
+    is_core: bool
+    is_default_visible: bool
+    is_disable_allowed: bool
+    is_parse_key: bool
+    is_validation_key: bool
+    is_batch_inheritable: bool
+    options_json: Optional[str] = None
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────
+# 手工流水 — 方案
+# ──────────────────────────────────────────
+class ManualSchemeCreate(BaseModel):
+    scheme_code: str = Field(..., max_length=50)
+    scheme_name: str = Field(..., max_length=100)
+    description: Optional[str] = None
+    selected_fields: List[str]
+    is_default: bool = False
+
+
+class ManualSchemeUpdate(BaseModel):
+    scheme_name: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = None
+    selected_fields: Optional[List[str]] = None
+    is_default: Optional[bool] = None
+    status: Optional[str] = None
+
+
+class ManualSchemeOut(BaseModel):
+    id: int
+    scheme_code: str
+    scheme_name: str
+    description: Optional[str]
+    selected_fields: List[str]
+    is_default: bool
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────
+# 手工流水 — 快速录入
+# ──────────────────────────────────────────
+class QuickEntryRow(BaseModel):
+    entity_match_key: str = ""
+    account_match_key: str = ""
+    business_date: str
+    summary_text: str
+    counterparty_name: str = ""
+    income_amount: Optional[float] = None
+    expense_amount: Optional[float] = None
+    previous_balance_input: Optional[float] = None
+    ending_balance_input: Optional[float] = None
+    business_time: Optional[str] = None
+    department_name: Optional[str] = None
+    income_expense_type: Optional[str] = None
+    handler_name: Optional[str] = None
+    owner_name: Optional[str] = None
+    note_text: Optional[str] = None
+    pending_recovery_flag: Optional[bool] = None
+    voucher_no: Optional[str] = None
+    receipt_no: Optional[str] = None
+
+
+class QuickEntrySave(BaseModel):
+    scheme_code: str = "manual_multi_subject_basic"
+    rows: List[QuickEntryRow]
+
+
+# ──────────────────────────────────────────
+# 手工流水 — 上传/预览/提交/导出
+# ──────────────────────────────────────────
+class ManualPreviewBody(BaseModel):
+    batch_code: str
+    scheme_code: Optional[str] = None
+
+
+class ManualCommitBody(BaseModel):
+    batch_code: str
+    confirm_rows: Optional[List[int]] = None
+    fixes: Optional[List[dict]] = None
+
+
+class ManualExportTemplateBody(BaseModel):
+    scheme_code: str = "manual_multi_subject_basic"
+    include_example_rows: bool = False

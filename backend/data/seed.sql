@@ -83,3 +83,36 @@ VALUES
   (1, 'manual_multi_subject_basic', '多主体总表标准版', '默认多主体手工总表',
    '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","previous_balance_input","note_text","department_name","income_expense_type","handler_name","owner_name","pending_recovery_flag","receipt_no","voucher_no"]',
    1, 'active', datetime('now'), datetime('now'))
+
+-- 手工字段池 — 可选字段（余额/时间/业务）
+INSERT INTO manual_field_pool (id, field_code, field_name_cn, data_type, is_core, is_default_visible, is_disable_allowed, is_parse_key, is_validation_key, is_batch_inheritable, status, created_at, updated_at)
+VALUES
+  (8, 'previous_balance_input', '上期余额', 'number', 0, 0, 1, 0, 1, 0, 'active', datetime('now'), datetime('now')),
+  (9, 'ending_balance_input', '期末余额', 'number', 0, 0, 1, 0, 1, 0, 'active', datetime('now'), datetime('now')),
+  (10, 'business_time', '业务时间', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now'));
+
+-- 手工字段池 — 可选字段（业务信息）
+INSERT INTO manual_field_pool (id, field_code, field_name_cn, data_type, is_core, is_default_visible, is_disable_allowed, is_parse_key, is_validation_key, is_batch_inheritable, status, created_at, updated_at)
+VALUES
+  (11, 'group_name', '分组', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (12, 'department_name', '所属部门', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (13, 'income_expense_type', '收支类型', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (14, 'handler_name', '经办人', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (15, 'owner_name', '负责人', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (16, 'note_text', '备注', 'text', 0, 1, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (17, 'pending_recovery_flag', '待回补', 'bool', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (18, 'voucher_no', '凭证号', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now')),
+  (19, 'receipt_no', '回单编号', 'text', 0, 0, 1, 0, 0, 0, 'active', datetime('now'), datetime('now'));
+
+-- 附加预设手工方案
+INSERT INTO manual_template_schemes (id, scheme_code, scheme_name, description, selected_fields_json, is_default, status, created_at, updated_at)
+VALUES
+  (2, 'manual_simple_cash', '现金简版', '现金类快速录入',
+   '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","note_text"]',
+   0, 'active', datetime('now'), datetime('now')),
+  (3, 'manual_bank_manual_account', '手工银行账户简版', '无网银账户或少量手工银行发生额',
+   '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","previous_balance_input","ending_balance_input","voucher_no","receipt_no"]',
+   0, 'active', datetime('now'), datetime('now')),
+  (4, 'manual_multi_subject_with_people', '多主体总表（含人员信息）', '多主体录入带经办人和负责人',
+   '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","department_name","handler_name","owner_name","note_text"]',
+   0, 'active', datetime('now'), datetime('now'));
