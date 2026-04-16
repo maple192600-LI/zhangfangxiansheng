@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# Virtual environment
+backend/venv/
+
+# SQLite database (regenerated on startup)
+backend/data/zhangfang.db
+backend/data/zhangfang.db-wal
+backend/data/zhangfang.db-shm
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Backups & exports (runtime data)
+backups/*.zip
+exports/*.xlsx

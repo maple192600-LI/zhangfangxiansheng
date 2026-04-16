@@ -1,0 +1,67 @@
+/* ──────────────────────────────────────────
+   账房先生 — 视觉主题变量
+   严格复刻 preview_v4_confirmed.html
+   ────────────────────────────────────────── */
+:root {
+  --bg: #f5f3ee;
+  --panel: #fbfaf7;
+  --panel-2: #ffffff;
+  --line: #ddd7cc;
+  --line-soft: #ebe6dc;
+  --text: #2f3a32;
+  --muted: #6e746f;
+  --green: #7f9b7a;
+  --green-2: #e6efe3;
+  --green-3: #f0f6ee;
+  --accent: #c8b48a;
+  --warn: #b87b5d;
+  --warn-bg: #faeee8;
+  --blue: #6e88a7;
+  --blue-bg: #eef3f8;
+  --shadow: 0 8px 24px rgba(60, 60, 40, 0.08);
+  --radius: 16px;
+  --radius-sm: 12px;
+
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  color: var(--text);
+  background: linear-gradient(180deg, #f6f4ef 0%, #f1eee7 100%);
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* Ant Design Vue 覆盖 */
+.ant-btn-primary {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+}
+
+.ant-btn-primary:hover {
+  background: #6f8b6a !important;
+  border-color: #6f8b6a !important;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}

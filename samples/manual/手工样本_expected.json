@@ -1,0 +1,66 @@
+{
+  "sample_name": "manual_multi_subject_v1",
+  "expected_summary": {
+    "total_rows": 12,
+    "parsed_rows": 12,
+    "core_valid_rows": 12,
+    "exception_rows": 0,
+    "needs_manual_confirm_rows": 0
+  },
+  "expected_grouping": {
+    "entities": [
+      "E001",
+      "E002",
+      "E003",
+      "E004",
+      "E005"
+    ],
+    "accounts": [
+      "A001",
+      "A101",
+      "A301",
+      "A302",
+      "A205",
+      "A402"
+    ]
+  },
+  "expected_post_parse_actions": [
+    "进入上传结果预览",
+    "允许手动维护修正",
+    "通过校验后进入基础数据表",
+    "再参与资金日报和综合报表生成"
+  ],
+  "critical_field_rules": {
+    "required": [
+      "单位编码",
+      "账户编码",
+      "业务日期",
+      "摘要",
+      "对方名称",
+      "上期余额",
+      "收入",
+      "支出"
+    ],
+    "optional": [
+      "分组",
+      "单位名称",
+      "账户名称",
+      "对方账号",
+      "期末余额",
+      "所属部门",
+      "收支类型",
+      "经办人",
+      "负责人",
+      "备注",
+      "自定义字段1",
+      "自定义字段2"
+    ],
+    "system_generated": [
+      "批次号",
+      "来源类型",
+      "解析状态",
+      "异常标记",
+      "滚动余额结果"
+    ]
+  }
+}
