@@ -78,7 +78,6 @@
             {{ tab.name }}
           </button>
         </div>
-        <div class="explain">{{ explainText }}</div>
         <div class="content">
           <router-view />
         </div>
@@ -541,16 +540,6 @@ watch(() => router.currentRoute.value, (route) => {
   border-color: #d7e5d4;
   color: #2f4330;
   font-weight: 600;
-}
-
-.explain {
-  background: #fff7cc;
-  border-top: 1px solid #efd95e;
-  border-bottom: 1px solid #efd95e;
-  padding: 10px 14px;
-  color: #6d5b00;
-  font-size: 13px;
-  line-height: 1.8;
 }
 
 .content {

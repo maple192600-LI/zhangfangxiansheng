@@ -1,9 +1,5 @@
 <template>
   <div class="section">
-    <div class="section-title">
-      <h3>{{ pageTitle }}</h3>
-      <span>V2 阶段实现</span>
-    </div>
     <div class="placeholder">此模块将在后续版本中开发，敬请期待。</div>
   </div>
 </template>

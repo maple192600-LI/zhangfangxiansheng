@@ -1,10 +1,5 @@
 <template>
   <div class="section">
-    <div class="section-title">
-      <h3>银行流水导入</h3>
-      <span>上传银行流水文件 → 模板匹配 → 预览 → 确认提交</span>
-    </div>
-
     <!-- 步骤指示器 -->
     <div class="steps">
       <div class="step" :class="{ active: step >= 1, done: step > 1 }">
@@ -190,9 +185,8 @@
 
     <!-- 模板管理区 -->
     <div class="section" style="margin-top:14px" v-if="step === 1">
-      <div class="section-title">
-        <h3>解析模板</h3>
-        <button class="btn btn-secondary" style="font-size:12px" @click="showTemplateForm = true">+ 新建模板</button>
+      <div class="top-bar">
+        <button class="btn btn-secondary" style="font-size:12px" @click="showTemplateForm = true">+ 新建规则</button>
       </div>
       <table class="data-table" v-if="templates.length">
         <thead>
@@ -208,16 +202,16 @@
           </tr>
         </tbody>
       </table>
-      <p v-else style="color:var(--muted);font-size:13px">暂无解析模板</p>
+      <p v-else style="color:var(--muted);font-size:13px">暂无银行流水规则</p>
     </div>
 
     <!-- 新建模板弹窗 -->
     <div class="modal-mask" v-if="showTemplateForm" @click.self="showTemplateForm = false">
       <div class="modal">
-        <h3>新建解析模板</h3>
+        <h3>新建银行流水规则</h3>
         <div class="form-group">
-          <label>模板名称</label>
-          <input v-model="tplForm.template_name" class="filter" placeholder="如：农业银行标准模板" />
+          <label>规则名称（中文，如：招商银行标准流水）</label>
+          <input v-model="tplForm.template_name" class="filter" placeholder="如：招商银行标准流水" />
         </div>
         <div class="form-group">
           <label>文件格式</label>

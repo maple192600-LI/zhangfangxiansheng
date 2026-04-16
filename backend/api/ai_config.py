@@ -2,6 +2,8 @@
 
 GET/POST/PUT /api/ai-configs
 POST /api/ai-configs/{id}/test
+GET /api/ai-providers — 获取所有提供商和模型列表
+GET /api/ai-providers/ollama/models — 自动检测 Ollama 本地模型
 """
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -9,6 +11,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from core.response import error, success
+from core.ai_provider import get_provider_list, detect_ollama_models
 from database import get_db
 from services import ai_config_service as svc
 
@@ -69,3 +72,16 @@ def test_ai_connection(config_id: int, db: Session = Depends(get_db)):
     if not result.get("connected"):
         return error(5001, result.get("error", "连接失败"), data=result)
     return success(result)
+
+
+@router.get("/ai-providers")
+def list_providers():
+    """返回所有支持的 AI 提供商及其模型列表"""
+    return success(get_provider_list())
+
+
+@router.get("/ai-providers/ollama/models")
+def detect_ollama():
+    """自动检测本地 Ollama 已安装的模型"""
+    models = detect_ollama_models()
+    return success(models)

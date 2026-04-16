@@ -1,10 +1,5 @@
 <template>
   <div class="section">
-    <div class="section-title">
-      <h3>Agent 配置</h3>
-      <span>内置 Agent 的状态和 AI 配置绑定</span>
-    </div>
-
     <table class="data-table" v-if="agents.length">
       <thead>
         <tr><th>Agent</th><th>类型</th><th>绑定 AI 配置</th><th>状态</th><th>操作</th></tr>

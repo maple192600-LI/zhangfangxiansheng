@@ -68,8 +68,8 @@ const routes = [
       { path: 'data/invoice', name: 'data-invoice', component: Placeholder },
       { path: 'data/voucher-tpl', name: 'data-voucher-tpl', component: Placeholder },
 
-      // 系统设置 > 规则中心（V2 占位）
-      { path: 'rule/bank', name: 'rule-bank', component: Placeholder },
+      // 系统设置 > 规则中心
+      { path: 'rule/bank', name: 'rule-bank', component: () => import('@/views/BankRule.vue') },
       { path: 'rule/io', name: 'rule-io', component: Placeholder },
       { path: 'rule/origin', name: 'rule-origin', component: Placeholder },
       { path: 'rule/voucher', name: 'rule-voucher', component: Placeholder },

@@ -1,9 +1,5 @@
 <template>
   <div class="section">
-    <div class="section-title">
-      <h3>今日工作总览</h3>
-      <span>默认打开页</span>
-    </div>
     <div class="filters-bar">
       <div class="filter">日期：2026-04-10</div>
       <div class="filter">口径：全部法人</div>

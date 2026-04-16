@@ -26,7 +26,23 @@ All must converge to:
 - `frontend/src/views/IncomeList.vue`
 - `frontend/src/views/ExpenseList.vue`
 
-## 4. Base data table role
+## 4. 报表预设模板
+
+每种报表都必须有预设的格式模板，用于：
+- 确定展示哪些列、列顺序、列宽
+- 确定分组/汇总方式
+- 导出 Excel 时的格式标准
+- 可供 AI Agent 在生成报表时参照
+
+**预设模板清单：**
+1. **基础数据表** — 日期/法人/账户/收入/支出/余额/对方/摘要，按日期正序
+2. **现金日记账** — 按账户分组，日期正序，显示上日余额→本日收入→本日支出→本日余额
+3. **账户余额表** — 按法人→账户层级，显示期初余额/本期收入/本期支出/期末余额
+4. **收入明细表** — 仅收入方向，按日期+法人分组
+5. **支出明细表** — 仅支出方向，按日期+法人分组
+6. **资金日报** — 单日汇总，按法人分组，总收入/总支出/净变动/日终余额
+
+## 5. Base data table role
 
 Base data table is the formal processing bottom layer for report generation.
 

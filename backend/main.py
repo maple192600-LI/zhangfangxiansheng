@@ -12,8 +12,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles  # noqa: F401 — kept for potential future use
+from fastapi.responses import FileResponse, Response
 
 # 确保项目根目录在 sys.path 中
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -108,19 +108,18 @@ if os.path.isdir(frontend_dist):
         # /api 路径直接放行给路由层
         if path.startswith("/api"):
             return await call_next(request)
-        # 静态资源（有扩展名且文件存在）直接放行给 StaticFiles
+        # 静态资源（有扩展名且文件存在）直接返回文件 + 禁缓存
         if "." in os.path.basename(path):
             file_path = os.path.join(frontend_dist, path.lstrip("/"))
             if os.path.isfile(file_path):
-                return await call_next(request)
-        # 其余所有路径（/bank-import、/account-manage 等）返回 index.html
+                return FileResponse(file_path,
+                                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        # 其余所有路径（/ /bank-import /account-manage 等）返回 index.html
         index_html = os.path.join(frontend_dist, "index.html")
         if os.path.isfile(index_html):
-            return FileResponse(index_html, media_type="text/html")
+            return FileResponse(index_html, media_type="text/html",
+                                headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return await call_next(request)
-
-    # 静态资源挂载（仅用于 /assets/ 等有扩展名的文件）
-    app.mount("/", StaticFiles(directory=frontend_dist), name="frontend")
 
 
 if __name__ == "__main__":

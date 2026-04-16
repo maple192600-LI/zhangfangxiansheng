@@ -48,3 +48,16 @@ export const createAlias = (accountId, data) =>
 
 export const deleteAlias = (accountId, aliasId) =>
   http.delete(`/accounts/${accountId}/aliases/${aliasId}`)
+
+// ── 批量导入 ──
+export const downloadAccountTemplate = () =>
+  window.open('/api/accounts/template', '_blank')
+
+export const importAccounts = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return http.post('/accounts/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+}

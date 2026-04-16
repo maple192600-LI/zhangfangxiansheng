@@ -1,7 +1,6 @@
 <template>
   <div class="section">
-    <div class="section-title">
-      <h3>API KEY 配置</h3>
+    <div class="top-bar">
       <button class="btn btn-primary" @click="openForm()">+ 添加配置</button>
     </div>
 
@@ -13,7 +12,7 @@
       </thead>
       <tbody>
         <tr v-for="c in configs" :key="c.id">
-          <td>{{ c.provider }}</td>
+          <td>{{ getProviderLabel(c.provider) }}</td>
           <td>{{ c.display_name }}</td>
           <td>{{ c.model_name || '-' }}</td>
           <td><span class="badge" :class="c.is_default ? 'enabled' : 'disabled'">{{ c.is_default ? '默认' : '-' }}</span></td>
@@ -37,37 +36,51 @@
     </div>
 
     <div class="modal-mask" v-if="showForm" @click.self="showForm=false">
-      <div class="modal">
+      <div class="modal" style="max-width:540px">
         <h3>{{ editing ? '编辑配置' : '添加配置' }}</h3>
+
         <div class="form-group">
           <label>提供商</label>
           <select v-model="form.provider" class="filter">
-            <option value="zhipu">智谱 (GLM)</option>
-            <option value="kimi">Kimi (月之暗面)</option>
-            <option value="qwen">通义千问</option>
-            <option value="openai_compatible">OpenAI 兼容</option>
-            <option value="ollama">Ollama (本地)</option>
+            <option v-for="p in providers" :key="p.code" :value="p.code">{{ p.label }}</option>
           </select>
         </div>
+
         <div class="form-group">
           <label>显示名称</label>
-          <input v-model="form.display_name" class="filter" placeholder="如：智谱 GLM-4" />
+          <input v-model="form.display_name" class="filter" placeholder="如：智谱 GLM-5 Turbo" />
         </div>
-        <div class="form-group">
+
+        <div class="form-group" v-if="currentProviderNeedsKey">
           <label>API Key{{ editing ? '（留空不修改）' : '' }}</label>
           <input v-model="form.api_key" type="password" class="filter" placeholder="sk-..." />
         </div>
+
         <div class="form-group">
-          <label>Base URL（可选）</label>
-          <input v-model="form.base_url" class="filter" placeholder="留空使用默认地址" />
+          <label>Base URL</label>
+          <input v-model="form.base_url" class="filter" :placeholder="currentProviderDefaultUrl || '输入 API 地址'" />
         </div>
+
         <div class="form-group">
-          <label>模型名称</label>
-          <input v-model="form.model_name" class="filter" placeholder="如：glm-4-flash" />
+          <label>模型</label>
+          <select v-if="availableModels.length" v-model="form.model_name" class="filter">
+            <option value="">— 请选择模型 —</option>
+            <option v-for="m in availableModels" :key="m.id" :value="m.id">{{ m.name }} — {{ m.desc }}</option>
+          </select>
+          <input v-else v-model="form.model_name" class="filter" placeholder="输入模型名称" />
         </div>
+
+        <div class="form-group" v-if="form.provider === 'ollama'">
+          <button class="btn btn-secondary btn-sm" @click="detectOllama" :disabled="detecting">
+            {{ detecting ? '检测中...' : '自动检测本地模型' }}
+          </button>
+          <span v-if="ollamaModels.length" style="margin-left:8px;color:var(--green);font-size:12px">发现 {{ ollamaModels.length }} 个模型</span>
+        </div>
+
         <div class="form-group">
           <label><input type="checkbox" v-model="form.is_default" /> 设为默认</label>
         </div>
+
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
           <button class="btn btn-secondary" @click="showForm=false">取消</button>
           <button class="btn btn-primary" @click="save">保存</button>
@@ -78,15 +91,66 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import * as api from '@/api/ai'
 
+const providers = ref([])
 const configs = ref([])
 const showForm = ref(false)
 const editing = ref(null)
 const testing = ref(null)
 const testResult = ref(null)
-const form = ref({ provider: 'zhipu', display_name: '', api_key: '', base_url: '', model_name: '', is_default: false })
+const detecting = ref(false)
+const ollamaModels = ref([])
+
+const form = ref({
+  provider: 'zhipu', display_name: '', api_key: '',
+  base_url: '', model_name: '', is_default: false,
+})
+
+const currentProviderNeedsKey = computed(() => {
+  const p = providers.value.find(p => p.code === form.value.provider)
+  return p ? p.needs_api_key : true
+})
+
+const currentProviderDefaultUrl = computed(() => {
+  const p = providers.value.find(p => p.code === form.value.provider)
+  return p ? p.base_url : ''
+})
+
+const availableModels = computed(() => {
+  if (form.value.provider === 'ollama' && ollamaModels.value.length > 0) {
+    return ollamaModels.value
+  }
+  const p = providers.value.find(p => p.code === form.value.provider)
+  return p ? p.models : []
+})
+
+// 选择提供商时自动预填
+watch(() => form.value.provider, (newProvider) => {
+  if (editing.value) return
+  const p = providers.value.find(p => p.code === newProvider)
+  if (p) {
+    form.value.base_url = p.base_url || ''
+    form.value.display_name = p.label
+    if (p.models.length > 0) {
+      form.value.model_name = p.models[0].id
+    } else {
+      form.value.model_name = ''
+    }
+  }
+})
+
+function getProviderLabel(code) {
+  const p = providers.value.find(p => p.code === code)
+  return p ? p.label : code
+}
+
+async function loadProviders() {
+  try {
+    providers.value = await api.getProviders()
+  } catch { providers.value = [] }
+}
 
 async function load() {
   try { configs.value = await api.getAIConfigs() } catch(e) { console.error(e) }
@@ -94,14 +158,33 @@ async function load() {
 
 function openForm(c) {
   testResult.value = null
+  ollamaModels.value = []
   if (c) {
     editing.value = c
-    form.value = { provider: c.provider, display_name: c.display_name, api_key: '', base_url: c.base_url || '', model_name: c.model_name || '', is_default: c.is_default }
+    form.value = {
+      provider: c.provider, display_name: c.display_name, api_key: '',
+      base_url: c.base_url || '', model_name: c.model_name || '', is_default: c.is_default,
+    }
   } else {
     editing.value = null
     form.value = { provider: 'zhipu', display_name: '', api_key: '', base_url: '', model_name: '', is_default: false }
   }
   showForm.value = true
+}
+
+async function detectOllama() {
+  detecting.value = true
+  try {
+    const models = await api.detectOllamaModels()
+    ollamaModels.value = models || []
+    if (models.length > 0 && !form.value.model_name) {
+      form.value.model_name = models[0].id
+    }
+  } catch {
+    ollamaModels.value = []
+    alert('未检测到本地 Ollama 服务，请确认已安装并启动 Ollama')
+  }
+  detecting.value = false
 }
 
 async function save() {
@@ -137,7 +220,7 @@ async function setDefault(id) {
   } catch(e) { alert(e.message) }
 }
 
-onMounted(load)
+onMounted(() => { loadProviders(); load() })
 </script>
 
 <style scoped>

@@ -19,6 +19,15 @@
 .section-title h3 { margin: 0; font-size: 17px; }
 .section-title span { color: var(--muted); font-size: 13px; }
 
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .filters-bar {
   display: flex;
   flex-wrap: wrap;
