@@ -25,6 +25,8 @@ from api.health import router as health_router
 from api.master_data import router as master_router
 from api.ai_config import router as ai_router
 from api.agent_config import router as agent_router
+from api.bank_import import router as bank_import_router
+from api.parser_template import router as parser_template_router
 
 
 def _init_db():
@@ -91,6 +93,8 @@ app.include_router(health_router, prefix="/api")
 app.include_router(master_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
+app.include_router(bank_import_router, prefix="/api")
+app.include_router(parser_template_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──
