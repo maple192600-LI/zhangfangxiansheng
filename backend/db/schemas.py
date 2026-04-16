@@ -316,8 +316,8 @@ class ManualSchemeOut(BaseModel):
 class QuickEntryRow(BaseModel):
     entity_match_key: str = ""
     account_match_key: str = ""
-    business_date: str
-    summary_text: str
+    business_date: str = ""
+    summary_text: str = ""
     counterparty_name: str = ""
     income_amount: Optional[float] = None
     expense_amount: Optional[float] = None
@@ -332,6 +332,22 @@ class QuickEntryRow(BaseModel):
     pending_recovery_flag: Optional[bool] = None
     voucher_no: Optional[str] = None
     receipt_no: Optional[str] = None
+
+    @classmethod
+    def _coerce_empty_to_none(cls, v):
+        if v == "" or v == " ":
+            return None
+        return v
+
+    def __init__(self, **data):
+        for field in ("income_amount", "expense_amount", "previous_balance_input", "ending_balance_input"):
+            if field in data and isinstance(data[field], str):
+                data[field] = self._coerce_empty_to_none(data[field])
+        for field in ("pending_recovery_flag",):
+            if field in data and isinstance(data[field], str):
+                val = data[field].strip().lower()
+                data[field] = True if val in ("true", "1", "yes") else (False if val in ("false", "0", "no") else None)
+        super().__init__(**data)
 
 
 class QuickEntrySave(BaseModel):

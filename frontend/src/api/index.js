@@ -8,6 +8,10 @@ const http = axios.create({
 // 响应拦截器 — 统一处理 code
 http.interceptors.response.use(
   (res) => {
+    // blob 响应直接返回（导出模板等）
+    if (res.config.responseType === 'blob') {
+      return res.data
+    }
     const { code, message, data } = res.data
     if (code === 0) {
       return data

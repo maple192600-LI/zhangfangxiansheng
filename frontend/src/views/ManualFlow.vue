@@ -62,7 +62,7 @@
                   <input v-model="row[col.field_code]" class="cell-input" :placeholder="col.field_name_cn" />
                 </template>
               </td>
-              <td><button class="btn btn-secondary btn-sm" @click="editableRows.splice(idx,1)" title="删除行">x</button></td>
+              <td><button class="btn btn-secondary btn-sm" @click="editableRows.splice(idx, 1)" title="删除行">x</button></td>
             </tr>
             <tr v-if="!editableRows.length">
               <td :colspan="visibleColumns.length + 1" class="empty">点击下方"添加行"开始录入</td>
@@ -72,7 +72,7 @@
       </div>
 
       <div class="bottom-bar">
-        <button class="btn btn-secondary" @click="addRow">+ 添加行</button>
+        <button class="btn btn-secondary" @click="addRow()">+ 添加行</button>
         <button class="btn btn-secondary" @click="addRows(5)">+ 添加5行</button>
         <button class="btn btn-primary" @click="doSave" :disabled="saving">{{ saving ? '保存中...' : '保存到暂存区' }}</button>
         <span class="count-info">共 {{ editableRows.length }} 行</span>
