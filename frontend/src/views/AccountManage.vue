@@ -12,9 +12,10 @@
         </select>
         <select v-model="filterEntity" class="filter">
           <option :value="null">全部法人</option>
+
           <option v-for="e in filteredEntities" :key="e.id" :value="e.id">{{ e.short_name }}</option>
         </select>
-        <input v-model="keyword" class="filter" placeholder="搜索编码/别名/银行/账号" style="width:180px" />
+        <input v-model="keyword" class="filter" placeholder="搜索账户编码/账户名称/银行/账号" style="width:220px" />
         <select v-model="filterStatus" class="filter" style="width:90px">
           <option value="">全部</option>
           <option value="enabled">启用</option>
@@ -34,11 +35,11 @@
           <thead>
             <tr>
               <th class="col-id">ID</th>
-              <th class="col-code">编码</th>
-              <th class="col-alias">别名</th>
-              <th class="col-entity">法人</th>
+              <th class="col-code">账户编码</th>
+              <th class="col-alias">账户名称</th>
+              <th class="col-entity">法人简称</th>
               <th class="col-bank">开户银行</th>
-              <th class="col-number">账号</th>
+              <th class="col-number">银行账号</th>
               <th class="col-type">账户类型</th>
               <th class="col-instrument">工具类型</th>
               <th class="col-balance">期初余额</th>

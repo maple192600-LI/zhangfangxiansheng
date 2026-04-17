@@ -17,8 +17,8 @@
         </select>
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary">导出</button>
-          <button class="btn btn-secondary">打印</button>
+          <button class="btn btn-secondary" @click="doExport">导出</button>
+          <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="loadReport">查询</button>
         </div>
       </div>
@@ -55,6 +55,7 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { exportReport } from '@/api/export'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -80,6 +81,16 @@ async function loadReport() {
     if (accountId.value) params.account_id = accountId.value
     blocks.value = await api.getCashJournal(params) || []
   } catch (e) { alert('查询失败: ' + (e.message || e)) }
+}
+
+async function doExport() {
+  try {
+    const blob = await exportReport({ export_type: 'cash_journal', start_date: startDate.value || undefined, end_date: endDate.value || undefined })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `cash_journal.xlsx`; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }
 
 onMounted(async () => {

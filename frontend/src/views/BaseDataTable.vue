@@ -22,8 +22,8 @@
         <div style="flex:1"></div>
         <div class="btn-row">
           <button class="btn btn-secondary" @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</button>
-          <button class="btn btn-secondary">导出</button>
-          <button class="btn btn-secondary">打印</button>
+          <button class="btn btn-secondary" @click="doExport('base_data')">导出</button>
+          <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="page = 1; loadData()">查询</button>
         </div>
       </div>
@@ -32,7 +32,7 @@
       <table v-else>
         <thead>
           <tr>
-            <th>日期</th><th>法人</th><th>账户</th><th>摘要</th><th>对方</th>
+            <th>日期</th><th>法人简称</th><th>账户名称</th><th>摘要</th><th>对方</th>
             <th>收入</th><th>支出</th><th>余额</th><th>状态</th>
           </tr>
         </thead>
@@ -69,6 +69,7 @@ import { ref, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { exportReport } from '@/api/export'
 
 const entities = ref([])
 const rows = ref([])
@@ -112,6 +113,19 @@ async function doRebuild() {
     loadData()
   } catch (e) { alert('重建失败: ' + (e.message || e)) }
   rebuilding.value = false
+}
+
+async function doExport(exportType) {
+  try {
+    const f = filters.value
+    const blob = await exportReport({ export_type: exportType, start_date: f.date_from || undefined, end_date: f.date_to || undefined, entity_id: f.entity_id || undefined })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${exportType}_${f.date_from || 'all'}_${f.date_to || 'all'}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }
 
 onMounted(async () => {

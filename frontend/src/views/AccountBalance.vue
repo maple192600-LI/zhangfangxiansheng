@@ -15,15 +15,15 @@
         </select>
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary">导出</button>
-          <button class="btn btn-secondary">打印</button>
+          <button class="btn btn-secondary" @click="doExport">导出</button>
+          <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="loadReport">查询</button>
         </div>
       </div>
       <table v-if="rows.length">
         <thead>
           <tr>
-            <th>法人</th><th>账户</th><th>期初余额</th><th>本期收入</th><th>本期支出</th><th>期末余额</th>
+            <th>法人简称</th><th>账户名称</th><th>期初余额</th><th>本期收入</th><th>本期支出</th><th>期末余额</th>
           </tr>
         </thead>
         <tbody>
@@ -60,6 +60,7 @@ import { ref, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { exportReport } from '@/api/export'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -74,6 +75,16 @@ async function loadReport() {
     if (entityId.value) params.entity_id = entityId.value
     rows.value = await api.getAccountBalance(params) || []
   } catch (e) { alert('查询失败: ' + (e.message || e)) }
+}
+
+async function doExport() {
+  try {
+    const blob = await exportReport({ export_type: 'account_balance', start_date: startDate.value || undefined, end_date: endDate.value || undefined, entity_id: entityId.value || undefined })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `account_balance.xlsx`; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }
 
 onMounted(async () => {

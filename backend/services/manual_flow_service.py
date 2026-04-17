@@ -18,6 +18,7 @@ from core.parser_engine import (
 )
 from db.tables import FundEvent, ImportBatch, Account, Entity, AccountAlias
 from services.manual_scheme_service import get_scheme_by_code
+from services import log_service
 
 
 # ── 实体/账户匹配 ──────────────────────────────
@@ -177,6 +178,9 @@ def quick_entry_save(db: Session, rows: List[Dict], scheme_code: str = "manual_m
         _create_fund_event(db, batch.id, "manual", parsed)
 
     db.commit()
+    log_service.write_log(db, action="batch_upload", module="manual_flow", detail={
+        "batch_code": batch.batch_code, "saved": saved, "abnormal": abnormal,
+    }, batch_id=batch.id)
     return {
         "batch_code": batch.batch_code,
         "batch_id": batch.id,
@@ -403,6 +407,9 @@ def commit_manual(db: Session, batch_code: str, confirm_rows: List[int] = None, 
     batch.status = "committed"
     db.commit()
 
+    log_service.write_log(db, action="batch_commit", module="manual_flow", detail={
+        "batch_code": batch_code, "committed": committed, "abnormal": abnormal,
+    }, batch_id=batch.id)
     return {
         "batch_code": batch_code,
         "committed_count": committed,

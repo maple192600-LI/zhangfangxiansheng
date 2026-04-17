@@ -19,7 +19,7 @@
         <table>
           <thead>
             <tr>
-              <th>#</th><th>法人</th><th>账户</th><th>日期</th><th>摘要</th>
+              <th>#</th><th>法人简称</th><th>账户名称</th><th>日期</th><th>摘要</th>
               <th>对方</th><th>收入</th><th>支出</th><th>异常代码</th>
             </tr>
           </thead>

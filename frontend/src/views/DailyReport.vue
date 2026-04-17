@@ -15,8 +15,8 @@
         </select>
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary">导出</button>
-          <button class="btn btn-secondary">打印</button>
+          <button class="btn btn-secondary" @click="doExport">导出</button>
+          <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="loadReport">生成日报</button>
         </div>
       </div>
@@ -25,7 +25,7 @@
       <table v-else-if="rows.length">
         <thead>
           <tr>
-            <th>法人</th><th>期初余额</th><th>收入合计</th><th>支出合计</th><th>净变动</th><th>期末余额</th>
+            <th>法人简称</th><th>期初余额</th><th>收入合计</th><th>支出合计</th><th>净变动</th><th>期末余额</th>
           </tr>
         </thead>
         <tbody>
@@ -61,6 +61,7 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { exportReport } from '@/api/export'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -89,6 +90,16 @@ async function loadReport() {
   } finally {
     loading.value = false
   }
+}
+
+async function doExport() {
+  try {
+    const blob = await exportReport({ export_type: 'daily_report', start_date: startDate.value || undefined, end_date: endDate.value || undefined, entity_id: entityId.value || undefined })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `daily_report.xlsx`; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }
 
 onMounted(async () => {

@@ -1,35 +1,27 @@
 <template>
+  <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>加载中...</p></div>
+  <template v-else>
   <div class="section">
-    <div class="filters-bar">
-      <div class="filter">日期：2026-04-10</div>
-      <div class="filter">口径：全部法人</div>
-      <div class="filter">状态：今日待办优先</div>
-    </div>
-    <div class="btn-row" style="margin-bottom: 14px;">
-      <button class="btn btn-primary">进入工作台</button>
-      <button class="btn btn-secondary">查看异常</button>
-      <button class="btn btn-secondary">生成基础数据表</button>
-    </div>
     <div class="metric-strip">
       <div class="metric">
         <div class="label">待处理任务</div>
-        <div class="value">7</div>
-        <div class="sub">未导入 2，待确认 3，待生成 2</div>
-      </div>
-      <div class="metric">
-        <div class="label">异常提醒</div>
-        <div class="value">4</div>
-        <div class="sub">收付款异常 2，规则未命中 2</div>
+        <div class="value" :class="overview.pending_tasks > 0 ? 'text-warn' : 'text-green'">{{ overview.pending_tasks || 0 }}</div>
+        <div class="sub">异常 {{ overview.abnormal_count || 0 }} 条</div>
       </div>
       <div class="metric">
         <div class="label">今日生成状态</div>
-        <div class="value">未完成</div>
-        <div class="sub">基础数据表未生成，日报未更新</div>
+        <div class="value" :class="overview.today_generated ? 'text-green' : 'text-warn'">{{ overview.today_generated ? '已完成' : '未完成' }}</div>
+        <div class="sub">{{ overview.report_info }}</div>
       </div>
       <div class="metric">
-        <div class="label">重点账户变化</div>
-        <div class="value">3 项</div>
-        <div class="sub">适合快速看一眼，不做完整汇报</div>
+        <div class="label">总收入</div>
+        <div class="value text-green">{{ fmtAmt(metrics.total_income) }}</div>
+        <div class="sub">所选区间</div>
+      </div>
+      <div class="metric">
+        <div class="label">总支出</div>
+        <div class="value text-warn">{{ fmtAmt(metrics.total_expense) }}</div>
+        <div class="sub">净变动 {{ fmtAmt(metrics.net_change) }}</div>
       </div>
     </div>
   </div>
@@ -38,72 +30,137 @@
     <div class="section">
       <div class="section-title">
         <h3>今日处理进度</h3>
-        <span>工作导向，不是汇报导向</span>
       </div>
       <div class="progress-list">
-        <div class="progress-row"><div>网银导入</div><div class="progress-bar"><span style="width: 80%"></span></div><div>80%</div></div>
-        <div class="progress-row"><div>手工流水</div><div class="progress-bar"><span style="width: 60%"></span></div><div>60%</div></div>
-        <div class="progress-row"><div>异常处理</div><div class="progress-bar"><span style="width: 35%"></span></div><div>35%</div></div>
-        <div class="progress-row"><div>基础数据表</div><div class="progress-bar"><span style="width: 0%"></span></div><div>0%</div></div>
-        <div class="progress-row"><div>日报生成</div><div class="progress-bar"><span style="width: 0%"></span></div><div>0%</div></div>
+        <div class="progress-row" v-for="(label, key) in progressLabels" :key="key">
+          <div>{{ label }}</div>
+          <div class="progress-bar"><span :style="{ width: (overview.progress?.[key] || 0) + '%' }"></span></div>
+          <div>{{ overview.progress?.[key] || 0 }}%</div>
+        </div>
       </div>
     </div>
 
     <div class="section">
       <div class="section-title">
         <h3>系统提醒</h3>
-        <span>轻量显示</span>
       </div>
       <div class="warning-list">
-        <div class="warning warn">有 2 条手工流水未指定归属账户，暂不能进入基础数据表。</div>
-        <div class="warning info">最近一次日报生成时间：2026-04-09 18:36。</div>
-        <div class="warning ok">最近一次备份完成，时间：2026-04-10 08:10。</div>
+        <div v-for="(r, i) in status.reminders" :key="i" class="warning" :class="r.type">
+          <span class="warning-dot"></span>
+          <span>{{ r.message }}</span>
+        </div>
+        <div v-if="!status.reminders?.length" class="empty-hint">暂无提醒</div>
       </div>
     </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">
+      <h3>收支趋势（近 30 天）</h3>
+    </div>
+    <div ref="trendChart" style="height: 300px;"></div>
   </div>
 
   <div class="dashboard-grid-2">
     <div class="section">
-      <div class="section-title">
-        <h3>待办追踪</h3>
-        <span>按今天工作流拆开</span>
-      </div>
-      <div class="kanban">
-        <div class="kanban-col">
-          <h5>待导入</h5>
-          <div class="task">中行流水 1 份待上传</div>
-          <div class="task">农行流水 1 份待上传</div>
-        </div>
-        <div class="kanban-col">
-          <h5>待确认</h5>
-          <div class="task">手工流水 2 条待确认归属</div>
-          <div class="task">1 条摘要待归类</div>
-        </div>
-        <div class="kanban-col">
-          <h5>待生成</h5>
-          <div class="task">基础数据表未生成</div>
-          <div class="task">资金日报未生成</div>
-        </div>
-      </div>
+      <div class="section-title"><h3>账户余额分布</h3></div>
+      <div ref="pieChart" style="height: 280px;"></div>
     </div>
-
     <div class="section">
-      <div class="section-title">
-        <h3>快捷入口</h3>
-        <span>只保留高频动作</span>
-      </div>
-      <div class="quick-grid">
-        <div class="quick"><strong>进入工作台</strong><span>开始今天的导入、录入和维护</span></div>
-        <div class="quick"><strong>查看基础数据表</strong><span>核对识别结果，确认是否可生成</span></div>
-        <div class="quick"><strong>异常中心</strong><span>集中处理待确认和规则未命中</span></div>
-        <div class="quick"><strong>OCR识别</strong><span>进入发票、合同、回单识别入口</span></div>
-        <div class="quick"><strong>重点账户余额</strong><span>快速查看关键账户状态</span></div>
-        <div class="quick"><strong>操作日志</strong><span>回看今天的主要动作</span></div>
-      </div>
+      <div class="section-title"><h3>重点账户</h3></div>
+      <table v-if="overview.account_changes?.length">
+        <thead><tr><th>账户名称</th><th>法人简称</th><th class="money">余额</th></tr></thead>
+        <tbody>
+          <tr v-for="a in overview.account_changes" :key="a.account_name">
+            <td>{{ a.account_name }}</td>
+            <td>{{ a.entity_name }}</td>
+            <td class="money">{{ fmtAmt(a.balance) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else class="empty-hint">暂无账户数据</div>
     </div>
   </div>
+  </template>
 </template>
+
+<script setup>
+import { ref, onMounted, nextTick } from 'vue'
+import * as echarts from 'echarts'
+import { getOverview, getSystemStatus } from '@/api/home'
+import { getMetrics, getTrends, getComposition } from '@/api/dashboard'
+import { fmtAmt } from '@/utils/format'
+
+const loading = ref(true)
+const overview = ref({})
+const metrics = ref({})
+const status = ref({})
+const trendChart = ref(null)
+const pieChart = ref(null)
+
+const progressLabels = {
+  bank_import: '网银导入',
+  manual_flow: '手工流水',
+  abnormal_fix: '异常处理',
+  base_data: '基础数据表',
+  daily_report: '日报生成',
+}
+
+onMounted(async () => {
+  try {
+    const [ov, mt, st, tr, cp] = await Promise.all([
+      getOverview(), getMetrics({}), getSystemStatus(), getTrends({ days: 30 }), getComposition(),
+    ])
+    overview.value = ov || {}
+    metrics.value = mt || {}
+    status.value = st || {}
+
+    // 先关闭 loading 让 DOM 渲染图表容器，再初始化 ECharts
+    loading.value = false
+    await nextTick()
+    renderTrendChart(tr)
+    renderPieChart(cp)
+  } catch (e) {
+    console.error('首页加载失败', e)
+    loading.value = false
+  }
+})
+
+function renderTrendChart(data) {
+  if (!trendChart.value || !data?.dates?.length) return
+  const chart = echarts.init(trendChart.value)
+  chart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['收入', '支出'], top: 0 },
+    grid: { top: 36, left: 50, right: 20, bottom: 30 },
+    xAxis: { type: 'category', data: data.dates, axisLabel: { fontSize: 11 } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+    series: [
+      { name: '收入', type: 'line', smooth: true, data: data.income, itemStyle: { color: '#7f9b7a' }, areaStyle: { color: 'rgba(127,155,122,.12)' } },
+      { name: '支出', type: 'line', smooth: true, data: data.expense, itemStyle: { color: '#c47a5a' }, areaStyle: { color: 'rgba(196,122,90,.1)' } },
+    ],
+  })
+  window.addEventListener('resize', () => chart.resize())
+}
+
+function renderPieChart(data) {
+  if (!pieChart.value || !data?.items?.length) return
+  const chart = echarts.init(pieChart.value)
+  chart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    series: [{
+      type: 'pie', radius: ['40%', '70%'],
+      label: { fontSize: 11 },
+      data: data.items.map(it => ({ name: it.name, value: it.value })),
+      itemStyle: { borderRadius: 6, borderColor: '#fbfaf7', borderWidth: 2 },
+      color: ['#7f9b7a', '#a8bfa4', '#c47a5a', '#d4a574', '#6b8fad', '#8faabc'],
+    }],
+  })
+  window.addEventListener('resize', () => chart.resize())
+}
+</script>
 
 <style scoped>
 @import './common.css';
+.empty-hint { color: var(--muted); font-size: var(--font-size-sm); padding: 20px; text-align: center; }
 </style>

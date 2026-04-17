@@ -456,3 +456,18 @@ tr.total-row td, tr.subtotal-row td { border-top: 2px solid var(--line); }
   .metric-strip, .dashboard-grid, .dashboard-grid-2,
   .kanban, .quick-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== 打印 ===== */
+@media print {
+  .sidebar, .right-tabs, .filters-bar, .btn-row, .bottom-bar,
+  .top-bar, .metric-strip, .dashboard-grid, .dashboard-grid-2,
+  .progress-list, .kanban, .quick-grid, .warning-list,
+  .loading-state, .error-bar, .modal-overlay { display: none !important; }
+  .app-layout { grid-template-columns: 1fr !important; }
+  .main-area { padding: 0 !important; }
+  .shell { box-shadow: none; border: none; }
+  .section { box-shadow: none; border: none; break-inside: avoid; }
+  table { font-size: 11px; break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; break-after: auto; }
+}

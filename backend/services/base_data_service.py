@@ -9,6 +9,7 @@ from sqlalchemy import func
 
 from db.tables import FundEvent, Account, Entity
 from db.schemas import BaseDataRowOut, RebuildResult
+from services import log_service
 
 
 # ── 基础数据查询 ──────────────────────────────
@@ -121,6 +122,9 @@ def rebuild_rolling_balance(db: Session, account_id: Optional[int] = None) -> Di
 
     db.commit()
 
+    log_service.write_log(db, action="report_rebuild", module="base_data", detail={
+        "affected_accounts": len(accounts), "updated_events": total_events,
+    })
     return {
         "affected_accounts": len(accounts),
         "updated_events": total_events,

@@ -9,6 +9,7 @@ from database import get_db
 from core.response import success, error
 from services import report_service as svc
 from services.base_data_service import _parse_date
+from services import log_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -33,6 +34,9 @@ def get_daily_report(
         sd = _to_date(start_date, today)
         ed = _to_date(end_date, today)
         result = svc.daily_report(db, sd, ed, entity_id)
+        log_service.write_log(db, action="report_generate", module="daily_report", detail={
+            "start_date": str(sd), "end_date": str(ed), "entity_id": entity_id,
+        })
         return success(result)
     except ValueError as e:
         return error(4001, str(e))

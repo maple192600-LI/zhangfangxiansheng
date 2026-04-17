@@ -19,6 +19,7 @@ from core.ai_call import chat
 from core.security import decrypt_key
 from db.tables import FundEvent, ImportBatch, ParserTemplate, AIConfig
 from config import DATA_DIR
+from services import log_service
 
 
 # ──────────────────────────────────────────
@@ -90,6 +91,9 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
             "confidence": "high",
         }
 
+    log_service.write_log(db, action="batch_upload", module="bank_import", detail={
+        "batch_code": batch_code, "filename": filename, "rows": len(rows) - header_idx - 1,
+    }, batch_id=batch.id)
     return result
 
 
@@ -220,6 +224,9 @@ def commit(db: Session, batch_code: str, parsed_rows: List[Dict]) -> Dict[str, A
     batch.status = "committed"
     db.commit()
 
+    log_service.write_log(db, action="batch_commit", module="bank_import", detail={
+        "batch_code": batch_code, "committed": committed, "abnormal": abnormal,
+    }, batch_id=batch.id)
     return {
         "batch_code": batch_code,
         "committed_count": committed,
