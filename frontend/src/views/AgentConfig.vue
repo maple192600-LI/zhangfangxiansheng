@@ -1,6 +1,6 @@
 <template>
   <div class="section">
-    <table class="data-table" v-if="agents.length">
+    <table v-if="agents.length">
       <thead>
         <tr><th>Agent</th><th>类型</th><th>绑定 AI 配置</th><th>状态</th><th>操作</th></tr>
       </thead>
@@ -17,7 +17,7 @@
               <option v-for="c in aiConfigs" :key="c.id" :value="c.id">{{ c.display_name }}</option>
             </select>
           </td>
-          <td><span class="badge" :class="a.status">{{ a.status === 'active' ? '启用' : '停用' }}</span></td>
+          <td><span class="tag" :class="a.status === 'active' ? 'tag-green' : 'tag-gray'">{{ a.status === 'active' ? '启用' : '停用' }}</span></td>
           <td>
             <button class="btn btn-secondary btn-sm" v-if="a.status==='active'" @click="toggleStatus(a.id, 'disabled')">停用</button>
             <button class="btn btn-primary btn-sm" v-else @click="toggleStatus(a.id, 'active')">启用</button>
@@ -78,13 +78,8 @@ onMounted(load)
 
 <style scoped>
 @import './common.css';
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data-table th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 500; }
-.data-table td { padding: 8px 10px; border-bottom: 1px solid #f0ede6; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; }
-.badge.active { background: #edf4ea; color: #3f5b3d; }
-.badge.disabled { background: #f5ece5; color: #8a6e52; }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* 页面特有样式 */
 .ws-list { display: flex; flex-direction: column; gap: 8px; }
-.ws-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 12px; background: #fff; border: 1px solid #e7e0d5; border-radius: 10px; }
+.ws-item { display: flex; align-items: center; gap: 8px; font-size: var(--font-size-sm); padding: 8px 12px; background: #fff; border: 1px solid #e7e0d5; border-radius: var(--radius-sm); }
 </style>

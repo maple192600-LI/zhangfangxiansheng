@@ -358,11 +358,11 @@ def commit_manual(db: Session, batch_code: str, confirm_rows: List[int] = None, 
                         abnormal -= 1
                     else:
                         ev.abnormal_code = ",".join(errors)
-        # 有效行状态设为 committed
+        # 有效行状态确认
         db.query(FundEvent).filter(
             FundEvent.batch_id == batch.id,
             FundEvent.parse_status == "valid"
-        ).update({"parse_status": "committed"})
+        ).update({"parse_status": "valid"})
     else:
         # Excel上传：删除旧events重新创建
         db.query(FundEvent).filter(FundEvent.batch_id == batch.id).delete()
@@ -373,7 +373,7 @@ def commit_manual(db: Session, batch_code: str, confirm_rows: List[int] = None, 
         for row in preview["parsed_rows"]:
             if confirm_rows and row.get("_row_no") not in confirm_rows:
                 continue
-            row["parse_status"] = "committed"
+            row["parse_status"] = "valid"
             _create_fund_event(db, batch.id, "manual", row)
             committed += 1
 
@@ -391,7 +391,7 @@ def commit_manual(db: Session, batch_code: str, confirm_rows: List[int] = None, 
                         row["_account_name"] = fix.get("account_name", "")
                     errors = _validate_row(row)
                     if not errors:
-                        row["parse_status"] = "committed"
+                        row["parse_status"] = "valid"
                         row["abnormal_code"] = None
                         _create_fund_event(db, batch.id, "manual", row)
                         committed += 1

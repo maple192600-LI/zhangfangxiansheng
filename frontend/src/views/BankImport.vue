@@ -57,7 +57,33 @@
           (置信度: {{ uploadResult.template_match.confidence }})
         </div>
         <div v-else class="warning warn">
-          未匹配到已有模板，请手动选择模板或配置映射。
+          未匹配到已有模板。你可以手动选择模板、让 AI 智能识别列映射，或新建规则。
+        </div>
+
+        <!-- AI 智能解析区域 -->
+        <div v-if="!(uploadResult.template_match && uploadResult.template_match.matched)" class="ai-section">
+          <button class="btn btn-primary" @click="doAIParse" :disabled="aiParsing" style="background:#2d5a6e">
+            {{ aiParsing ? 'AI 识别中...' : 'AI 智能识别列映射' }}
+          </button>
+          <div v-if="aiResult" class="ai-result" :class="aiResult.ok ? 'ok' : 'fail'">
+            <template v-if="aiResult.ok">
+              <strong>AI 识别成功</strong> — 匹配 {{ aiResult.matched_count }}/{{ aiResult.total_columns }} 列，置信度 {{ aiResult.confidence }}
+              <div class="mapping-preview">
+                <span v-for="(field, col) in aiResult.mapping" :key="col" class="mapping-tag">
+                  {{ col }} → {{ fieldLabel(field) }}
+                </span>
+              </div>
+              <div class="btn-row" style="margin-top:8px">
+                <button class="btn btn-secondary btn-sm" @click="applyAIMapping">应用此映射并预览</button>
+                <button class="btn btn-secondary btn-sm" @click="saveAITemplate" :disabled="savingTemplate">
+                  {{ savingTemplate ? '保存中...' : '保存为规则模板' }}
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <strong>AI 识别失败</strong> — {{ aiResult.error }}
+            </template>
+          </div>
         </div>
 
         <div class="form-row">
@@ -107,7 +133,7 @@
       <div v-if="previewResult.parsed_rows.length" class="table-wrap">
         <h4>有效数据 ({{ previewResult.valid_count }} 行)</h4>
         <div class="table-scroll">
-          <table class="data-table">
+          <table>
             <thead>
               <tr>
                 <th>行号</th>
@@ -136,7 +162,7 @@
       <div v-if="previewResult.abnormal_rows.length" class="table-wrap" style="margin-top:14px">
         <h4 style="color:#c25e3a">异常数据 ({{ previewResult.abnormal_count }} 行)</h4>
         <div class="table-scroll">
-          <table class="data-table">
+          <table>
             <thead>
               <tr>
                 <th>行号</th>
@@ -156,7 +182,7 @@
                 <td>{{ row.expense_amount }}</td>
                 <td>{{ row.counterparty_name }}</td>
                 <td>{{ row.summary_text }}</td>
-                <td><span class="badge err">{{ (row._errors || []).join(', ') }}</span></td>
+                <td><span class="tag tag-warn">{{ (row._errors || []).join(', ') }}</span></td>
               </tr>
             </tbody>
           </table>
@@ -188,7 +214,7 @@
       <div class="top-bar">
         <button class="btn btn-secondary" style="font-size:12px" @click="showTemplateForm = true">+ 新建规则</button>
       </div>
-      <table class="data-table" v-if="templates.length">
+      <table v-if="templates.length">
         <thead>
           <tr><th>模板名称</th><th>类型</th><th>格式</th><th>表头行</th><th>状态</th></tr>
         </thead>
@@ -198,7 +224,7 @@
             <td>{{ t.template_type }}</td>
             <td>{{ t.file_format }}</td>
             <td>{{ t.header_row }}</td>
-            <td><span class="badge" :class="t.status">{{ t.status === 'active' ? '启用' : '停用' }}</span></td>
+            <td><span class="tag" :class="t.status === 'active' ? 'tag-green' : 'tag-gray'">{{ t.status === 'active' ? '启用' : '停用' }}</span></td>
           </tr>
         </tbody>
       </table>
@@ -261,6 +287,9 @@ const headerRow = ref(0)
 const previewing = ref(false)
 const committing = ref(false)
 const showTemplateForm = ref(false)
+const aiParsing = ref(false)
+const aiResult = ref(null)
+const savingTemplate = ref(false)
 
 const tplForm = ref({
   template_name: '',
@@ -399,11 +428,82 @@ async function loadTemplates() {
   } catch { /* ignore */ }
 }
 
+const FIELD_LABELS = {
+  business_date: '交易日期', income_amount: '收入金额', expense_amount: '支出金额',
+  counterparty_name: '对方户名', summary_text: '摘要', balance: '余额',
+  business_time: '交易时间', counterpart_account: '对方账号',
+  counterpart_bank: '对方开户行', voucher_no: '凭证号', transaction_type: '交易类型',
+}
+
+function fieldLabel(code) {
+  return FIELD_LABELS[code] || code
+}
+
+async function doAIParse() {
+  aiParsing.value = true
+  aiResult.value = null
+  try {
+    const headers = uploadResult.value.headers || []
+    const result = await api.aiParseHeaders({ headers })
+    aiResult.value = result
+  } catch (e) {
+    aiResult.value = { ok: false, error: e.message || 'AI 解析失败' }
+  } finally {
+    aiParsing.value = false
+  }
+}
+
+function applyAIMapping() {
+  if (!aiResult.value || !aiResult.value.ok) return
+  // 用 AI 映射直接预览
+  doPreviewWithMapping(aiResult.value.mapping)
+}
+
+async function doPreviewWithMapping(mapping) {
+  previewing.value = true
+  try {
+    const result = await api.previewBankImport({
+      batch_code: uploadResult.value.batch_code,
+      header_row: headerRow.value,
+      mapping: mapping,
+    })
+    previewResult.value = result
+    step.value = 3
+  } catch (e) {
+    alert('预览失败: ' + e.message)
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function saveAITemplate() {
+  if (!aiResult.value || !aiResult.value.ok) return
+  savingTemplate.value = true
+  try {
+    await api.saveAsTemplate({
+      template_name: aiResult.value.template_name || 'AI自动识别模板',
+      file_format: uploadResult.value.detected_format || 'xlsx',
+      header_row: headerRow.value,
+      skip_rows: 0,
+      sample_headers: uploadResult.value.headers || [],
+      mapping_json: aiResult.value.mapping,
+    })
+    await loadTemplates()
+    alert('规则模板已保存！下次上传同类型文件将自动匹配。')
+  } catch (e) {
+    alert('保存失败: ' + e.message)
+  } finally {
+    savingTemplate.value = false
+  }
+}
+
 onMounted(loadTemplates)
 </script>
 
 <style scoped>
 @import './common.css';
+
+/* 页面特有样式 */
 
 /* 步骤条 */
 .steps {
@@ -491,19 +591,10 @@ onMounted(loadTemplates)
 }
 .form-row label { font-size: 13px; color: var(--muted); white-space: nowrap; }
 
-/* 表格 */
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data-table th {
-  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
-  color: var(--muted); font-weight: 500; white-space: nowrap;
-}
-.data-table td { padding: 8px 10px; border-bottom: 1px solid #f0ede6; }
-.table-wrap { background: #fff; border: 1px solid #e7e0d5; border-radius: 12px; padding: 14px; }
-.table-wrap h4 { margin: 0 0 10px; font-size: 14px; }
+/* 表格区域 */
+.table-wrap { background: #fff; border: 1px solid #e7e0d5; border-radius: var(--radius-sm); padding: 14px; }
+.table-wrap h4 { margin: 0 0 10px; font-size: var(--font-size-sm); }
 .table-scroll { overflow-x: auto; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; }
-.badge.active { background: #edf4ea; color: #3f5b3d; }
-.badge.err { background: #fdf0ec; color: #7f4b32; }
 
 /* 弹窗 */
 .modal-mask {
@@ -521,4 +612,44 @@ onMounted(loadTemplates)
 textarea.filter { font-family: inherit; resize: vertical; line-height: 1.6; }
 
 .done-area { padding: 20px 0; }
+
+/* AI 解析区域 */
+.ai-section {
+  margin: 12px 0;
+  padding: 12px;
+  background: #eef5f8;
+  border: 1px solid #c8dce3;
+  border-radius: 10px;
+}
+.ai-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.ai-result.ok {
+  background: #edf4ea;
+  border: 1px solid #d9e6d4;
+  color: #3f5b3d;
+}
+.ai-result.fail {
+  background: #fdf0ec;
+  border: 1px solid #ebd0c2;
+  color: #7f4b32;
+}
+.mapping-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mapping-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #fff;
+  border: 1px solid #d9e6d4;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #3f5b3d;
+}
 </style>

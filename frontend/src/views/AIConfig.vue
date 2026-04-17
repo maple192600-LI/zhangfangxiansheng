@@ -4,7 +4,7 @@
       <button class="btn btn-primary" @click="openForm()">+ 添加配置</button>
     </div>
 
-    <table class="data-table" v-if="configs.length">
+    <table v-if="configs.length">
       <thead>
         <tr>
           <th>提供商</th><th>名称</th><th>模型</th><th>默认</th><th>状态</th><th>操作</th>
@@ -15,8 +15,8 @@
           <td>{{ getProviderLabel(c.provider) }}</td>
           <td>{{ c.display_name }}</td>
           <td>{{ c.model_name || '-' }}</td>
-          <td><span class="badge" :class="c.is_default ? 'enabled' : 'disabled'">{{ c.is_default ? '默认' : '-' }}</span></td>
-          <td><span class="badge" :class="c.status">{{ c.status === 'active' ? '启用' : '停用' }}</span></td>
+          <td><span class="tag" :class="c.is_default ? 'tag-green' : 'tag-gray'">{{ c.is_default ? '默认' : '-' }}</span></td>
+          <td><span class="tag" :class="c.status === 'active' ? 'tag-green' : 'tag-warn'">{{ c.status === 'active' ? '启用' : '停用' }}</span></td>
           <td class="btn-row">
             <button class="btn btn-secondary btn-sm" @click="handleTest(c.id)" :disabled="testing===c.id">
               {{ testing===c.id ? '测试中...' : '测试连接' }}
@@ -225,21 +225,15 @@ onMounted(() => { loadProviders(); load() })
 
 <style scoped>
 @import './common.css';
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data-table th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 500; }
-.data-table td { padding: 8px 10px; border-bottom: 1px solid #f0ede6; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; }
-.badge.enabled { background: #edf4ea; color: #3f5b3d; }
-.badge.disabled { background: #f5ece5; color: #8a6e52; }
-.badge.active { background: #edf4ea; color: #3f5b3d; }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
-.test-result { margin-top: 12px; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
-.test-result.ok { background: #edf4ea; color: #3f5b3d; border: 1px solid #d9e6d4; }
-.test-result.fail { background: #fdf0ec; color: #7f4b32; border: 1px solid #ebd0c2; }
+
+/* 页面特有样式 */
+.test-result { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: var(--font-size-sm); }
+.test-result.ok { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-border); }
+.test-result.fail { background: var(--tag-warn-bg); color: var(--tag-warn-text); border: 1px solid var(--tag-warn-border); }
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: #faf8f3; border-radius: 16px; padding: 24px; width: 90%; max-width: 480px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+.modal { background: #faf8f3; border-radius: var(--radius-lg); padding: 24px; width: 90%; max-width: 480px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
 .modal h3 { margin: 0 0 16px 0; }
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.form-group label { display: block; font-size: var(--font-size-sm); color: var(--muted); margin-bottom: 4px; }
 .form-group .filter { width: 100%; box-sizing: border-box; }
 </style>

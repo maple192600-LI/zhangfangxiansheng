@@ -4,7 +4,7 @@
       <button class="btn btn-primary" @click="showForm=true">+ 新建规则模板</button>
     </div>
 
-    <table class="data-table" v-if="templates.length">
+    <table v-if="templates.length">
       <thead>
         <tr>
           <th>规则名称</th><th>识别银行</th><th>文件格式</th><th>表头行</th><th>跳过行</th>
@@ -29,7 +29,7 @@
             </div>
           </td>
           <td>{{ Object.keys(t.mapping_json || {}).length }}</td>
-          <td><span class="badge" :class="t.status">{{ t.status === 'active' ? '启用' : '停用' }}</span></td>
+          <td><span class="tag" :class="t.status === 'active' ? 'tag-green' : 'tag-gray'">{{ t.status === 'active' ? '启用' : '停用' }}</span></td>
           <td>
             <div class="btn-row">
               <button class="btn btn-secondary btn-sm" @click="viewDetail(t)">查看</button>
@@ -52,7 +52,7 @@
           <div class="field"><span class="label">文件格式</span><span>{{ detailData.file_format }}</span></div>
           <div class="field"><span class="label">表头行号</span><span>{{ detailData.header_row }}</span></div>
           <div class="field"><span class="label">跳过行数</span><span>{{ detailData.skip_rows }}</span></div>
-          <div class="field"><span class="label">状态</span><span class="badge" :class="detailData.status">{{ detailData.status }}</span></div>
+          <div class="field"><span class="label">状态</span><span class="tag" :class="detailData.status === 'active' ? 'tag-green' : 'tag-gray'">{{ detailData.status }}</span></div>
         </div>
         <div style="margin-top:14px">
           <h4 style="margin:0 0 8px;font-size:14px">样本表头</h4>
@@ -62,7 +62,7 @@
         </div>
         <div style="margin-top:14px">
           <h4 style="margin:0 0 8px;font-size:14px">字段映射</h4>
-          <table class="data-table" style="font-size:12px">
+          <table style="font-size:var(--font-size-xs)">
             <thead><tr><th>银行列名</th><th>→ 标准字段</th></tr></thead>
             <tbody>
               <tr v-for="(v, k) in (detailData.mapping_json || {})" :key="k">
@@ -212,36 +212,29 @@ onMounted(loadTemplates)
 
 <style scoped>
 @import './common.css';
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data-table th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 500; }
-.data-table td { padding: 8px 10px; border-bottom: 1px solid #f0ede6; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; }
-.badge.active { background: #edf4ea; color: #3f5b3d; }
-.badge.disabled { background: #f5ece5; color: #8a6e52; }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
 
+/* 页面特有样式 */
 .tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
-.tag {
-  display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px;
-  background: #f0ede6; color: #5b635e;
+.tag-list .tag {
+  padding: 2px 8px; font-size: var(--font-size-xs);
 }
-.tag.more { background: #e2ded4; color: #8a6e52; }
+.tag-list .tag.more { background: #e2ded4; color: #8a6e52; }
 
 .bank-tag {
-  display: inline-block; padding: 3px 10px; border-radius: 8px; font-size: 12px;
-  background: #edf4ea; color: #3f5b3d; font-weight: 500;
+  display: inline-block; padding: 3px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);
+  background: var(--tag-green-bg); color: var(--tag-green-text); font-weight: 500;
 }
 
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: #faf8f3; border-radius: 16px; padding: 24px; width: 90%; max-width: 520px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+.modal { background: #faf8f3; border-radius: var(--radius-lg); padding: 24px; width: 90%; max-width: 520px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
 .modal h3 { margin: 0 0 16px 0; }
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.form-group label { display: block; font-size: var(--font-size-sm); color: var(--muted); margin-bottom: 4px; }
 .form-group .filter { width: 100%; box-sizing: border-box; }
 .form-row { display: flex; gap: 12px; }
 textarea.filter { font-family: inherit; resize: vertical; line-height: 1.6; }
 
 .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.field { background: #fff; border: 1px solid #e7e0d5; border-radius: 10px; padding: 10px 12px; }
-.field .label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.field { background: #fff; border: 1px solid #e7e0d5; border-radius: var(--radius-sm); padding: 10px 12px; }
+.field .label { display: block; font-size: var(--font-size-xs); color: var(--muted); margin-bottom: 4px; }
 </style>

@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const http = axios.create({
   baseURL: '/api',
-  timeout: 30000
+  timeout: 300000
 })
 
 // 响应拦截器 — 统一处理 code

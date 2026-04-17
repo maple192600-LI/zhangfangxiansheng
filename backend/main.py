@@ -29,6 +29,8 @@ from api.agent_config import router as agent_router
 from api.bank_import import router as bank_import_router
 from api.parser_template import router as parser_template_router
 from api.manual_flow import router as manual_flow_router
+from api.base_data import router as base_data_router
+from api.reports import router as reports_router
 
 
 def _init_db():
@@ -149,6 +151,8 @@ app.include_router(agent_router, prefix="/api")
 app.include_router(bank_import_router, prefix="/api")
 app.include_router(parser_template_router, prefix="/api")
 app.include_router(manual_flow_router, prefix="/api")
+app.include_router(base_data_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──

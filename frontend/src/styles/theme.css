@@ -1,29 +1,96 @@
 /* ──────────────────────────────────────────
    账房先生 — 视觉主题变量
-   严格复刻 preview_v4_confirmed.html
+   严格复刻 frontend_prototype.html 设计体系
    ────────────────────────────────────────── */
 :root {
-  --bg: #f5f3ee;
-  --panel: #fbfaf7;
-  --panel-2: #ffffff;
-  --line: #ddd7cc;
-  --line-soft: #ebe6dc;
-  --text: #2f3a32;
-  --muted: #6e746f;
-  --green: #7f9b7a;
-  --green-2: #e6efe3;
-  --green-3: #f0f6ee;
-  --accent: #c8b48a;
-  --warn: #b87b5d;
-  --warn-bg: #faeee8;
-  --blue: #6e88a7;
-  --blue-bg: #eef3f8;
-  --shadow: 0 8px 24px rgba(60, 60, 40, 0.08);
-  --radius: 16px;
-  --radius-sm: 12px;
+  /* 色彩体系 */
+  --bg:              #f5f3ee;
+  --bg-gradient:     linear-gradient(180deg, #f6f4ef 0%, #f1eee7 100%);
+  --panel:           #fbfaf7;
+  --panel-2:         #ffffff;
+  --line:            #ddd7cc;
+  --line-soft:       #ebe6dc;
+  --line-table:      #eee7da;
+  --line-table-vert: #f0eadf;
 
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+  /* 文本层次 */
+  --text:            #2f3a32;
+  --text-secondary:  #465048;
+  --text-tertiary:   #5b635e;
+  --text-light:      #6a706c;
+  --muted:           #6e746f;
+
+  /* 主强调色 — 低饱和绿 */
+  --green:           #7f9b7a;
+  --green-hover:     #6e8d69;
+  --green-2:         #e6efe3;
+  --green-3:         #f0f6ee;
+
+  /* 辅助强调色 — 砂金暖棕 */
+  --accent:          #c8b48a;
+
+  /* 风险/异常色 */
+  --warn:            #b87b5d;
+  --warn-bg:         #faeee8;
+  --warn-border:     #ebd0c2;
+  --warn-text:       #7f4b32;
+
+  /* 信息色 */
+  --info:            #6e88a7;
+  --info-bg:         #eef3f8;
+  --info-border:     #d8e1ec;
+  --info-text:       #4f6681;
+
+  /* 成功色 */
+  --ok-bg:           #edf4ea;
+  --ok-border:       #d9e6d4;
+  --ok-text:         #3f5b3d;
+
+  /* 标签色（4 种变体） */
+  --tag-green-bg:    #e7f0e4;  --tag-green-text: #2f5a2f;  --tag-green-border: #cfe1cc;
+  --tag-warn-bg:     #f7e9e1;  --tag-warn-text: #874f32;   --tag-warn-border: #ebd0c2;
+  --tag-gray-bg:     #f2f1ed;  --tag-gray-text: #676d68;   --tag-gray-border: #e5e2da;
+  --tag-blue-bg:     #e8eef5;  --tag-blue-text: #3e5a7a;   --tag-blue-border: #c9d5e3;
+
+  /* 表头 */
+  --thead-bg:        #f7f4ee;
+
+  /* 圆角 */
+  --radius-lg:       16px;
+  --radius:          16px;
+  --radius-md:       14px;
+  --radius-sm:       12px;
+  --radius-pill:     999px;
+
+  /* 阴影 */
+  --shadow:          0 8px 24px rgba(60, 60, 40, 0.08);
+  --shadow-card-subtle: 0 2px 8px rgba(60, 60, 40, 0.04);
+
+  /* 间距比例 */
+  --space-xs:        6px;
+  --space-sm:        10px;
+  --space-md:        12px;
+  --space-lg:        14px;
+  --space-xl:        16px;
+  --space-2xl:       18px;
+  --space-3xl:       20px;
+  --space-section:   28px;
+
+  /* 字号比例 */
+  --font-size-xs:    12px;
+  --font-size-sm:    13px;
+  --font-size-base:  14px;
+  --font-size-md:    15px;
+  --font-size-lg:    17px;
+  --font-size-xl:    20px;
+  --font-size-hero:  26px;
+
+  /* 字体 */
+  --font-family:     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+  /* 布局 */
+  --sidebar-width:   280px;
 }
 
 * {
@@ -35,8 +102,9 @@
 body {
   font-family: var(--font-family);
   color: var(--text);
-  background: linear-gradient(180deg, #f6f4ef 0%, #f1eee7 100%);
+  background: var(--bg-gradient);
   min-height: 100vh;
+  line-height: 1.6;
 }
 
 #app {
@@ -50,18 +118,26 @@ body {
 }
 
 .ant-btn-primary:hover {
-  background: #6f8b6a !important;
-  border-color: #6f8b6a !important;
+  background: var(--green-hover) !important;
+  border-color: var(--green-hover) !important;
 }
 
 /* 滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 3px;
+}
+
+/* 过渡动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

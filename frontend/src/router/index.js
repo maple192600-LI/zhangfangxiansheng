@@ -21,6 +21,7 @@ const routes = [
       { path: 'upload-preview', name: 'upload-preview', component: () => import('@/views/UploadPreview.vue') },
 
       // 资金板块 > 资金日报表
+      { path: 'daily-report', name: 'daily-report', component: () => import('@/views/DailyReport.vue') },
       { path: 'base-data', name: 'base-data', component: () => import('@/views/BaseDataTable.vue') },
       { path: 'cash-journal', name: 'cash-journal', component: () => import('@/views/CashJournal.vue') },
       { path: 'account-balance', name: 'account-balance', component: () => import('@/views/AccountBalance.vue') },

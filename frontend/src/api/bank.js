@@ -25,3 +25,10 @@ export const getParserTemplates = (params) =>
 
 export const createParserTemplate = (data) =>
   http.post('/parser-templates', data)
+
+// ── AI 智能解析 ──
+export const aiParseHeaders = (data) =>
+  http.post('/bank-import/ai-parse', data)
+
+export const saveAsTemplate = (data) =>
+  http.post('/bank-import/save-template', data)

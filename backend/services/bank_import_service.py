@@ -15,7 +15,9 @@ from core.parser_engine import (
     match_template, normalize_amount, normalize_date,
     read_file_from_bytes,
 )
-from db.tables import FundEvent, ImportBatch, ParserTemplate
+from core.ai_call import chat
+from core.security import decrypt_key
+from db.tables import FundEvent, ImportBatch, ParserTemplate, AIConfig
 from config import DATA_DIR
 
 
@@ -330,4 +332,126 @@ def _tpl_out(r: ParserTemplate) -> Dict:
         "status": r.status,
         "created_at": r.created_at,
         "updated_at": r.updated_at,
+    }
+
+
+# ──────────────────────────────────────────
+# AI 智能解析
+# ──────────────────────────────────────────
+
+# 标准字段列表（供 AI 参考映射）
+STANDARD_FIELDS = {
+    "business_date": "交易日期",
+    "income_amount": "收入金额",
+    "expense_amount": "支出金额",
+    "counterparty_name": "对方户名/对方名称",
+    "summary_text": "摘要/用途",
+    "balance": "余额",
+    "business_time": "交易时间",
+    "counterpart_account": "对方账号",
+    "counterpart_bank": "对方开户行",
+    "voucher_no": "凭证号",
+    "transaction_type": "交易类型",
+}
+
+
+def ai_parse_headers(db: Session, headers: list, sample_rows: list = None) -> Dict[str, Any]:
+    """用 AI 分析银行流水表头，自动生成列映射。
+
+    Args:
+        headers: 检测到的表头列名列表
+        sample_rows: 可选的前几行样本数据
+    Returns:
+        {"mapping": {银行列名: 标准字段}, "suggested_name": str, "confidence": str}
+    """
+    # 获取默认 AI 配置
+    ai_cfg = db.query(AIConfig).filter(
+        AIConfig.status == "active",
+    ).order_by(AIConfig.is_default.desc()).first()
+
+    if not ai_cfg:
+        return {
+            "ok": False,
+            "error": "未配置 AI 提供商，请先在「系统设置 → AI配置」中添加 API KEY",
+        }
+
+    api_key = decrypt_key(ai_cfg.api_key_encrypted)
+
+    # 构造 prompt
+    field_desc = "\n".join(f"  - {k}: {v}" for k, v in STANDARD_FIELDS.items())
+    header_list = ", ".join(f'"{h}"' for h in headers)
+
+    sample_text = ""
+    if sample_rows:
+        lines = []
+        for row in sample_rows[:3]:
+            if isinstance(row, (list, tuple)):
+                lines.append(" | ".join(str(c) for c in row))
+        if lines:
+            sample_text = f"\n\n前几行样本数据:\n" + "\n".join(lines)
+
+    prompt = f"""你是一个银行流水解析专家。请分析以下银行流水的表头列名，将每列映射到对应的标准字段。
+
+## 表头列名
+{header_list}
+{sample_text}
+
+## 可用标准字段
+{field_desc}
+
+## 要求
+1. 返回 JSON 格式：{{"银行列名": "标准字段code"}}
+2. 只映射能匹配的列，不确定的不映射
+3. business_date 是必须映射的核心字段
+4. 如果列名含义不明确，参考样本数据判断
+5. 同时建议一个模板名称（如：xx银行标准流水）
+
+请严格返回如下 JSON 格式（不要包含其他文字）:
+{{"mapping": {{"银行列名1": "field1", "银行列名2": "field2"}}, "template_name": "建议的模板名称"}}"""
+
+    result = chat(
+        provider=ai_cfg.provider,
+        api_key=api_key,
+        base_url=ai_cfg.base_url,
+        model_name=ai_cfg.model_name,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=512,
+        timeout=300,
+    )
+
+    if not result.get("ok"):
+        return {"ok": False, "error": f"AI 调用失败: {result.get('error', '未知错误')}"}
+
+    content = result["content"].strip()
+
+    # 尝试从返回内容中提取 JSON
+    try:
+        # 去掉 markdown 代码块标记
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(content)
+        mapping = parsed.get("mapping", {})
+        template_name = parsed.get("template_name", "AI自动识别模板")
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "AI 返回格式异常，请重试或手动配置映射", "raw": content}
+
+    # 验证映射字段合法性
+    valid_mapping = {}
+    for bank_col, field_code in mapping.items():
+        if field_code in STANDARD_FIELDS:
+            valid_mapping[bank_col] = field_code
+
+    if not valid_mapping:
+        return {"ok": False, "error": "AI 未能识别出有效的列映射"}
+
+    has_date = any(v == "business_date" for v in valid_mapping.values())
+    confidence = "high" if has_date and len(valid_mapping) >= 3 else "medium" if has_date else "low"
+
+    return {
+        "ok": True,
+        "mapping": valid_mapping,
+        "template_name": template_name,
+        "confidence": confidence,
+        "matched_count": len(valid_mapping),
+        "total_columns": len(headers),
     }

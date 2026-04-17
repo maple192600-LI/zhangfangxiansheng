@@ -3,12 +3,11 @@
     <!-- 左侧导航 -->
     <aside class="sidebar">
       <div class="brand">
-        <h1>资金报表系统</h1>
-        <p>首页独立置顶，首页风格改为多维表格仪表盘风格。其余目录关系不变。</p>
+        <h1>账房先生</h1>
+        <div class="subtitle">面向中国财务人员的本地部署资金工作台</div>
       </div>
 
       <div class="nav-group">
-        <div class="nav-title">主导航</div>
         <div class="nav-list">
           <template v-for="(item, key) in navData" :key="key">
             <!-- 有二级导航 -->
@@ -18,7 +17,8 @@
                 :class="{ active: nav.currentPrimary === key }"
                 @click="toggleSection(key)"
               >
-                {{ key }}
+                <span class="nav-icon">{{ item.icon }}</span>
+                <span class="nav-label">{{ key }}</span>
                 <span class="caret">{{ openState[key] ? '▾' : '▸' }}</span>
               </button>
               <div class="subnav" :class="{ open: openState[key] }">
@@ -40,7 +40,8 @@
                 :class="{ active: nav.currentPrimary === key }"
                 @click="selectPrimary(key)"
               >
-                {{ key }}
+                <span class="nav-icon">{{ item.icon }}</span>
+                <span class="nav-label">{{ key }}</span>
               </button>
             </template>
           </template>
@@ -50,24 +51,9 @@
 
     <!-- 右侧内容区 -->
     <main class="main-area">
-      <!-- 顶栏 -->
-      <div class="topbar">
-        <div class="sys">
-          <div class="pill">当前法人范围：全部法人</div>
-          <div class="pill">当前口径：资金报表系统</div>
-        </div>
-        <div class="search">全局搜索：账户 / 摘要 / 对方名称 / 模块名</div>
-        <div class="pill">本地备份入口</div>
-      </div>
-
-      <!-- 面包屑 -->
-      <div class="crumb">
-        当前路径：<strong>{{ breadcrumb }}</strong>
-      </div>
-
       <!-- 内容壳 -->
       <div class="shell">
-        <div class="right-tabs">
+        <div class="right-tabs" v-if="currentTabs.length">
           <button
             v-for="(tab, idx) in currentTabs"
             :key="idx"
@@ -79,12 +65,12 @@
           </button>
         </div>
         <div class="content">
-          <router-view />
+          <router-view v-slot="{ Component }">
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
+          </router-view>
         </div>
-      </div>
-
-      <div class="footer-note">
-        这版已经把首页独立到左侧置顶位置，并改成工作导向的仪表盘样式。不是汇报台，是出纳打开软件后的总控台。
       </div>
     </main>
   </div>
@@ -101,6 +87,7 @@ const router = useRouter()
 // 导航数据 — 严格复刻 preview_v4_confirmed.html 的 navData
 const navData = {
   '首页': {
+    icon: '🏠',
     tabs: [
       { name: '工作总览', explain: '首页默认页。打开软件先看今天的处理进度、待办、异常、快捷入口和关键状态。', route: 'home' },
       { name: '待办追踪', explain: '首页待办追踪页。集中看待导入、待确认、待生成和待处理项。', route: 'home-tasks' },
@@ -109,6 +96,7 @@ const navData = {
     ]
   },
   '资金板块': {
+    icon: '💰',
     secondary: {
       '工作台': {
         tabs: [
@@ -139,6 +127,7 @@ const navData = {
     }
   },
   'OCR识别': {
+    icon: '📷',
     secondary: {
       '识别': {
         tabs: [
@@ -157,6 +146,7 @@ const navData = {
     }
   },
   '贷款管理': {
+    icon: '🏦',
     tabs: [
       { name: '贷款台账', explain: '贷款管理下的贷款台账页。', route: 'loan-ledger' },
       { name: '利息支出', explain: '贷款管理下的利息支出页。', route: 'loan-interest' },
@@ -165,11 +155,13 @@ const navData = {
     ]
   },
   '预算管理': {
+    icon: '📋',
     tabs: [
       { name: '资金计划', explain: '预算管理下的资金计划页。', route: 'budget-plan' }
     ]
   },
   'AI智能体': {
+    icon: '🤖',
     secondary: {
       '规则agent': { tabs: [{ name: '负责解析新上传的各种新文件和模板规则解析', explain: '规则 agent 页面。', route: 'agent-social' }] },
       '日报agent': { tabs: [{ name: '负责日记账流水识别', explain: '日报 agent 页面。', route: 'agent-daily' }] },
@@ -181,6 +173,7 @@ const navData = {
     }
   },
   '系统设置': {
+    icon: '⚙️',
     secondary: {
       '数据中心': {
         tabs: [
@@ -249,23 +242,6 @@ const currentTabs = computed(() => {
     return node.secondary[nav.currentSecondary].tabs
   }
   return node.tabs || []
-})
-
-// 说明文字
-const explainText = computed(() => {
-  const tabs = currentTabs.value
-  if (tabs.length === 0) return ''
-  const idx = Math.min(nav.currentTab, tabs.length - 1)
-  return tabs[idx]?.explain || ''
-})
-
-// 面包屑
-const breadcrumb = computed(() => {
-  const sec = nav.currentSecondary ? ` / ${nav.currentSecondary}` : ''
-  const tabs = currentTabs.value
-  const idx = Math.min(nav.currentTab, tabs.length - 1)
-  const tabName = tabs[idx]?.name || ''
-  return `${nav.currentPrimary}${sec} / ${tabName}`
 })
 
 function toggleSection(key) {
@@ -350,16 +326,15 @@ watch(() => router.currentRoute.value, (route) => {
 }
 
 .brand h1 {
-  font-size: 20px;
+  font-size: var(--font-size-xl);
   margin: 0;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
-.brand p {
-  margin: 0;
+.brand .subtitle {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1.7;
 }
 
@@ -367,28 +342,34 @@ watch(() => router.currentRoute.value, (route) => {
   margin-top: 10px;
 }
 
-.nav-title {
-  font-size: 12px;
-  color: #7a7f79;
-  padding: 8px 12px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
 .nav-main {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   width: 100%;
   border: none;
   background: transparent;
-  border-radius: 14px;
-  padding: 12px 12px;
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
   cursor: pointer;
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--font-size-md);
   text-align: left;
+  transition: background .18s ease, box-shadow .18s ease;
+  font-family: inherit;
 }
+
+.nav-icon {
+  width: 20px;
+  text-align: center;
+  flex: 0 0 20px;
+  font-size: 15px;
+  margin-right: 8px;
+  opacity: .7;
+}
+
+.nav-main.active .nav-icon { opacity: 1; }
+
+.nav-label { flex: 1; }
 
 .nav-main:hover {
   background: #f3f0e8;
@@ -445,63 +426,11 @@ watch(() => router.currentRoute.value, (route) => {
 
 /* ── 右侧内容区 ── */
 .main-area {
-  padding: 18px 20px 28px;
+  padding: 18px 20px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.topbar {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 14px;
-  align-items: center;
-  background: rgba(251, 250, 247, 0.82);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px 16px;
-  box-shadow: var(--shadow);
-}
-
-.sys {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.pill {
-  padding: 8px 12px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: #465048;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.search {
-  padding: 10px 14px;
-  min-width: 280px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: #6a706c;
-  font-size: 14px;
-}
-
-.crumb {
-  background: rgba(251, 250, 247, 0.95);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 10px 14px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.crumb strong {
-  color: var(--text);
 }
 
 .shell {
@@ -543,14 +472,7 @@ watch(() => router.currentRoute.value, (route) => {
 }
 
 .content {
-  padding: 16px;
-}
-
-.footer-note {
-  margin-top: 10px;
-  color: #7a7f79;
-  font-size: 12px;
-  line-height: 1.8;
+  padding: var(--space-xl);
 }
 
 @media (max-width: 1200px) {
@@ -560,9 +482,6 @@ watch(() => router.currentRoute.value, (route) => {
   .sidebar {
     height: auto;
     position: relative;
-  }
-  .topbar {
-    grid-template-columns: 1fr;
   }
 }
 </style>

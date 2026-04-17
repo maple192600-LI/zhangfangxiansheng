@@ -372,3 +372,67 @@ class ManualCommitBody(BaseModel):
 class ManualExportTemplateBody(BaseModel):
     scheme_code: str = "manual_multi_subject_basic"
     include_example_rows: bool = False
+
+
+# ──────────────────────────────────────────
+# 基础数据查询
+# ──────────────────────────────────────────
+class BaseDataRowOut(BaseModel):
+    id: int
+    business_date: Optional[str] = None
+    entity_id: Optional[int] = None
+    entity_name: Optional[str] = None
+    account_id: Optional[int] = None
+    account_name: Optional[str] = None
+    direction: Optional[str] = None
+    income_amount: Optional[float] = None
+    expense_amount: Optional[float] = None
+    rolling_balance: Optional[float] = None
+    counterparty_name: Optional[str] = None
+    summary_text: Optional[str] = None
+    abnormal_code: Optional[str] = None
+
+
+class RebuildResult(BaseModel):
+    affected_accounts: int = 0
+    updated_events: int = 0
+
+
+# ──────────────────────────────────────────
+# 报表输出
+# ──────────────────────────────────────────
+class DailyReportEntityRow(BaseModel):
+    entity_id: Optional[int] = None
+    entity_name: str = ""
+    opening_balance: float = 0
+    total_income: float = 0
+    total_expense: float = 0
+    net_change: float = 0
+    ending_balance: float = 0
+
+
+class CashJournalDayRow(BaseModel):
+    business_date: str = ""
+    prev_balance: float = 0
+    income: float = 0
+    expense: float = 0
+    day_balance: float = 0
+
+
+class CashJournalAccountBlock(BaseModel):
+    account_id: Optional[int] = None
+    account_name: str = ""
+    entity_name: str = ""
+    rows: List[CashJournalDayRow] = []
+
+
+class AccountBalanceRow(BaseModel):
+    entity_id: int
+    entity_name: str
+    account_id: Optional[int] = None
+    account_name: Optional[str] = None
+    opening_balance: float = 0
+    period_income: float = 0
+    period_expense: float = 0
+    ending_balance: float = 0
+    is_subtotal: bool = False

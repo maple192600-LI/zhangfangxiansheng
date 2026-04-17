@@ -30,6 +30,20 @@ class CommitBody(BaseModel):
     parsed_rows: List[Dict[str, Any]]
 
 
+class AIParseBody(BaseModel):
+    headers: List[str]
+    sample_rows: Optional[List[List[str]]] = None
+
+
+class SaveTemplateBody(BaseModel):
+    template_name: str
+    file_format: str = "xlsx"
+    header_row: int = 0
+    skip_rows: int = 0
+    sample_headers: List[str] = []
+    mapping_json: Dict[str, str]
+
+
 # ── 上传 ──
 
 @router.post("/bank-import/upload")
@@ -72,3 +86,34 @@ def commit(body: CommitBody, db: Session = Depends(get_db)):
     except ValueError as e:
         return error(ErrorCode.NOT_FOUND, str(e))
     return success(result)
+
+
+# ── AI 智能解析表头 ──
+
+@router.post("/bank-import/ai-parse")
+def ai_parse(body: AIParseBody, db: Session = Depends(get_db)):
+    try:
+        result = svc.ai_parse_headers(db, body.headers, body.sample_rows)
+        return success(result)
+    except Exception as e:
+        return error(5000, str(e))
+
+
+# ── 保存为规则模板 ──
+
+@router.post("/bank-import/save-template")
+def save_template(body: SaveTemplateBody, db: Session = Depends(get_db)):
+    try:
+        result = svc.create_template(db, {
+            "template_name": body.template_name,
+            "template_type": "bank",
+            "file_format": body.file_format,
+            "header_row": body.header_row,
+            "skip_rows": body.skip_rows,
+            "sample_headers": body.sample_headers,
+            "mapping_json": body.mapping_json,
+            "created_by": "ai_assist",
+        })
+        return success(result)
+    except Exception as e:
+        return error(5000, str(e))
