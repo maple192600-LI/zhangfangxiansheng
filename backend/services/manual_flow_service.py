@@ -108,7 +108,8 @@ def _validate_row(parsed: Dict) -> List[str]:
         errors.append("SUMMARY_MISSING")
     inc = parsed.get("income_amount") or 0
     exp = parsed.get("expense_amount") or 0
-    if inc == 0 and exp == 0:
+    has_balance = parsed.get("previous_balance_input") or parsed.get("ending_balance_input")
+    if inc == 0 and exp == 0 and not has_balance:
         errors.append("AMOUNT_INVALID")
     elif inc > 0 and exp > 0:
         errors.append("AMOUNT_INVALID")

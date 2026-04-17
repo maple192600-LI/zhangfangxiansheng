@@ -69,8 +69,8 @@ VALUES
 -- 手工字段池核心字段
 INSERT INTO manual_field_pool (id, field_code, field_name_cn, data_type, is_core, is_default_visible, is_disable_allowed, is_parse_key, is_validation_key, is_batch_inheritable, status, created_at, updated_at)
 VALUES
-  (1, 'entity_match_key', '法人简称', 'text', 1, 1, 0, 1, 1, 0, 'active', datetime('now'), datetime('now')),
-  (2, 'account_match_key', '账户名称', 'text', 1, 1, 0, 1, 1, 0, 'active', datetime('now'), datetime('now')),
+  (1, 'entity_match_key', '单位编码', 'text', 1, 1, 0, 1, 1, 0, 'active', datetime('now'), datetime('now')),
+  (2, 'account_match_key', '账户编码', 'text', 1, 1, 0, 1, 1, 0, 'active', datetime('now'), datetime('now')),
   (3, 'business_date', '业务日期', 'date', 1, 1, 0, 1, 1, 0, 'active', datetime('now'), datetime('now')),
   (4, 'summary_text', '摘要', 'text', 1, 1, 0, 0, 1, 0, 'active', datetime('now'), datetime('now')),
   (5, 'counterparty_name', '对方名称', 'text', 1, 1, 0, 0, 1, 0, 'active', datetime('now'), datetime('now')),

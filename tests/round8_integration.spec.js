@@ -238,8 +238,8 @@ test.describe('Round 8 — 集成测试：完整业务流程', () => {
     const fieldNames = body.data.map(f => f.field_name_cn)
     expect(fieldNames).not.toContain('法人识别键')
     expect(fieldNames).not.toContain('账户识别键')
-    expect(fieldNames).toContain('法人简称')
-    expect(fieldNames).toContain('账户名称')
+    expect(fieldNames).toContain('单位编码')
+    expect(fieldNames).toContain('账户编码')
   })
 
   test('手工流水 — 方案查询', async ({ request }) => {
