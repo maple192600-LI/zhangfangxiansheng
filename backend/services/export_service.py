@@ -43,8 +43,8 @@ def generate_export(db, export_type: str, start_date: Optional[str], end_date: O
     """生成 Excel 导出文件，返回文件路径"""
     from services.base_data_service import query_base_data
     from services.report_service import (
-        get_daily_report, get_cash_journal, get_account_balance,
-        get_income_list, get_expense_list,
+        daily_report, cash_journal, account_balance,
+        income_list, expense_list,
     )
 
     config = EXPORT_CONFIG.get(export_type)
@@ -136,21 +136,21 @@ def _fetch_data(db, export_type, start_date, end_date, entity_id) -> list:
                 for r in result.get("items", [])
             ]
         elif export_type == "daily_report":
-            rows = get_daily_report(db, **params)
+            rows = daily_report(db, **params)
             return [
                 [r.get("entity_name"), r.get("opening_balance"), r.get("total_income"),
                  r.get("total_expense"), r.get("net_change"), r.get("ending_balance")]
                 for r in rows
             ]
         elif export_type == "account_balance":
-            rows = get_account_balance(db, **params)
+            rows = account_balance(db, **params)
             return [
                 [r.get("entity_name"), r.get("account_name"), r.get("opening_balance"),
                  r.get("period_income"), r.get("period_expense"), r.get("ending_balance")]
                 for r in rows if not r.get("is_subtotal")
             ]
         elif export_type == "income_list":
-            result = get_income_list(db, **params, page=1, page_size=10000)
+            result = income_list(db, **params, page=1, page_size=10000)
             return [
                 [r.get("business_date"), r.get("entity_name"), r.get("account_name"),
                  r.get("summary_text"), r.get("counterparty_name"),
@@ -158,7 +158,7 @@ def _fetch_data(db, export_type, start_date, end_date, entity_id) -> list:
                 for r in result.get("items", [])
             ]
         elif export_type == "expense_list":
-            result = get_expense_list(db, **params, page=1, page_size=10000)
+            result = expense_list(db, **params, page=1, page_size=10000)
             return [
                 [r.get("business_date"), r.get("entity_name"), r.get("account_name"),
                  r.get("summary_text"), r.get("counterparty_name"),
@@ -166,7 +166,7 @@ def _fetch_data(db, export_type, start_date, end_date, entity_id) -> list:
                 for r in result.get("items", [])
             ]
         elif export_type == "cash_journal":
-            blocks = get_cash_journal(db, **params)
+            blocks = cash_journal(db, **params)
             rows = []
             for block in blocks:
                 for r in block.get("rows", []):

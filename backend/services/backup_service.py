@@ -6,6 +6,8 @@ import shutil
 from datetime import datetime
 from typing import Dict, Optional
 
+from sqlalchemy import text
+
 from config import BACKUP_DIR, DATA_DIR, DB_PATH, BASE_DIR
 
 
@@ -43,7 +45,7 @@ def create_backup(db) -> Dict:
     vacuum_path = os.path.join(DATA_DIR, "zhangfang_vacuum.db")
     if os.path.exists(vacuum_path):
         os.remove(vacuum_path)
-    db.execute(f"VACUUM INTO '{vacuum_path}'")
+    db.execute(text(f"VACUUM INTO '{vacuum_path}'"))
     db.commit()
 
     # meta.json
