@@ -1,4 +1,6 @@
 """批次管理 API — 列表 / 回滚"""
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,8 @@ from database import get_db
 from core.response import success, error
 from db.tables import ImportBatch, FundEvent
 from services import log_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/batches", tags=["batch"])
 
@@ -42,7 +46,8 @@ def list_batches(
             "page": page,
             "page_size": page_size,
         })
-    except Exception:
+    except Exception as e:
+        logger.error("获取批次列表失败: %s", str(e), exc_info=True)
         return error(5000, "获取批次列表失败")
 
 
@@ -70,4 +75,5 @@ def rollback_batch(batch_id: int, db: Session = Depends(get_db)):
         return success({"batch_id": batch_id, "rolled_back_events": len(events)})
     except Exception as e:
         db.rollback()
-        return error(5000, f"回滚失败: {str(e)}")
+        logger.error("回滚失败: %s", str(e), exc_info=True)
+        return error(5000, "回滚失败，请查看操作日志")

@@ -47,7 +47,46 @@
           </template>
         </div>
       </div>
+
+      <!-- 用户区域 -->
+      <div class="user-area">
+        <div class="user-info">
+          <span class="user-avatar">{{ (auth.user?.username || '?')[0].toUpperCase() }}</span>
+          <span class="user-name">{{ auth.user?.username || '未知用户' }}</span>
+        </div>
+        <div class="user-actions">
+          <button class="user-btn" @click="showPwdDialog = true">修改密码</button>
+          <button class="user-btn user-btn-logout" @click="handleLogout">退出登录</button>
+        </div>
+      </div>
     </aside>
+
+    <!-- 修改密码弹窗 -->
+    <div v-if="showPwdDialog" class="modal-overlay" @click.self="showPwdDialog = false">
+      <div class="modal-box">
+        <h3>修改密码</h3>
+        <div v-if="pwdError" class="error-bar" style="margin-bottom: 12px;">{{ pwdError }}</div>
+        <div v-if="pwdOk" class="warning ok" style="margin-bottom: 12px;">密码修改成功，请重新登录</div>
+        <div class="form-group">
+          <label class="form-label">当前密码</label>
+          <input v-model="oldPwd" type="password" class="form-input" placeholder="请输入当前密码" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">新密码</label>
+          <input v-model="newPwd" type="password" class="form-input" placeholder="请输入新密码" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">确认新密码</label>
+          <input v-model="confirmPwd" type="password" class="form-input" placeholder="再次输入新密码" />
+        </div>
+        <div class="btn-row" style="justify-content: flex-end; margin-top: 16px;">
+          <button class="btn btn-secondary" @click="showPwdDialog = false">取消</button>
+          <button class="btn btn-primary" :disabled="pwdLoading" @click="handleChangePwd">
+            {{ pwdLoading ? '保存中...' : '确认修改' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 右侧内容区 -->
     <main class="main-area">
@@ -77,12 +116,71 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useNavStore } from '@/stores/nav'
+import { useAuthStore } from '@/stores/auth'
+import { changePassword } from '@/api/auth'
 
 const nav = useNavStore()
 const router = useRouter()
+const route = useRoute()
+const auth = useAuthStore()
+
+// 首次登录强制改密码检测
+onMounted(() => {
+  if (route.query.forceChangePwd === '1' || auth.user?.must_change_password) {
+    showPwdDialog.value = true
+  }
+})
+
+// 修改密码相关
+const showPwdDialog = ref(false)
+const oldPwd = ref('')
+const newPwd = ref('')
+const confirmPwd = ref('')
+const pwdLoading = ref(false)
+const pwdError = ref('')
+const pwdOk = ref(false)
+
+async function handleChangePwd() {
+  if (!oldPwd.value || !newPwd.value || !confirmPwd.value) {
+    pwdError.value = '请填写所有字段'
+    return
+  }
+  if (newPwd.value !== confirmPwd.value) {
+    pwdError.value = '两次输入的新密码不一致'
+    return
+  }
+  if (newPwd.value.length < 6) {
+    pwdError.value = '新密码至少6位'
+    return
+  }
+  pwdLoading.value = true
+  pwdError.value = ''
+  try {
+    await changePassword({ old_password: oldPwd.value, new_password: newPwd.value })
+    pwdOk.value = true
+    setTimeout(() => {
+      showPwdDialog.value = false
+      pwdOk.value = false
+      oldPwd.value = ''
+      newPwd.value = ''
+      confirmPwd.value = ''
+      auth.logout()
+      router.push({ name: 'login' })
+    }, 1500)
+  } catch (e) {
+    pwdError.value = e.message || '修改密码失败'
+  } finally {
+    pwdLoading.value = false
+  }
+}
+
+function handleLogout() {
+  auth.logout()
+  router.push({ name: 'login' })
+}
 
 // 导航数据 — 严格复刻 preview_v4_confirmed.html 的 navData
 const navData = {
@@ -315,6 +413,8 @@ watch(() => router.currentRoute.value, (route) => {
   top: 0;
   height: 100vh;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .brand {
@@ -484,4 +584,88 @@ watch(() => router.currentRoute.value, (route) => {
     position: relative;
   }
 }
+
+/* ── 用户区域 ── */
+.user-area {
+  margin-top: auto;
+  padding: 16px 14px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--green-2);
+  color: #30422f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.user-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 8px);
+  background: #fff;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.user-btn:hover {
+  background: #f4f1ea;
+}
+
+.user-btn-logout {
+  color: var(--warn-text);
+  border-color: var(--warn-border);
+}
+
+.user-btn-logout:hover {
+  background: var(--warn-bg);
+}
+
+/* ── 弹窗 ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.35);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-box {
+  background: #fff; border-radius: var(--radius-lg, 16px); padding: 28px;
+  max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,.15);
+}
+.modal-box h3 { margin: 0 0 16px; font-size: var(--font-size-lg); }
+
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
+.form-input {
+  width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line);
+  border-radius: var(--radius, 8px); font-size: 14px; color: var(--text);
+  background: var(--panel); outline: none; box-sizing: border-box;
+}
+.form-input:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-2); }
 </style>

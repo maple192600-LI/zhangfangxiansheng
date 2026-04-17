@@ -59,9 +59,13 @@ class Account(Base):
     bank_name = Column(String(100), nullable=True)
     branch_name = Column(String(200), nullable=True)
     account_number = Column(String(100), nullable=True)
+    account_last_four = Column(String(10), nullable=True)
     account_type = Column(String(50), nullable=False)
     instrument_type = Column(String(50), nullable=False)
     input_method = Column(String(50), nullable=False, default="manual")
+    has_online_banking = Column(Boolean, nullable=False, default=False)
+    include_in_daily_report = Column(Boolean, nullable=False, default=True)
+    allow_manual_entry = Column(Boolean, nullable=False, default=True)
     currency = Column(String(20), nullable=False, default="CNY")
     initial_balance = Column(Numeric(18, 2), nullable=False, default=0)
     balance_date = Column(Date, nullable=False)
@@ -286,3 +290,16 @@ class OperationLog(Base):
         Index("idx_operation_logs_module", "module", "created_at"),
         Index("idx_operation_logs_batch", "batch_id"),
     )
+
+
+# ──────────────────────────────────────────
+# 14. users — 用户（单用户认证）
+# ──────────────────────────────────────────
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(50), nullable=False, unique=True)
+    password_hash = Column(String(128), nullable=False)
+    must_change_password = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)

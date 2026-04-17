@@ -100,7 +100,7 @@ def list_entities(
 def create_entity(db: Session, data: EntityCreate) -> Entity:
     existing = db.query(Entity).filter(Entity.entity_code == data.entity_code).first()
     if existing:
-        raise ValueError(f"法人编码已存在: {data.entity_code}")
+        raise ValueError(f"单位编码已存在: {data.entity_code}")
     obj = Entity(**data.model_dump())
     db.add(obj)
     db.commit()
@@ -111,7 +111,7 @@ def create_entity(db: Session, data: EntityCreate) -> Entity:
 def update_entity(db: Session, entity_id: int, data: EntityUpdate) -> Entity:
     obj = db.query(Entity).filter(Entity.id == entity_id).first()
     if not obj:
-        raise ValueError("法人不存在")
+        raise ValueError("单位不存在")
     for key, val in data.model_dump(exclude_unset=True).items():
         setattr(obj, key, val)
     obj.updated_at = datetime.now()
@@ -331,9 +331,65 @@ def _account_to_dict(a: Account) -> Dict[str, Any]:
 # 批量导入
 # ──────────────────────────────────────────
 
-# 列顺序: 板块名称, 法人编码, 法人全称, 法人简称, 账户编码, 账户名称,
-#          开户银行, 开户网点, 银行账号, 账户类型, 工具类型, 录入方式, 币种,
-#          期初余额, 余额日期, 备注
+# 新模板列顺序（与用户提供的 Excel 模板一致）:
+# 核算组织, 单位名称, 单位简称, 单位编码, 开户银行, 银行账号, 开户行名称,
+# 账户编号, 账户后四位, 账户类型, 资金类型, 是否网银, 录入方式, 币种,
+# 期初余额, 余额日期, 是否纳入日报, 是否允许手工录入, 状态, 备注
+
+# 旧模板列顺序（兼容旧文件）:
+# 板块名称, 法人编码, 法人全称, 法人简称, 账户编码, 账户名称,
+# 开户银行, 开户网点, 银行账号, 账户类型, 工具类型, 录入方式, 币种,
+# 期初余额, 余额日期, 备注
+
+def _detect_template_version(header_row) -> str:
+    """根据表头判断模板版本"""
+    if not header_row:
+        return "unknown"
+    first_val = str(header_row[0] or "").strip()
+    # 新模板第一列是"核算组织"
+    if first_val == "核算组织":
+        return "v2"
+    # 旧模板第一列是"板块名称"
+    if first_val in ("板块名称", "板块"):
+        return "v1"
+    # 按列数判断：20列=new, 16列=old
+    non_empty = sum(1 for c in header_row if c and str(c).strip())
+    if non_empty >= 18:
+        return "v2"
+    return "v1"
+
+
+def _parse_bool(val) -> bool:
+    """解析布尔值：是/否/true/false/1/0"""
+    if not val:
+        return False
+    s = str(val).strip().lower()
+    return s in ("是", "true", "1", "yes")
+
+
+def _parse_input_method(val) -> str:
+    """解析录入方式：网银导入→bank_import, 手工填写→manual, 原值保留"""
+    if not val:
+        return "manual"
+    s = str(val).strip()
+    if s in ("网银导入", "bank_import"):
+        return "bank_import"
+    if s in ("手工填写", "手工录入", "manual"):
+        return "manual"
+    return s
+
+
+def _parse_status(val) -> str:
+    """解析状态：启用→enabled, 停用/已注销→disabled"""
+    if not val:
+        return "enabled"
+    s = str(val).strip()
+    if s in ("启用", "enabled"):
+        return "enabled"
+    if s in ("停用", "已注销", "disabled"):
+        return "disabled"
+    return s
+
 
 def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
     fmt = detect_format(filename)
@@ -344,13 +400,16 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
     if len(rows) < 2:
         raise ValueError("文件内容为空")
 
-    # 跳过表头（第1行）和提示行（第2行），从第3行开始
-    data_rows = rows[2:]  # 第3行起是数据
-    # 也支持没有提示行的情况
-    if rows[1] and rows[1][0] and "必填" in str(rows[1][0]):
-        pass  # 第2行是提示行，已跳过
-    else:
-        data_rows = rows[1:]  # 只有表头，第2行起就是数据
+    # 检测模板版本
+    version = _detect_template_version(rows[0])
+
+    # 跳过表头行
+    data_rows = rows[1:]
+    # 跳过提示行（如果第2行包含"必填"/"怎么理解"等说明文字）
+    if data_rows and data_rows[0]:
+        first_cell = str(data_rows[0][0] or "").strip()
+        if first_cell and ("必填" in first_cell or "怎么理解" in first_cell or "填写" in first_cell):
+            data_rows = data_rows[1:]
 
     created_divisions = 0
     created_entities = 0
@@ -370,18 +429,58 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
         account_cache[a.account_code] = a.id
 
     for ri, row in enumerate(data_rows):
-        row_no = ri + 3
+        row_no = ri + 2
         vals = [str(c).strip() if c and str(c).strip() else "" for c in row]
-        # 补齐到 16 列
-        while len(vals) < 16:
-            vals.append("")
 
-        div_name, ent_code, ent_name, ent_short = vals[0], vals[1], vals[2], vals[3]
-        acc_code, acc_alias = vals[4], vals[5]
-        bank_name, branch, acc_number = vals[6], vals[7], vals[8]
-        acc_type, inst_type, input_method = vals[9], vals[10], vals[11]
-        currency, balance_str, date_str = vals[12], vals[13], vals[14]
-        notes = vals[15]
+        if version == "v2":
+            # 新模板：20列
+            while len(vals) < 20:
+                vals.append("")
+            div_name   = vals[0]   # 核算组织
+            ent_name   = vals[1]   # 单位名称
+            ent_short  = vals[2]   # 单位简称
+            ent_code   = vals[3]   # 单位编码
+            bank_name  = vals[4]   # 开户银行
+            acc_number = vals[5]   # 银行账号
+            branch     = vals[6]   # 开户行名称
+            acc_code   = vals[7]   # 账户编号
+            last_four  = vals[8]   # 账户后四位
+            acc_type   = vals[9]   # 账户类型
+            inst_type  = vals[10]  # 资金类型
+            has_online = vals[11]  # 是否网银
+            input_meth = vals[12]  # 录入方式
+            currency   = vals[13]  # 币种
+            balance_str = vals[14] # 期初余额
+            date_str   = vals[15]  # 余额日期
+            in_report  = vals[16]  # 是否纳入日报
+            allow_man  = vals[17]  # 是否允许手工录入
+            status_str = vals[18]  # 状态
+            notes      = vals[19]  # 备注
+        else:
+            # 旧模板：16列（兼容）
+            while len(vals) < 16:
+                vals.append("")
+            div_name   = vals[0]   # 板块名称
+            ent_code   = vals[1]   # 法人编码
+            ent_name   = vals[2]   # 法人全称
+            ent_short  = vals[3]   # 法人简称
+            acc_code   = vals[4]   # 账户编码
+            _acc_alias = vals[5]   # 账户名称
+            bank_name  = vals[6]   # 开户银行
+            branch     = vals[7]   # 开户网点
+            acc_number = vals[8]   # 银行账号
+            acc_type   = vals[9]   # 账户类型
+            inst_type  = vals[10]  # 工具类型
+            input_meth = vals[11]  # 录入方式
+            currency   = vals[12]  # 币种
+            balance_str = vals[13] # 期初余额
+            date_str   = vals[14]  # 余额日期
+            notes      = vals[15]  # 备注
+            last_four  = ""
+            has_online = ""
+            in_report  = ""
+            allow_man  = ""
+            status_str = ""
 
         # 跳过空行
         if not acc_code and not ent_code and not div_name:
@@ -389,13 +488,13 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
 
         # 必填校验
         if not acc_code:
-            errors.append(f"第{row_no}行: 缺少账户编码")
+            errors.append(f"第{row_no}行: 缺少账户编号")
             continue
         if not ent_code:
-            errors.append(f"第{row_no}行: 缺少法人编码")
+            errors.append(f"第{row_no}行: 缺少单位编码")
             continue
 
-        # 自动创建板块
+        # 自动创建核算组织（板块）
         if div_name and div_name not in division_cache:
             div = Division(name=div_name, sort_order=len(division_cache), status="enabled")
             db.add(div)
@@ -403,10 +502,10 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
             division_cache[div_name] = div.id
             created_divisions += 1
 
-        # 自动创建法人
+        # 自动创建单位（法人）
         if ent_code not in entity_cache:
             if not ent_name or not ent_short:
-                errors.append(f"第{row_no}行: 新法人缺少名称或简称")
+                errors.append(f"第{row_no}行: 新单位缺少名称或简称")
                 continue
             div_id = division_cache.get(div_name) if div_name else None
             ent = Entity(
@@ -423,7 +522,7 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
 
         # 账户去重
         if acc_code in account_cache:
-            errors.append(f"第{row_no}行: 账户编码 {acc_code} 已存在，跳过")
+            errors.append(f"第{row_no}行: 账户编号 {acc_code} 已存在，跳过")
             continue
 
         # 解析余额
@@ -442,20 +541,29 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
             if ds:
                 balance_date = date.fromisoformat(ds)
 
+        # 解析后四位（从银行账号自动提取如果没填）
+        parsed_last_four = last_four.strip()
+        if not parsed_last_four and acc_number and len(acc_number) >= 4:
+            parsed_last_four = acc_number[-4:]
+
         acc = Account(
             entity_id=entity_cache[ent_code],
             account_code=acc_code,
-            account_alias=acc_alias or acc_code,
+            account_alias=acc_type or acc_code,
             bank_name=bank_name or None,
             branch_name=branch or None,
             account_number=acc_number or None,
-            account_type=acc_type or "银行账户",
+            account_last_four=parsed_last_four or None,
+            account_type=acc_type or "其他账户",
             instrument_type=inst_type or "银行存款",
-            input_method=input_method or "manual",
+            input_method=_parse_input_method(input_meth),
+            has_online_banking=_parse_bool(has_online),
+            include_in_daily_report=_parse_bool(in_report) if in_report else True,
+            allow_manual_entry=_parse_bool(allow_man) if allow_man else True,
             currency=currency or "CNY",
             initial_balance=init_balance,
             balance_date=balance_date,
-            status="enabled",
+            status=_parse_status(status_str) if status_str else "enabled",
             notes=notes or None,
         )
         db.add(acc)
@@ -470,6 +578,6 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
         "created_divisions": created_divisions,
         "created_entities": created_entities,
         "created_accounts": created_accounts,
-        "errors": errors[:20],  # 最多返回20条错误
+        "errors": errors[:20],
         "error_count": len(errors),
     }

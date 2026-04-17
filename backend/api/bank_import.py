@@ -4,6 +4,8 @@ POST /api/bank-import/upload   — 上传文件
 POST /api/bank-import/preview  — 预览解析结果
 POST /api/bank-import/commit   — 确认提交
 """
+import logging
+
 from fastapi import APIRouter, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
@@ -12,6 +14,8 @@ from sqlalchemy.orm import Session
 from core.response import error, success, ErrorCode
 from database import get_db
 from services import bank_import_service as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -96,7 +100,8 @@ def ai_parse(body: AIParseBody, db: Session = Depends(get_db)):
         result = svc.ai_parse_headers(db, body.headers, body.sample_rows)
         return success(result)
     except Exception as e:
-        return error(5000, str(e))
+        logger.error("AI解析表头失败: %s", str(e), exc_info=True)
+        return error(5000, "AI解析表头失败，请查看操作日志")
 
 
 # ── 保存为规则模板 ──
@@ -116,4 +121,5 @@ def save_template(body: SaveTemplateBody, db: Session = Depends(get_db)):
         })
         return success(result)
     except Exception as e:
-        return error(5000, str(e))
+        logger.error("保存规则模板失败: %s", str(e), exc_info=True)
+        return error(5000, "保存规则模板失败，请查看操作日志")

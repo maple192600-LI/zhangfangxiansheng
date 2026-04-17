@@ -10,7 +10,7 @@
         <span style="color:var(--muted);font-size:13px">至</span>
         <input v-model="endDate" type="date" class="filter" />
         <select v-model="entityId" class="filter">
-          <option :value="null">全部法人</option>
+          <option :value="null">全部单位</option>
           <option v-for="e in entities" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
         </select>
         <div style="flex:1"></div>
@@ -23,7 +23,7 @@
       <table v-if="rows.length">
         <thead>
           <tr>
-            <th>法人简称</th><th>账户名称</th><th>期初余额</th><th>本期收入</th><th>本期支出</th><th>期末余额</th>
+            <th>单位简称</th><th>账户名称</th><th>期初余额</th><th>本期收入</th><th>本期支出</th><th>期末余额</th>
           </tr>
         </thead>
         <tbody>

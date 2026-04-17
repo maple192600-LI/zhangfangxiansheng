@@ -1,4 +1,5 @@
 """手工流水 API — 快速录入 + Excel上传/预览/提交 + 方案管理"""
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form
@@ -18,6 +19,8 @@ from db.schemas import (
 )
 from services import manual_scheme_service as scheme_svc
 from services import manual_flow_service as flow_svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/manual-flow", tags=["manual-flow"])
 
@@ -65,10 +68,8 @@ def quick_entry_save(body: QuickEntrySave, db: Session = Depends(get_db)):
         result = flow_svc.quick_entry_save(db, rows, body.scheme_code)
         return success(result)
     except Exception as e:
-        return error(5000, str(e))
-
-
-# ── Track B: Excel 上传 ──
+        logger.error("快速录入保存失败: %s", str(e), exc_info=True)
+        return error(5000, "快速录入保存失败，请查看操作日志")
 
 @router.post("/upload")
 async def upload_workbook(
@@ -81,10 +82,8 @@ async def upload_workbook(
         result = flow_svc.upload_workbook(db, data, file.filename or "upload.xlsx", scheme_code)
         return success(result)
     except Exception as e:
-        return error(5000, str(e))
-
-
-# ── 预览 ──
+        logger.error("Excel上传失败: %s", str(e), exc_info=True)
+        return error(5000, "Excel上传失败，请查看操作日志")
 
 @router.post("/preview")
 def preview(body: ManualPreviewBody, db: Session = Depends(get_db)):
@@ -92,10 +91,8 @@ def preview(body: ManualPreviewBody, db: Session = Depends(get_db)):
         result = flow_svc.preview_manual(db, body.batch_code, body.scheme_code)
         return success(result)
     except Exception as e:
-        return error(5000, str(e))
-
-
-# ── 提交 ──
+        logger.error("手工流水预览失败: %s", str(e), exc_info=True)
+        return error(5000, "手工流水预览失败，请查看操作日志")
 
 @router.post("/commit")
 def commit(body: ManualCommitBody, db: Session = Depends(get_db)):
@@ -103,10 +100,8 @@ def commit(body: ManualCommitBody, db: Session = Depends(get_db)):
         result = flow_svc.commit_manual(db, body.batch_code, body.confirm_rows, body.fixes)
         return success(result)
     except Exception as e:
-        return error(5000, str(e))
-
-
-# ── 导出模板 ──
+        logger.error("手工流水提交失败: %s", str(e), exc_info=True)
+        return error(5000, "手工流水提交失败，请查看操作日志")
 
 @router.post("/export-template")
 def export_template(body: ManualExportTemplateBody, db: Session = Depends(get_db)):
@@ -119,4 +114,5 @@ def export_template(body: ManualExportTemplateBody, db: Session = Depends(get_db
             headers={"Content-Disposition": "attachment; filename=manual_template.xlsx"},
         )
     except Exception as e:
-        return error(5000, str(e))
+        logger.error("导出模板失败: %s", str(e), exc_info=True)
+        return error(5000, "导出模板失败，请查看操作日志")

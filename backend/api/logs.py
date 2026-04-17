@@ -1,4 +1,5 @@
 """操作日志 API"""
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query, Depends
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from core.response import success, error
 from services import log_service as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -24,5 +27,6 @@ def query_logs(
     try:
         data = svc.query_logs(db, module, action, start_date, end_date, page, page_size)
         return success(data)
-    except Exception:
+    except Exception as e:
+        logger.error("查询操作日志失败: %s", str(e), exc_info=True)
         return error(5000, "查询操作日志失败")

@@ -37,6 +37,8 @@ from api.export import router as export_router
 from api.backup import router as backup_router
 from api.batch import router as batch_router
 from api.logs import router as logs_router
+from api.auth import router as auth_router
+from api.reset import router as reset_router
 
 
 def _init_db():
@@ -45,8 +47,12 @@ def _init_db():
 
     Base.metadata.create_all(bind=engine)
 
+    # 增量迁移：在任何 ORM 查询之前完成表结构变更
+    _migrate_schema()
+
     insp = inspect(engine)
     if not insp.get_table_names():
+        _ensure_default_user()
         return
 
     with engine.connect() as conn:
@@ -57,11 +63,13 @@ def _init_db():
             if field_count <= 7:
                 print("补充手工字段池可选字段...")
                 _run_seed_increment(conn, DATA_DIR)
+            _ensure_default_user()
             return
 
         seed_path = os.path.join(DATA_DIR, "seed.sql")
         if not os.path.exists(seed_path):
             print("警告：未找到种子数据文件 data/seed.sql")
+            _ensure_default_user()
             return
 
         with open(seed_path, "r", encoding="utf-8") as f:
@@ -77,6 +85,48 @@ def _init_db():
                 conn.execute(text(stmt))
         conn.commit()
         print("种子数据已写入。")
+
+    _ensure_default_user()
+
+
+def _migrate_schema():
+    """增量表结构迁移 — 在 create_all 之后、ORM 查询之前执行"""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        # users.must_change_password
+        try:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+            print("已为 users 表添加 must_change_password 字段")
+        except Exception:
+            pass
+
+        # accounts 新增列（核算组织模板统一）
+        _try_add_col(conn, "accounts", "account_last_four", "VARCHAR(10)")
+        _try_add_col(conn, "accounts", "has_online_banking", "BOOLEAN NOT NULL DEFAULT 0")
+        _try_add_col(conn, "accounts", "include_in_daily_report", "BOOLEAN NOT NULL DEFAULT 1")
+        _try_add_col(conn, "accounts", "allow_manual_entry", "BOOLEAN NOT NULL DEFAULT 1")
+
+
+def _try_add_col(conn, table: str, column: str, definition: str):
+    """安全添加列，已存在则忽略"""
+    from sqlalchemy import text
+    try:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+        conn.commit()
+        print(f"已为 {table} 表添加 {column} 字段")
+    except Exception:
+        pass
+
+
+def _ensure_default_user():
+    """确保默认 admin 用户存在"""
+    from database import SessionLocal
+    from services.auth_service import get_or_create_default_user
+    with SessionLocal() as db:
+        get_or_create_default_user(db)
 
 
 def _run_seed_increment(conn, data_dir: str):
@@ -165,6 +215,8 @@ app.include_router(export_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(batch_router, prefix="/api")
 app.include_router(logs_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(reset_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──
@@ -190,6 +242,10 @@ if os.path.isdir(frontend_dist):
             return FileResponse(index_html, media_type="text/html",
                                 headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return await call_next(request)
+
+    # ── 认证中间件（在 spa_fallback 之后注册，先于 spa 执行） ──
+    from core.auth_middleware import auth_middleware
+    app.middleware("http")(auth_middleware)
 
 
 if __name__ == "__main__":

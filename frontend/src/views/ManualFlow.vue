@@ -22,7 +22,7 @@
         <!-- 批量上下文 -->
         <div class="batch-bar">
           <select v-model="batchCtx.entity_id" class="filter" style="width:140px">
-            <option :value="null">批量法人简称（可选）</option>
+            <option :value="null">批量单位简称（可选）</option>
             <option v-for="e in entities" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
           </select>
           <select v-model="batchCtx.account_id" class="filter" style="width:140px">
@@ -48,12 +48,12 @@
                 <td v-for="col in visibleColumns" :key="col.field_code">
                   <template v-if="col.field_code === 'entity_match_key'">
                     <select v-model="row[col.field_code]" class="cell-input">
-                      <option value="">选择法人简称</option>
+                      <option value="">选择单位简称</option>
                       <option v-for="e in entities" :key="e.entity_id" :value="e.entity_name">{{ e.entity_name }}</option>
                     </select>
                   </template>
                   <template v-else-if="col.field_code === 'account_match_key'">
-                    <input v-model="row[col.field_code]" class="cell-input" placeholder="账户编码/名称" />
+                    <input v-model="row[col.field_code]" class="cell-input" placeholder="账户编号/名称" />
                   </template>
                   <template v-else-if="col.data_type === 'number'">
                     <input v-model="row[col.field_code]" type="number" step="0.01" class="cell-input" />

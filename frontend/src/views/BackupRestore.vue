@@ -37,6 +37,15 @@
       <h4>暂无备份</h4>
       <p>点击"创建备份"生成第一份系统备份</p>
     </div>
+
+    <!-- 恢复出厂设置 -->
+    <div class="factory-section">
+      <h4 style="margin: 0 0 6px; color: var(--text);">恢复出厂设置</h4>
+      <p style="margin: 0 0 12px; font-size: 13px; color: var(--text-light);">清空所有业务数据（流水、报表、日志），保留主数据配置。执行前自动创建备份。</p>
+      <button class="btn btn-warn" @click="confirmingFactory = true" :disabled="resetting">
+        {{ resetting ? '执行中...' : '恢复出厂设置' }}
+      </button>
+    </div>
   </div>
 
   <!-- 恢复确认弹窗 -->
@@ -51,16 +60,37 @@
       </div>
     </div>
   </div>
+
+  <!-- 恢复出厂确认弹窗 -->
+  <div v-if="confirmingFactory" class="modal-overlay" @click.self="confirmingFactory = false">
+    <div class="modal-box">
+      <h3>确认恢复出厂设置</h3>
+      <p>将清空以下业务数据：</p>
+      <ul style="font-size: 13px; line-height: 1.8; padding-left: 20px; color: var(--text-secondary);">
+        <li>资金流水记录（fund_events）</li>
+        <li>导入批次记录（import_batches）</li>
+        <li>日报生成记录（daily_report_runs）</li>
+        <li>操作日志（operation_logs）</li>
+      </ul>
+      <p style="color: var(--warn-text); font-weight: 600;">主数据（单位、账户、模板等）将被保留。执行前自动创建备份。</p>
+      <div class="btn-row" style="justify-content: flex-end; margin-top: 20px;">
+        <button class="btn btn-secondary" @click="confirmingFactory = false">取消</button>
+        <button class="btn btn-warn" @click="doFactoryReset">确认恢复出厂</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { listBackups, createBackup, restoreBackup } from '@/api/backup'
+import { listBackups, createBackup, restoreBackup, factoryReset } from '@/api/backup'
 
 const backups = ref([])
 const creating = ref(false)
 const restoring = ref(null)
 const confirming = ref(null)
+const confirmingFactory = ref(false)
+const resetting = ref(false)
 const error = ref('')
 const message = ref('')
 
@@ -108,6 +138,22 @@ async function doRestore(filename) {
     restoring.value = null
   }
 }
+
+async function doFactoryReset() {
+  confirmingFactory.value = false
+  resetting.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const data = await factoryReset()
+    message.value = `恢复出厂完成。已自动备份：${data.backup_file || '无'}`
+    await fetchList()
+  } catch (e) {
+    error.value = e.message || '恢复出厂设置失败'
+  } finally {
+    resetting.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -122,4 +168,12 @@ async function doRestore(filename) {
 }
 .modal-box h3 { margin: 0 0 12px; font-size: var(--font-size-lg); }
 .modal-box p { font-size: var(--font-size-sm); line-height: 1.8; margin: 6px 0; }
+
+.factory-section {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px dashed var(--warn-border, #e8c9a0);
+  border-radius: var(--radius, 8px);
+  background: var(--warn-bg, #fef6ed);
+}
 </style>

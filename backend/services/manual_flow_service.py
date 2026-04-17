@@ -286,7 +286,8 @@ def _preview_from_file(db: Session, batch: ImportBatch, scheme_code: str) -> Dic
     if not file_path or not os.path.isfile(file_path):
         raise ValueError("上传文件已丢失，请重新上传")
 
-    file_data = open(file_path, "rb").read()
+    with open(file_path, "rb") as fh:
+        file_data = fh.read()
     rows = read_file_from_bytes(file_data, source, fmt)
     header_idx = detect_header_row(rows)
     headers = [h.strip() for h in rows[header_idx]]

@@ -1,4 +1,5 @@
 """报表 API — 日报/日记账/余额表/收支明细"""
+import logging
 from datetime import date
 from typing import Optional
 
@@ -10,6 +11,8 @@ from core.response import success, error
 from services import report_service as svc
 from services.base_data_service import _parse_date
 from services import log_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -40,7 +43,8 @@ def get_daily_report(
         return success(result)
     except ValueError as e:
         return error(4001, str(e))
-    except Exception:
+    except Exception as e:
+        logger.error("生成日报失败: %s", str(e), exc_info=True)
         return error(5000, "生成日报失败，请检查参数后重试")
 
 
@@ -59,7 +63,8 @@ def get_cash_journal(
         return success(result)
     except ValueError as e:
         return error(4001, str(e))
-    except Exception:
+    except Exception as e:
+        logger.error("查询日记账失败: %s", str(e), exc_info=True)
         return error(5000, "查询日记账失败，请检查参数后重试")
 
 
@@ -79,7 +84,8 @@ def get_account_balance(
         return success(result)
     except ValueError as e:
         return error(4001, str(e))
-    except Exception:
+    except Exception as e:
+        logger.error("查询余额表失败: %s", str(e), exc_info=True)
         return error(5000, "查询余额表失败，请检查参数后重试")
 
 
@@ -101,7 +107,8 @@ def get_income_list(
         return success(result)
     except ValueError as e:
         return error(4001, str(e))
-    except Exception:
+    except Exception as e:
+        logger.error("查询收入明细失败: %s", str(e), exc_info=True)
         return error(5000, "查询收入明细失败，请检查参数后重试")
 
 
@@ -123,5 +130,6 @@ def get_expense_list(
         return success(result)
     except ValueError as e:
         return error(4001, str(e))
-    except Exception:
+    except Exception as e:
+        logger.error("查询支出明细失败: %s", str(e), exc_info=True)
         return error(5000, "查询支出明细失败，请检查参数后重试")

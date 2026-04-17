@@ -3,12 +3,14 @@
 板块 / 法人 / 账户 / 别名 — 共 14 个端点 + 批量导入。
 严格按 docs/30_contracts/23_api_contracts.md 实现。
 """
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from config import DATA_DIR
 from core.response import error, success
 from database import get_db
 from db.schemas import (
@@ -17,6 +19,8 @@ from db.schemas import (
     InitialBalanceSet,
 )
 from services import master_data_service as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -222,77 +226,17 @@ def delete_alias(
 
 @router.get("/accounts/template")
 def download_template():
-    """下载账户批量导入模板"""
-    import io
-    import openpyxl
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    """下载账户批量导入模板（用户提供的标准模板）"""
+    import os
+    from fastapi.responses import FileResponse
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "账户导入模板"
-
-    # 表头
-    headers = [
-        ("板块名称", "必填，如：养护板块"),
-        ("法人编码", "必填，如：E001"),
-        ("法人全称", "必填，如：山西喜跃发实业发展有限公司"),
-        ("法人简称", "必填，如：实业公司"),
-        ("账户编码", "必填，如：A001"),
-        ("账户名称", "必填，如：中行手工户"),
-        ("开户银行", "选填"),
-        ("开户网点", "选填"),
-        ("银行账号", "选填"),
-        ("账户类型", "必填，如：银行账户/现金/票据/其他"),
-        ("工具类型", "必填，如：银行存款/现金/票据/受限资金"),
-        ("录入方式", "manual 或 bank_import"),
-        ("币种", "如 CNY"),
-        ("期初余额", "数字"),
-        ("余额日期", "如 2026-03-01"),
-        ("备注", "选填"),
-    ]
-
-    header_font = Font(bold=True, size=11)
-    header_fill = PatternFill(start_color="E8F0E6", end_color="E8F0E6", fill_type="solid")
-    hint_font = Font(size=9, color="888888")
-    thin_border = Border(
-        left=Side(style="thin"), right=Side(style="thin"),
-        top=Side(style="thin"), bottom=Side(style="thin"),
-    )
-
-    for ci, (name, hint) in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=ci, value=name)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.border = thin_border
-        cell.alignment = Alignment(horizontal="center")
-
-        hint_cell = ws.cell(row=2, column=ci, value=hint)
-        hint_cell.font = hint_font
-        hint_cell.border = thin_border
-
-    # 示例行
-    example = [
-        "养护板块", "E001", "山西喜跃发实业发展有限公司", "实业公司",
-        "A001", "中行手工户", "中国银行", "太原分行", "6217xxxx0001",
-        "银行账户", "银行存款", "manual", "CNY", 200000, "2026-03-01", "无网银手工户",
-    ]
-    for ci, val in enumerate(example, 1):
-        cell = ws.cell(row=3, column=ci, value=val)
-        cell.border = thin_border
-
-    # 列宽
-    col_widths = [14, 10, 30, 12, 10, 14, 12, 12, 18, 12, 12, 14, 8, 12, 14, 20]
-    for ci, w in enumerate(col_widths, 1):
-        ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = w
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    return StreamingResponse(
-        buf,
+    template_path = os.path.join(DATA_DIR, "account_import_template.xlsx")
+    if not os.path.isfile(template_path):
+        return error(5000, "导入模板文件不存在")
+    return FileResponse(
+        template_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=account_import_template.xlsx"},
+        filename="账户数据中心_导入模板.xlsx",
     )
 
 

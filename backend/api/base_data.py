@@ -1,4 +1,5 @@
 """基础数据 API — 查询 + 滚动余额重建"""
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -8,6 +9,8 @@ from fastapi import Depends
 from database import get_db
 from core.response import success, error
 from services import base_data_service as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/base-data", tags=["base-data"])
 
@@ -32,7 +35,8 @@ def get_base_data(
         return success(result)
     except ValueError as e:
         return error(4001, str(e))
-    except Exception:
+    except Exception as e:
+        logger.error("查询基础数据失败: %s", str(e), exc_info=True)
         return error(5000, "查询基础数据失败，请检查参数后重试")
 
 
@@ -41,5 +45,6 @@ def rebuild_balance(db: Session = Depends(get_db)):
     try:
         result = svc.rebuild_rolling_balance(db)
         return success(result)
-    except Exception:
+    except Exception as e:
+        logger.error("余额重建失败: %s", str(e), exc_info=True)
         return error(5000, "余额重建失败，请稍后重试")

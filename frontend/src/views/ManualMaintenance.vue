@@ -3,7 +3,7 @@
     <div class="section">
       <div class="section-title">
         <h3>异常行修复</h3>
-        <span>修正未匹配的法人或账户</span>
+        <span>修正未匹配的单位或账户</span>
       </div>
       <div class="filters-bar">
         <span style="font-size:var(--font-size-sm)">批次号：<strong>{{ batchCode }}</strong></span>
@@ -19,7 +19,7 @@
         <table>
           <thead>
             <tr>
-              <th>#</th><th>法人简称</th><th>账户名称</th><th>日期</th><th>摘要</th>
+              <th>#</th><th>单位简称</th><th>账户名称</th><th>日期</th><th>摘要</th>
               <th>对方</th><th>收入</th><th>支出</th><th>异常代码</th>
             </tr>
           </thead>

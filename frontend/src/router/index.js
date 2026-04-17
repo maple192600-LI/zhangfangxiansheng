@@ -4,6 +4,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 const Placeholder = () => import('@/views/Placeholder.vue')
 
 const routes = [
+  // 登录页 — 顶层路由，不走 MainLayout
+  { path: '/login', name: 'login', component: () => import('@/views/Login.vue') },
   {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
@@ -105,6 +107,17 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// 导航守卫 — 未登录跳转 /login
+router.beforeEach((to) => {
+  const token = localStorage.getItem('zf_token')
+  if (!token && to.name !== 'login') {
+    return { name: 'login' }
+  }
+  if (token && to.name === 'login') {
+    return { name: 'home' }
+  }
 })
 
 export default router

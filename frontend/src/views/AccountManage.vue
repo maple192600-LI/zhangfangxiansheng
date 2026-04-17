@@ -3,19 +3,19 @@
     <div class="section">
       <div class="section-title">
         <h3>账户数据管理</h3>
-        <span>管理所有法人实体下的资金账户</span>
+        <span>管理所有核算组织下的单位账户</span>
       </div>
       <div class="filters-bar">
         <select v-model="filterDivision" class="filter" @change="loadData">
-          <option :value="null">全部板块</option>
+          <option :value="null">全部核算组织</option>
           <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
         </select>
         <select v-model="filterEntity" class="filter">
-          <option :value="null">全部法人</option>
+          <option :value="null">全部单位</option>
 
           <option v-for="e in filteredEntities" :key="e.id" :value="e.id">{{ e.short_name }}</option>
         </select>
-        <input v-model="keyword" class="filter" placeholder="搜索账户编码/账户名称/银行/账号" style="width:220px" />
+        <input v-model="keyword" class="filter" placeholder="搜索账户编号/账户名称/银行/账号" style="width:220px" />
         <select v-model="filterStatus" class="filter" style="width:90px">
           <option value="">全部</option>
           <option value="enabled">启用</option>
@@ -35,13 +35,13 @@
           <thead>
             <tr>
               <th class="col-id">ID</th>
-              <th class="col-code">账户编码</th>
+              <th class="col-code">账户编号</th>
               <th class="col-alias">账户名称</th>
-              <th class="col-entity">法人简称</th>
+              <th class="col-entity">单位简称</th>
               <th class="col-bank">开户银行</th>
               <th class="col-number">银行账号</th>
               <th class="col-type">账户类型</th>
-              <th class="col-instrument">工具类型</th>
+              <th class="col-instrument">资金类型</th>
               <th class="col-balance">期初余额</th>
               <th class="col-date">余额日期</th>
               <th class="col-method">录入方式</th>
@@ -87,72 +87,105 @@
 
     <!-- 账户表单弹窗 -->
     <div class="modal-mask" v-if="showForm" @click.self="showForm=false">
-      <div class="modal">
+      <div class="modal modal-lg">
         <h3>{{ editing ? '编辑账户' : '新建账户' }}</h3>
         <div class="form-grid">
           <div class="form-group">
-            <label class="form-label">所属法人 *</label>
+            <label class="form-label">所属单位 *</label>
             <select v-model="form.entity_id" class="form-input">
-              <option v-for="e in allEntities" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
+              <option :value="null" disabled>-- 请选择所属单位 --</option>
+              <optgroup v-for="d in divisions" :key="d.id" :label="d.name">
+                <option v-for="e in getEntitiesForDivision(d.id)" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
+              </optgroup>
+              <option v-for="e in ungroupedEntities" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">账户编码 *</label>
-            <input v-model="form.account_code" class="form-input" placeholder="如 A007" :disabled="!!editing" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">账户别名 *</label>
-            <input v-model="form.account_alias" class="form-input" placeholder="如 中行手工户" />
+            <label class="form-label">账户编号 *</label>
+            <input v-model="form.account_code" class="form-input" placeholder="如 ZH0001" :disabled="!!editing" />
           </div>
           <div class="form-group">
             <label class="form-label">开户银行</label>
             <input v-model="form.bank_name" class="form-input" placeholder="如 中国银行" />
           </div>
           <div class="form-group">
-            <label class="form-label">开户行</label>
-            <input v-model="form.branch_name" class="form-input" placeholder="如 太原分行" />
+            <label class="form-label">银行账号</label>
+            <input v-model="form.account_number" class="form-input" placeholder="完整账号，不加空格" />
           </div>
           <div class="form-group">
-            <label class="form-label">账号</label>
-            <input v-model="form.account_number" class="form-input" placeholder="银行卡号" />
+            <label class="form-label">开户行名称</label>
+            <input v-model="form.branch_name" class="form-input" placeholder="如 中国银行上海浦东支行" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">账户后四位</label>
+            <input v-model="form.account_last_four" class="form-input" placeholder="银行账号后四位" />
           </div>
           <div class="form-group">
             <label class="form-label">账户类型 *</label>
             <select v-model="form.account_type" class="form-input">
-              <option value="银行账户">银行账户</option>
+              <option value="" disabled>-- 请选择 --</option>
+              <option value="基本户">基本户</option>
+              <option value="一般户">一般户</option>
+              <option value="临时户">临时户</option>
+              <option value="现金账户">现金账户</option>
+              <option value="农民工工资专用账户">农民工工资专用账户</option>
+              <option value="票据账户">票据账户</option>
+              <option value="信用证账户">信用证账户</option>
+              <option value="贷款账户">贷款账户</option>
+              <option value="其他账户">其他账户</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">资金类型 *</label>
+            <select v-model="form.instrument_type" class="form-input">
+              <option value="" disabled>-- 请选择 --</option>
+              <option value="银行存款">银行存款</option>
               <option value="现金">现金</option>
               <option value="票据">票据</option>
+              <option value="信用证">信用证</option>
+              <option value="保证金">保证金</option>
               <option value="其他">其他</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">工具类型 *</label>
-            <select v-model="form.instrument_type" class="form-input">
-              <option value="银行存款">银行存款</option>
-              <option value="现金">现金</option>
-              <option value="票据">票据</option>
-              <option value="受限资金">受限资金</option>
-              <option value="其他">其他</option>
+            <label class="form-label">是否网银 *</label>
+            <select v-model="form.has_online_banking" class="form-input">
+              <option :value="true">是</option>
+              <option :value="false">否</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">录入方式 *</label>
             <select v-model="form.input_method" class="form-input">
-              <option value="manual">手工录入</option>
-              <option value="bank_import">银行导入</option>
+              <option value="网银导入">网银导入</option>
+              <option value="手工填写">手工填写</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">币种 *</label>
-            <input v-model="form.currency" class="form-input" />
+            <label class="form-label">币种</label>
+            <input v-model="form.currency" class="form-input" placeholder="CNY" />
           </div>
           <div class="form-group" v-if="!editing">
             <label class="form-label">期初余额 *</label>
-            <input v-model.number="form.initial_balance" type="number" step="0.01" class="form-input" />
+            <input v-model.number="form.initial_balance" type="number" step="0.01" class="form-input" placeholder="系统起算余额" />
           </div>
           <div class="form-group" v-if="!editing">
             <label class="form-label">余额日期 *</label>
             <input v-model="form.balance_date" type="date" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">是否纳入日报</label>
+            <select v-model="form.include_in_daily_report" class="form-input">
+              <option :value="true">是</option>
+              <option :value="false">否</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">是否允许手工录入</label>
+            <select v-model="form.allow_manual_entry" class="form-input">
+              <option :value="true">是</option>
+              <option :value="false">否</option>
+            </select>
           </div>
           <div class="form-group" v-if="editing">
             <label class="form-label">状态</label>
@@ -163,7 +196,7 @@
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>
-            <input v-model="form.notes" class="form-input" />
+            <input v-model="form.notes" class="form-input" placeholder="补充说明" />
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
@@ -193,15 +226,25 @@ const keyword = ref('')
 const showForm = ref(false)
 const editing = ref(null)
 const form = ref({
-  entity_id: null, account_code: '', account_alias: '', bank_name: '', branch_name: '',
-  account_number: '', account_type: '银行账户', instrument_type: '银行存款',
-  input_method: 'manual', currency: 'CNY', initial_balance: 0, balance_date: '',
+  entity_id: null, account_code: '', bank_name: '', branch_name: '',
+  account_number: '', account_last_four: '', account_type: '', instrument_type: '',
+  has_online_banking: false, input_method: '手工填写', currency: 'CNY',
+  include_in_daily_report: true, allow_manual_entry: true,
+  initial_balance: 0, balance_date: '',
   status: 'enabled', notes: '',
 })
 
 const filteredEntities = computed(() => {
   if (!filterDivision.value) return allEntities.value
   return allEntities.value.filter(e => e.division_id === filterDivision.value)
+})
+
+const getEntitiesForDivision = (divisionId) => {
+  return allEntities.value.filter(e => e.division_id === divisionId)
+}
+
+const ungroupedEntities = computed(() => {
+  return allEntities.value.filter(e => !e.division_id)
 })
 
 const filteredAccounts = computed(() => {
@@ -238,20 +281,26 @@ function openForm(acc) {
   if (acc) {
     editing.value = acc
     form.value = {
-      entity_id: acc.entity_id, account_code: acc.account_code, account_alias: acc.account_alias,
+      entity_id: acc.entity_id, account_code: acc.account_code,
       bank_name: acc.bank_name || '', branch_name: acc.branch_name || '',
-      account_number: acc.account_number || '', account_type: acc.account_type,
-      instrument_type: acc.instrument_type, input_method: acc.input_method,
-      currency: acc.currency, initial_balance: acc.initial_balance,
-      balance_date: acc.balance_date, status: acc.status, notes: acc.notes || '',
+      account_number: acc.account_number || '', account_last_four: acc.account_last_four || '',
+      account_type: acc.account_type || '', instrument_type: acc.instrument_type || '',
+      has_online_banking: acc.has_online_banking || false,
+      input_method: acc.input_method === 'bank_import' ? '网银导入' : '手工填写',
+      currency: acc.currency, include_in_daily_report: acc.include_in_daily_report !== false,
+      allow_manual_entry: acc.allow_manual_entry !== false,
+      initial_balance: acc.initial_balance, balance_date: acc.balance_date,
+      status: acc.status, notes: acc.notes || '',
     }
   } else {
     editing.value = null
     form.value = {
-      entity_id: null, account_code: '', account_alias: '', bank_name: '', branch_name: '',
-      account_number: '', account_type: '银行账户', instrument_type: '银行存款',
-      input_method: 'manual', currency: 'CNY', initial_balance: 0,
-      balance_date: new Date().toISOString().slice(0, 10), status: 'enabled', notes: '',
+      entity_id: null, account_code: '', bank_name: '', branch_name: '',
+      account_number: '', account_last_four: '', account_type: '', instrument_type: '',
+      has_online_banking: false, input_method: '手工填写', currency: 'CNY',
+      include_in_daily_report: true, allow_manual_entry: true,
+      initial_balance: 0, balance_date: new Date().toISOString().slice(0, 10),
+      status: 'enabled', notes: '',
     }
   }
   showForm.value = true
@@ -261,11 +310,16 @@ async function saveAccount() {
   try {
     const payload = {
       entity_id: form.value.entity_id, account_code: form.value.account_code,
-      account_alias: form.value.account_alias, bank_name: form.value.bank_name,
-      branch_name: form.value.branch_name, account_number: form.value.account_number,
+      account_alias: form.value.account_type || form.value.account_code,
+      bank_name: form.value.bank_name, branch_name: form.value.branch_name,
+      account_number: form.value.account_number,
+      account_last_four: form.value.account_last_four || (form.value.account_number ? form.value.account_number.slice(-4) : ''),
       account_type: form.value.account_type, instrument_type: form.value.instrument_type,
-      input_method: form.value.input_method, currency: form.value.currency,
-      notes: form.value.notes,
+      has_online_banking: form.value.has_online_banking,
+      input_method: form.value.input_method === '网银导入' ? 'bank_import' : 'manual',
+      include_in_daily_report: form.value.include_in_daily_report,
+      allow_manual_entry: form.value.allow_manual_entry,
+      currency: form.value.currency, notes: form.value.notes,
     }
     if (editing.value) {
       payload.status = form.value.status
@@ -303,19 +357,11 @@ async function doImport(e) {
   const file = e.target.files[0]
   if (!file) return
   try {
-    const fd = new FormData()
-    fd.append('file', file)
-    const resp = await fetch('/api/accounts/import', { method: 'POST', body: fd })
-    const result = await resp.json()
-    if (result.code === 0) {
-      const d = result.data
-      let msg = `导入完成！\n创建板块: ${d.created_divisions}\n创建法人: ${d.created_entities}\n创建账户: ${d.created_accounts}`
-      if (d.error_count > 0) msg += `\n\n${d.error_count} 条错误：\n${d.errors.join('\n')}`
-      alert(msg)
-      await loadData()
-    } else {
-      alert('导入失败: ' + result.message)
-    }
+    const d = await master.importAccounts(file)
+    let msg = `导入完成！\n创建核算组织: ${d.created_divisions}\n创建单位: ${d.created_entities}\n创建账户: ${d.created_accounts}`
+    if (d.error_count > 0) msg += `\n\n${d.error_count} 条错误：\n${d.errors.join('\n')}`
+    alert(msg)
+    await loadData()
   } catch (e) { alert('导入出错: ' + e.message) }
   e.target.value = ''
 }
@@ -369,6 +415,7 @@ tr.disabled { opacity: 0.55; }
   background: rgba(0,0,0,0.35);
   display: flex; align-items: center; justify-content: center;
   z-index: 1000;
+  overflow-y: auto;
 }
 .modal {
   background: #faf8f3;
@@ -376,10 +423,16 @@ tr.disabled { opacity: 0.55; }
   padding: 24px;
   width: 90%;
   max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  position: relative;
+  z-index: 1001;
 }
+.modal-lg { max-width: 780px; }
 .modal h3 { margin: 0 0 16px 0; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 16px; }
+.form-grid .form-input { max-width: none; }
 
 /* 响应式 */
 @media (max-width: 1000px) {

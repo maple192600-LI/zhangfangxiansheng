@@ -69,7 +69,7 @@
     <div class="section">
       <div class="section-title"><h3>重点账户</h3></div>
       <table v-if="overview.account_changes?.length">
-        <thead><tr><th>账户名称</th><th>法人简称</th><th class="money">余额</th></tr></thead>
+        <thead><tr><th>账户名称</th><th>单位简称</th><th class="money">余额</th></tr></thead>
         <tbody>
           <tr v-for="a in overview.account_changes" :key="a.account_name">
             <td>{{ a.account_name }}</td>
@@ -85,11 +85,28 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getOverview, getSystemStatus } from '@/api/home'
 import { getMetrics, getTrends, getComposition } from '@/api/dashboard'
 import { fmtAmt } from '@/utils/format'
+
+// 保存 chart 实例用于清理
+let trendChartInstance = null
+let pieChartInstance = null
+
+const handleResize = () => {
+  trendChartInstance?.resize()
+  pieChartInstance?.resize()
+}
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChartInstance?.dispose()
+  pieChartInstance?.dispose()
+  trendChartInstance = null
+  pieChartInstance = null
+})
 
 const loading = ref(true)
 const overview = ref({})
@@ -128,8 +145,9 @@ onMounted(async () => {
 
 function renderTrendChart(data) {
   if (!trendChart.value || !data?.dates?.length) return
-  const chart = echarts.init(trendChart.value)
-  chart.setOption({
+  if (trendChartInstance) trendChartInstance.dispose()
+  trendChartInstance = echarts.init(trendChart.value)
+  trendChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['收入', '支出'], top: 0 },
     grid: { top: 36, left: 50, right: 20, bottom: 30 },
@@ -140,13 +158,14 @@ function renderTrendChart(data) {
       { name: '支出', type: 'line', smooth: true, data: data.expense, itemStyle: { color: '#c47a5a' }, areaStyle: { color: 'rgba(196,122,90,.1)' } },
     ],
   })
-  window.addEventListener('resize', () => chart.resize())
+  window.addEventListener('resize', handleResize)
 }
 
 function renderPieChart(data) {
   if (!pieChart.value || !data?.items?.length) return
-  const chart = echarts.init(pieChart.value)
-  chart.setOption({
+  if (pieChartInstance) pieChartInstance.dispose()
+  pieChartInstance = echarts.init(pieChart.value)
+  pieChartInstance.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     series: [{
       type: 'pie', radius: ['40%', '70%'],
@@ -156,7 +175,7 @@ function renderPieChart(data) {
       color: ['#7f9b7a', '#a8bfa4', '#c47a5a', '#d4a574', '#6b8fad', '#8faabc'],
     }],
   })
-  window.addEventListener('resize', () => chart.resize())
+  window.addEventListener('resize', handleResize)
 }
 </script>
 

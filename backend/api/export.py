@@ -1,4 +1,5 @@
 """导出 API — 生成 Excel 并下载"""
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -10,6 +11,8 @@ from database import get_db
 from core.response import success, error
 from services import export_service as svc
 from services import log_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -44,4 +47,5 @@ def export_report(req: ExportRequest, db: Session = Depends(get_db)):
             headers={"Cache-Control": "no-cache"},
         )
     except Exception as e:
-        return error(5000, f"导出失败: {str(e)}")
+        logger.error("导出失败: %s", str(e), exc_info=True)
+        return error(5000, "导出失败，请查看操作日志")

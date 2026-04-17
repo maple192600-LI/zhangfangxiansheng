@@ -1,6 +1,7 @@
 """备份恢复服务"""
 import os
 import json
+import logging
 import zipfile
 import shutil
 from datetime import datetime
@@ -9,6 +10,33 @@ from typing import Dict, Optional
 from sqlalchemy import text
 
 from config import BACKUP_DIR, DATA_DIR, DB_PATH, BASE_DIR
+
+logger = logging.getLogger(__name__)
+
+MAX_BACKUP_RETENTION = 20
+
+
+def _validate_backup_filename(filename: str) -> str:
+    """校验备份文件名，防止路径穿越"""
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise ValueError("无效的备份文件名")
+    base = os.path.basename(filename)
+    if not base.startswith("bk_") or not base.endswith(".zip"):
+        raise ValueError("无效的备份文件名格式")
+    resolved = os.path.realpath(os.path.join(BACKUP_DIR, base))
+    if not resolved.startswith(os.path.realpath(BACKUP_DIR) + os.sep):
+        raise ValueError("备份文件路径非法")
+    return base
+
+
+def _safe_extract(zf: zipfile.ZipFile, target_dir: str) -> None:
+    """安全解压 ZIP，防止 Zip Slip 路径穿越"""
+    real_target = os.path.realpath(target_dir)
+    for member in zf.namelist():
+        member_path = os.path.realpath(os.path.join(target_dir, member))
+        if not member_path.startswith(real_target + os.sep) and member_path != real_target:
+            raise ValueError(f"ZIP 内含不安全路径: {member}")
+        zf.extract(member, target_dir)
 
 
 def list_backups() -> Dict:
@@ -45,6 +73,9 @@ def create_backup(db) -> Dict:
     vacuum_path = os.path.join(DATA_DIR, "zhangfang_vacuum.db")
     if os.path.exists(vacuum_path):
         os.remove(vacuum_path)
+    vacuum_path = os.path.normpath(vacuum_path)
+    if "'" in vacuum_path or '"' in vacuum_path:
+        raise ValueError("数据库路径含非法字符")
     db.execute(text(f"VACUUM INTO '{vacuum_path}'"))
     db.commit()
 
@@ -73,9 +104,9 @@ def create_backup(db) -> Dict:
     if os.path.exists(vacuum_path):
         os.remove(vacuum_path)
 
-    # 保留最近 20 份
+    # 保留最近 N 份
     all_backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.startswith("bk_") and f.endswith(".zip")])
-    while len(all_backups) > 20:
+    while len(all_backups) > MAX_BACKUP_RETENTION:
         old = os.path.join(BACKUP_DIR, all_backups.pop(0))
         os.remove(old)
 
@@ -87,7 +118,8 @@ def create_backup(db) -> Dict:
 
 def restore_backup(filename: str) -> Dict:
     """从备份 ZIP 恢复"""
-    filepath = os.path.join(BACKUP_DIR, filename)
+    safe_name = _validate_backup_filename(filename)
+    filepath = os.path.join(BACKUP_DIR, safe_name)
     if not os.path.exists(filepath):
         raise ValueError("备份文件不存在")
 
@@ -103,7 +135,7 @@ def restore_backup(filename: str) -> Dict:
             shutil.copy2(DB_PATH, backup_current)
 
         try:
-            zf.extract(db_in_zip, os.path.dirname(DATA_DIR))
+            _safe_extract(zf, os.path.dirname(DATA_DIR))
             extracted = os.path.join(os.path.dirname(DATA_DIR), db_in_zip)
             shutil.move(extracted, DB_PATH)
         except Exception:
@@ -121,7 +153,6 @@ def restore_backup(filename: str) -> Dict:
         if agents_files:
             agents_dir = os.path.join(BASE_DIR, "agents")
             os.makedirs(agents_dir, exist_ok=True)
-            for af in agents_files:
-                zf.extract(af, BASE_DIR)
+            _safe_extract(zf, BASE_DIR)
 
-    return {"restored_from": filename}
+    return {"restored_from": safe_name}
