@@ -4,18 +4,21 @@
 """
 import json
 import os
+import re
 import uuid
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from core import artifact_runtime
 from core.parser_engine import (
     apply_mapping, detect_format, detect_header_row,
     match_template, normalize_amount, normalize_date,
     read_file_from_bytes,
 )
 from core.ai_call import chat
+from core.pii_masker import mask_row
 from core.security import decrypt_key
 from db.tables import FundEvent, ImportBatch, ParserTemplate, AIConfig
 from config import DATA_DIR
@@ -39,6 +42,11 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
     # 检测表头
     header_idx = detect_header_row(rows)
     headers = [h.strip() for h in rows[header_idx] if h and h.strip()]
+    sample_rows = [
+        [str(c).strip() if c else "" for c in row[:len(headers)]]
+        for row in rows[header_idx + 1:header_idx + 6]
+        if any(c and str(c).strip() for c in row)
+    ]
 
     # 查找匹配模板
     templates = _get_active_templates(db, "bank")
@@ -79,6 +87,7 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         "detected_format": fmt,
         "row_count": len(rows) - header_idx - 1,
         "headers": headers,
+        "sample_rows": sample_rows,
         "header_row": header_idx,
         "template_match": None,
     }
@@ -184,54 +193,163 @@ def preview(
 # 确认提交
 # ──────────────────────────────────────────
 
-def commit(db: Session, batch_code: str, parsed_rows: List[Dict]) -> Dict[str, Any]:
+def commit(db: Session, batch_code: str, parser_artifact_id: int) -> Dict[str, Any]:
+    batch = db.query(ImportBatch).filter(ImportBatch.batch_code == batch_code).first()
+    if not batch:
+        raise ValueError("批次不存在")
+    file_path = _find_uploaded_file(batch_code, batch.source_name or "")
+    if not file_path:
+        raise ValueError("原始上传文件未找到")
+
+    db.query(FundEvent).filter(FundEvent.batch_id == batch.id).delete()
+    rows = list(
+        artifact_runtime.run_parser(
+            db,
+            parser_artifact_id,
+            file_path,
+            {"batch_code": batch_code},
+        )
+    )
+    for row in rows:
+        db.add(FundEvent(**row, batch_id=batch.id, parser_artifact_id=parser_artifact_id))
+    batch.status = "committed"
+    batch.updated_at = datetime.now()
+    db.commit()
+
+    log_service.write_log(
+        db,
+        action="batch_commit",
+        module="bank_import",
+        detail={
+            "batch_code": batch_code,
+            "parser_artifact_id": parser_artifact_id,
+            "inserted_rows": len(rows),
+        },
+        batch_id=batch.id,
+    )
+    return {
+        "batch_code": batch_code,
+        "parser_artifact_id": parser_artifact_id,
+        "inserted_rows": len(rows),
+    }
+
+
+def commit_by_mapping(
+    db: Session,
+    batch_code: str,
+    account_code: str,
+    mapping: Optional[Dict[str, str]] = None,
+    template_id: Optional[int] = None,
+    template_name: str = None,
+    sample_headers: list = None,
+) -> Dict[str, Any]:
+    """基于模板映射直接提交入库（不依赖 fund agent parser artifact）"""
     batch = db.query(ImportBatch).filter(ImportBatch.batch_code == batch_code).first()
     if not batch:
         raise ValueError("批次不存在")
 
-    committed = 0
-    abnormal = 0
+    file_path = _find_uploaded_file(batch_code, batch.source_name or "")
+    if not file_path:
+        raise ValueError("原始上传文件未找到")
 
-    for row in parsed_rows:
-        event = FundEvent(
-            batch_id=batch.id,
-            source_type="bank",
-            business_date=_to_date(row.get("business_date")),
-            business_time=row.get("business_time", ""),
-            entity_id=row.get("_entity_id"),
-            account_id=row.get("_account_id"),
-            direction=_infer_direction(row),
-            income_amount=normalize_amount(row.get("income_amount", "0")),
-            expense_amount=normalize_amount(row.get("expense_amount", "0")),
-            counterparty_name=row.get("counterparty_name", ""),
-            summary_text=row.get("summary_text", ""),
-            previous_balance_input=normalize_amount(row.get("previous_balance_input", "")),
-            ending_balance_input=normalize_amount(row.get("ending_balance_input", "")),
-            parse_status="valid",
-            raw_data_json=json.dumps(row, ensure_ascii=False),
-        )
+    # 获取账户信息
+    from db.tables import Account, Entity
+    account = db.query(Account).filter(Account.account_code == account_code).first()
+    if not account:
+        raise ValueError(f"账户不存在: {account_code}")
+    entity = db.query(Entity).filter(Entity.id == account.entity_id).first()
+    entity_code = entity.entity_code if entity else ""
+    entity_name = entity.name if entity else ""
+    account_alias = account.account_alias or account_code
 
-        errors = row.get("_errors", [])
-        if errors:
-            event.parse_status = "abnormal"
-            event.abnormal_code = errors[0]
-            abnormal += 1
+    # 读取文件并应用映射
+    fmt = detect_format(batch.source_name or "")
+    rows_raw = read_file_from_bytes(
+        open(file_path, "rb").read(),
+        batch.source_name or "",
+        fmt,
+    )
+    header_idx = detect_header_row(rows_raw)
+
+    tpl_mapping = mapping
+    h_row = header_idx
+
+    if template_id and not tpl_mapping:
+        tpl = db.query(ParserTemplate).filter(ParserTemplate.id == template_id).first()
+        if not tpl:
+            raise ValueError("模板不存在")
+        h_row = tpl.header_row
+        raw_mapping = tpl.mapping_json
+        if isinstance(raw_mapping, str):
+            tpl_mapping = json.loads(raw_mapping)
         else:
-            committed += 1
+            tpl_mapping = raw_mapping
 
+    if not tpl_mapping:
+        raise ValueError("未提供列映射，请先配置模板或手动映射")
+
+    parsed = apply_mapping(rows_raw, h_row, tpl_mapping)
+
+    # 清除旧数据
+    db.query(FundEvent).filter(FundEvent.batch_id == batch.id).delete()
+
+    inserted = 0
+    for row in parsed:
+        biz_date_str = normalize_date(row.get("business_date", ""))
+        if not biz_date_str:
+            continue
+
+        income = normalize_amount(row.get("income_amount", "")) or 0
+        expense = normalize_amount(row.get("expense_amount", "")) or 0
+
+        # 处理单列金额（正负值）：负值视为支出
+        if income < 0:
+            expense = abs(income)
+            income = 0
+
+        event = FundEvent(
+            business_date=date.fromisoformat(biz_date_str),
+            entity_code=entity_code,
+            entity_name=entity_name,
+            account_code=account_code,
+            account_name=account_alias,
+            summary=row.get("summary_text", "")[:500],
+            counterparty=row.get("counterparty_name", "")[:200],
+            amount_in=income,
+            amount_out=expense,
+            rolling_balance=normalize_amount(row.get("balance", "")),
+            state="正常",
+            source="网银导入",
+            batch_id=batch.id,
+        )
         db.add(event)
+        inserted += 1
 
     batch.status = "committed"
+    batch.updated_at = datetime.now()
+
+    # 自动保存映射为解析模板（规则中心 → 银行流水规则）
+    _auto_save_template(db, batch, h_row, tpl_mapping, account_alias,
+                        template_name=template_name, sample_headers=sample_headers)
+
     db.commit()
 
-    log_service.write_log(db, action="batch_commit", module="bank_import", detail={
-        "batch_code": batch_code, "committed": committed, "abnormal": abnormal,
-    }, batch_id=batch.id)
+    log_service.write_log(
+        db,
+        action="batch_commit",
+        module="bank_import",
+        detail={
+            "batch_code": batch_code,
+            "account_code": account_code,
+            "inserted_rows": inserted,
+            "mode": "mapping",
+        },
+        batch_id=batch.id,
+    )
     return {
         "batch_code": batch_code,
-        "committed_count": committed,
-        "abnormal_count": abnormal,
-        "batch_status": "committed",
+        "account_code": account_code,
+        "inserted_rows": inserted,
     }
 
 
@@ -274,6 +392,18 @@ def _get_active_templates(db: Session, template_type: str) -> List[ParserTemplat
         ParserTemplate.template_type == template_type,
         ParserTemplate.status == "active",
     ).all()
+
+
+def _find_uploaded_file(batch_code: str, source_name: str) -> Optional[str]:
+    upload_dir = os.path.join(DATA_DIR, "uploads")
+    if not os.path.isdir(upload_dir):
+        return None
+    for filename in os.listdir(upload_dir):
+        if batch_code in filename or (source_name and filename.endswith(source_name)):
+            path = os.path.join(upload_dir, filename)
+            if os.path.isfile(path):
+                return path
+    return None
 
 
 def _validate_row(row: Dict) -> List[str]:
@@ -362,42 +492,58 @@ STANDARD_FIELDS = {
 }
 
 
-def ai_parse_headers(db: Session, headers: list, sample_rows: list = None) -> Dict[str, Any]:
-    """用 AI 分析银行流水表头，自动生成列映射。
+def ai_parse_headers(db: Session, headers: list, sample_rows: list = None, agent_id: int = None) -> Dict[str, Any]:
+    """通过指定智能体分析银行流水表头，自动生成列映射。
+
+    使用智能体的完整角色设定和 AI 配置，而非独立调用 AI API。
 
     Args:
         headers: 检测到的表头列名列表
         sample_rows: 可选的前几行样本数据
+        agent_id: 指定调用的智能体 ID，为 None 时取第一个活跃智能体
     Returns:
         {"mapping": {银行列名: 标准字段}, "suggested_name": str, "confidence": str}
     """
-    # 获取默认 AI 配置
-    ai_cfg = db.query(AIConfig).filter(
-        AIConfig.status == "active",
-    ).order_by(AIConfig.is_default.desc()).first()
+    from db.tables import AgentV2
 
-    if not ai_cfg:
+    # 查找指定的智能体，未指定则取第一个活跃的
+    if agent_id:
+        agent = db.query(AgentV2).filter(
+            AgentV2.id == agent_id,
+            AgentV2.status == "active",
+        ).first()
+    else:
+        agent = db.query(AgentV2).filter(
+            AgentV2.status == "active",
+        ).order_by(AgentV2.sort_order.desc()).first()
+
+    if not agent or not agent.ai_config:
         return {
             "ok": False,
-            "error": "未配置 AI 提供商，请先在「系统设置 → AI配置」中添加 API KEY",
+            "error": "未找到可用的 AI 智能体，请先在「AI智能体」中创建并配置",
         }
 
-    api_key = decrypt_key(ai_cfg.api_key_encrypted)
+    ai_cfg = agent.ai_config
+    api_key = decrypt_key(ai_cfg.api_key_local)
 
-    # 构造 prompt
+    # 构造 prompt — 包含标准字段定义和任务指令
     field_desc = "\n".join(f"  - {k}: {v}" for k, v in STANDARD_FIELDS.items())
-    header_list = ", ".join(f'"{h}"' for h in headers)
+    short_headers = []
+    for h in headers:
+        bracket = h.find("[")
+        short_headers.append(h[:bracket].strip() if bracket > 0 else h)
+    header_list = ", ".join(f'"{h}"' for h in short_headers)
 
     sample_text = ""
     if sample_rows:
         lines = []
-        for row in sample_rows[:3]:
+        for row in sample_rows[:2]:
             if isinstance(row, (list, tuple)):
-                lines.append(" | ".join(str(c) for c in row))
+                lines.append(" | ".join(mask_row(row, short_headers)))
         if lines:
             sample_text = f"\n\n前几行样本数据:\n" + "\n".join(lines)
 
-    prompt = f"""你是一个银行流水解析专家。请分析以下银行流水的表头列名，将每列映射到对应的标准字段。
+    user_message = f"""请分析以下银行流水的表头列名，将每列映射到对应的标准字段。
 
 ## 表头列名
 {header_list}
@@ -416,31 +562,67 @@ def ai_parse_headers(db: Session, headers: list, sample_rows: list = None) -> Di
 请严格返回如下 JSON 格式（不要包含其他文字）:
 {{"mapping": {{"银行列名1": "field1", "银行列名2": "field2"}}, "template_name": "建议的模板名称"}}"""
 
+    # 使用智能体的 role_prompt 作为 system message
+    system_prompt = f"你是「{agent.display_name}」，一个 AI 智能体。"
+    if agent.role_prompt:
+        system_prompt += f"\n\n{agent.role_prompt}"
+
+    # 追加任务限定：让智能体只输出 JSON，不进入交互对话模式
+    system_prompt += "\n\n【当前任务模式】你现在处于「列映射任务」模式，不要与用户对话，只需完成列映射并返回严格的 JSON 结果。不要输出任何 JSON 以外的内容。"
+
     result = chat(
         provider=ai_cfg.provider,
         api_key=api_key,
         base_url=ai_cfg.base_url,
         model_name=ai_cfg.model_name,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=512,
-        timeout=300,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        max_tokens=agent.llm_max_tokens or 4096,
+        timeout=agent.llm_timeout or 90,
     )
 
     if not result.get("ok"):
-        return {"ok": False, "error": f"AI 调用失败: {result.get('error', '未知错误')}"}
+        return {
+            "ok": False,
+            "error": f"AI 调用失败: {result.get('error', '未知错误')}",
+            "error_code": result.get("error_code", "AI_CALL_FAILED"),
+            "error_category": result.get("error_category", "unknown"),
+        }
 
     content = result["content"].strip()
 
+    # 清理思考标签（部分模型如 GLM 会返回 <think/> 内容）
+    content = _strip_thinking_tags(content)
+
     # 尝试从返回内容中提取 JSON
-    try:
-        # 去掉 markdown 代码块标记
-        if content.startswith("```"):
-            content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        parsed = json.loads(content)
-        mapping = parsed.get("mapping", {})
-        template_name = parsed.get("template_name", "AI自动识别模板")
-    except json.JSONDecodeError:
-        return {"ok": False, "error": "AI 返回格式异常，请重试或手动配置映射", "raw": content}
+    parsed = _extract_and_parse_json(content)
+    if parsed is None:
+        return {
+            "ok": False,
+            "error": "AI 返回格式异常，请重试或手动配置映射",
+            "error_code": "AI_JSON_PARSE_FAILED",
+            "error_category": "parse",
+            "hint": "建议改用手工映射",
+            "raw": content,
+        }
+
+    mapping = parsed.get("mapping", {})
+    template_name = parsed.get("template_name", "AI自动识别模板")
+
+    # 将短列名映射回原始列名
+    short_to_original = {}
+    for orig in headers:
+        bracket = orig.find("[")
+        short = orig[:bracket].strip() if bracket > 0 else orig
+        short_to_original[short] = orig
+
+    restored_mapping = {}
+    for bank_col, field_code in mapping.items():
+        original_col = short_to_original.get(bank_col, bank_col)
+        restored_mapping[original_col] = field_code
+    mapping = restored_mapping
 
     # 验证映射字段合法性
     valid_mapping = {}
@@ -462,3 +644,147 @@ def ai_parse_headers(db: Session, headers: list, sample_rows: list = None) -> Di
         "matched_count": len(valid_mapping),
         "total_columns": len(headers),
     }
+
+
+def _extract_json_object(text: str) -> Optional[str]:
+    match = re.search(r"\{.*\}", text, flags=re.S)
+    return match.group(0) if match else None
+
+
+def _strip_thinking_tags(text: str) -> str:
+    """去除模型返回的思考标签内容（<think/>、<reasoning/> 等）"""
+    text = re.sub(r"<think[^>]*>.*?</think\s*>", "", text, flags=re.S)
+    text = re.sub(r"<reasoning[^>]*>.*?</reasoning\s*>", "", text, flags=re.S)
+    text = re.sub(r"<reflection[^>]*>.*?</reflection\s*>", "", text, flags=re.S)
+    return text.strip()
+
+
+def _extract_and_parse_json(text: str) -> Optional[dict]:
+    """从 AI 返回文本中提取并解析 JSON，支持多种格式：
+    1. 纯 JSON
+    2. markdown 代码块包裹
+    3. JSON 前后有额外文本
+    4. 嵌套代码块
+    """
+    text = text.strip()
+
+    # 尝试1：直接解析
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 尝试2：去掉 markdown 代码块
+    code_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, flags=re.S)
+    if code_match:
+        try:
+            return json.loads(code_match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # 尝试3：提取最外层 { }
+    extracted = _extract_json_object(text)
+    if extracted:
+        try:
+            return json.loads(extracted)
+        except json.JSONDecodeError:
+            pass
+
+    # 尝试4：查找 "mapping" 关键字后的 JSON 对象
+    mapping_match = re.search(r'\{\s*"mapping"\s*:', text, flags=re.S)
+    if mapping_match:
+        start = mapping_match.start()
+        sub = text[start:]
+        depth = 0
+        for i, ch in enumerate(sub):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(sub[: i + 1])
+                    except json.JSONDecodeError:
+                        break
+
+    return None
+
+
+def _auto_save_template(
+    db: Session,
+    batch: ImportBatch,
+    header_row: int,
+    mapping: Dict[str, str],
+    account_alias: str,
+    template_name: str = None,
+    sample_headers: list = None,
+) -> None:
+    """提交成功后自动保存解析模板到规则中心（银行流水规则）。
+
+    模板名称包含银行中文简称，确保与账户关联。
+    如果已存在相同名称的模板则更新，否则新建。
+    """
+    if not mapping:
+        return
+
+    # 确定模板名称：优先使用传入的名称，否则从文件名推断
+    source_name = batch.source_name or ""
+    if template_name:
+        tpl_name = template_name
+    else:
+        bank_name = _infer_bank_name(source_name, account_alias)
+        tpl_name = f"{bank_name}流水解析规则"
+
+    # 检查是否已存在同名模板
+    existing = db.query(ParserTemplate).filter(
+        ParserTemplate.template_name == tpl_name,
+        ParserTemplate.template_type == "bank",
+    ).first()
+
+    mapping_str = json.dumps(mapping, ensure_ascii=False)
+    headers_str = json.dumps(sample_headers or [], ensure_ascii=False) if sample_headers else "[]"
+
+    if existing:
+        existing.mapping_json = mapping_str
+        existing.sample_headers = headers_str
+        existing.updated_at = datetime.now()
+    else:
+        obj = ParserTemplate(
+            template_name=tpl_name,
+            template_type="bank",
+            file_format=detect_format(source_name) or "xlsx",
+            header_row=header_row,
+            skip_rows=0,
+            sample_headers=headers_str,
+            mapping_json=mapping_str,
+            created_by="ai_assist",
+            status="active",
+        )
+        db.add(obj)
+
+
+def _infer_bank_name(source_name: str, account_alias: str) -> str:
+    """从文件名或账户别名推断银行中文名称"""
+    bank_keywords = {
+        "工商": "工商银行", "ICBC": "工商银行", "icbc": "工商银行",
+        "建设": "建设银行", "CCB": "建设银行", "ccb": "建设银行",
+        "农业": "农业银行", "ABC": "农业银行", "abc": "农业银行",
+        "中国银行": "中国银行", "BOC": "中国银行", "boc": "中国银行",
+        "招商": "招商银行", "CMB": "招商银行", "cmb": "招商银行",
+        "交通": "交通银行", "BOCOM": "交通银行", "bocom": "交通银行",
+        "浦发": "浦发银行", "SPDB": "浦发银行", "spdb": "浦发银行",
+        "民生": "民生银行", "CMBC": "民生银行", "cmbc": "民生银行",
+        "兴业": "兴业银行", "CIB": "兴业银行", "cib": "兴业银行",
+        "光大": "光大银行", "CEB": "光大银行", "ceb": "光大银行",
+        "华夏": "华夏银行", "HXB": "华夏银行", "hxb": "华夏银行",
+        "平安": "平安银行", "PAB": "平安银行", "pab": "平安银行",
+        "中信": "中信银行", "CITIC": "中信银行", "citic": "中信银行",
+        "邮储": "邮储银行", "PSBC": "邮储银行", "psbc": "邮储银行",
+    }
+
+    combined = f"{source_name} {account_alias}"
+    for keyword, name in bank_keywords.items():
+        if keyword in combined:
+            return name
+
+    return account_alias or "未知银行"

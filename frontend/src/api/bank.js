@@ -30,5 +30,9 @@ export const createParserTemplate = (data) =>
 export const aiParseHeaders = (data) =>
   http.post('/bank-import/ai-parse', data)
 
+// ── 获取可用智能体列表 ──
+export const getAgents = () =>
+  http.get('/agent_v2/agents')
+
 export const saveAsTemplate = (data) =>
   http.post('/bank-import/save-template', data)

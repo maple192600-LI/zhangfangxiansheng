@@ -1,800 +1,314 @@
-# 23 API Contracts
+# 23 · API 契约（v3 · 42 端点上限）
 
-## 1. Response Wrapper
+> 本文件取代 v2 版。定义 V1 阶段冻结的 42 个 API 端点 + 统一响应格式 + 错误码表。
+> 契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C7。
 
-All APIs return unified envelope:
+---
 
+## §A0 · 统一响应格式（强制）
+
+```json
+{ "code": 0, "message": "ok", "data": {} }
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `code` | integer | 0 = 成功；非零 = 错误码（见 §A99） |
+| `message` | string | 中文提示（成功为 "ok"） |
+| `data` | object / array / null | 实际返回数据 |
+
+违反 = `tools/guards/check_api_response_shape.py`（推荐）拒绝。
+
+---
+
+## §A1 · 42 端点总览
+
+| # | 模块 | 方法 | 路径 | 职责 |
+|---|---|---|---|---|
+| 1 | 主数据 | GET | `/api/divisions` | 板块列表 |
+| 2 | 主数据 | POST/PUT/DELETE | `/api/divisions/:code` | 板块 CUD |
+| 3 | 主数据 | GET | `/api/entities` | 单位列表（分页） |
+| 4 | 主数据 | POST/PUT/DELETE | `/api/entities/:code` | 单位 CUD |
+| 5 | 主数据 | GET | `/api/accounts` | 账户列表 |
+| 6 | 主数据 | POST/PUT/DELETE | `/api/accounts/:code` | 账户 CUD |
+| 7 | 主数据 | POST | `/api/accounts/import` | Excel 批量导入 |
+| 8 | AI 配置 | GET | `/api/ai/configs` | Provider 列表 |
+| 9 | AI 配置 | POST/PUT/DELETE | `/api/ai/configs/:id` | Provider CUD |
+| 10 | AI 配置 | POST | `/api/ai/configs/:id/test` | 连接测试 |
+| 11 | AI 配置 | GET | `/api/agents` | Agent 配置 |
+| 12 | AI 配置 | PUT | `/api/agents/:name/binding` | 绑定 Provider |
+| 13 | Fund Agent | POST | `/api/fund/agent/skills/parser.bank/invoke` | 生成银行 Parser |
+| 14 | Fund Agent | POST | `/api/fund/agent/skills/parser.manual/invoke` | 生成手工 Parser |
+| 15 | Fund Agent | POST | `/api/fund/agent/skills/rule.template_fill/invoke` | 生成 Rule |
+| 16 | Fund Agent | POST | `/api/fund/agent/skills/rule.maintain/invoke` | 维护 Rule |
+| 17 | Fund Agent | POST | `/api/fund/agent/skills/template.inference/invoke` | 模板识别 |
+| 18 | Artifacts | GET | `/api/fund/parsers` | Parser artifact 列表 |
+| 19 | Artifacts | GET | `/api/fund/parsers/:id` | 详情 + 代码 |
+| 20 | Artifacts | POST | `/api/fund/parsers/:id/approve` | 审批 draft → approved |
+| 21 | Artifacts | GET | `/api/fund/rules` | Rule artifact 列表 |
+| 22 | Artifacts | GET | `/api/fund/rules/:id` | 详情 + bindings |
+| 23 | Artifacts | POST | `/api/fund/rules/:id/approve` | 审批 |
+| 24 | 流水导入 | POST | `/api/bank/import` | 上传银行流水（触发 Parser） |
+| 25 | 流水导入 | GET | `/api/bank/batches` | 批次列表 |
+| 26 | 流水导入 | GET | `/api/bank/batches/:id` | 批次详情 |
+| 27 | 流水导入 | POST | `/api/manual/flow` | 快速录入单条 |
+| 28 | 流水导入 | POST | `/api/manual/flow/upload` | Excel 多主体上传 |
+| 29 | 模板识别 | POST | `/api/fund/templates/upload` | 上传空白模板 |
+| 30 | 模板识别 | GET | `/api/fund/templates/jobs/:id` | 识别任务状态 |
+| 31 | 模板识别 | POST | `/api/fund/templates/jobs/:id/confirm` | 用户确认 → 生成 Rule |
+| 32 | 报表 | POST | `/api/reports/generate` | 生成报表（走 Rule artifact） |
+| 33 | 报表 | GET | `/api/reports/download/:id` | 下载 Excel |
+| 34 | 报表 | GET | `/api/reports/history` | 历史报表 |
+| 35 | 异常中心 | GET | `/api/events/pending` | 待确认/异常 列表 |
+| 36 | 异常中心 | PUT | `/api/events/:id/resolve` | 标记正常 |
+| 37 | 异常中心 | PUT | `/api/events/:id/void` | 作废 |
+| 38 | 系统 | POST | `/api/auth/login` | 登录 |
+| 39 | 系统 | POST | `/api/auth/logout` | 登出 |
+| 40 | 系统 | GET | `/api/system/health` | 健康检查 |
+| 41 | 系统 | GET | `/api/system/backup` | 备份下载 |
+| 42 | 系统 | POST | `/api/system/backup/restore` | 恢复 |
+
+**不变量**：端点总数 ≤ 42。新增必须走 §ChangeFlow，并更新 `tools/guards/check_api_inventory.py`。
+
+---
+
+## §A2 · 关键端点详细 Schema
+
+### §A2.1 · `POST /api/fund/agent/skills/parser.bank/invoke`
+
+**请求体**：
+```json
+{
+  "account_code": "ZH0001",
+  "sample_file_id": "upload-abc-123",
+  "privacy_mode": "standard"
+}
+```
+
+**成功响应**：
 ```json
 {
   "code": 0,
   "message": "ok",
-  "data": {}
-}
-```
-
-Failure:
-
-```json
-{
-  "code": 4001,
-  "message": "账户识别失败",
   "data": {
-    "abnormal_code": "ACCOUNT_MATCH_FAILED"
-  }
-}
-```
-
-### Error Code Table
-
-| code | 含义 | 场景 |
-|------|------|------|
-| 0 | 成功 | — |
-| 1001 | 参数缺失 | 必填字段为空 |
-| 1002 | 参数格式错误 | 日期/数字/JSON 格式不合法 |
-| 1003 | 唯一约束冲突 | code/name 重复 |
-| 2001 | 记录不存在 | 查询 ID 无对应记录 |
-| 2002 | 状态不允许操作 | 已禁用/已回滚的记录 |
-| 3001 | 文件读取失败 | 上传文件损坏或格式不支持 |
-| 3002 | 模板匹配失败 | 无命中模板且无 AI 建议 |
-| 4001 | 账户匹配失败 | 实体/账户归属无法识别 |
-| 4002 | 余额校验失败 | 期末余额与计算值不一致 |
-| 4003 | 重复拦截 | 疑似重复记录 |
-| 5001 | AI 连接失败 | API Key 无效或网络不通 |
-| 5002 | AI 超时 | 请求超过 30s |
-| 9001 | 系统内部错误 | 未预期异常 |
-
-### Pagination
-
-分页接口统一使用以下参数和响应格式：
-
-Request params:
-- `page` (int, default 1)
-- `page_size` (int, default 50, max 200)
-
-Response:
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "items": [],
-    "total": 100,
-    "page": 1,
-    "page_size": 50,
-    "total_pages": 2
-  }
-}
-```
-
----
-
-## 2. Master Data — Divisions
-
-### GET /api/divisions
-Query params:
-- `status` (string, optional): enabled / disabled
-
-Response:
-```json
-{
-  "code": 0,
-  "data": [
-    { "id": 1, "name": "养护板块", "sort_order": 0, "status": "enabled", "created_at": "2026-01-01T00:00:00" }
-  ]
-}
-```
-
-### POST /api/divisions
-Request:
-```json
-{ "name": "养护板块", "sort_order": 0 }
-```
-
-### PUT /api/divisions/{id}
-Request:
-```json
-{ "name": "养护板块", "sort_order": 1, "status": "enabled" }
-```
-
----
-
-## 3. Master Data — Entities
-
-### GET /api/entities
-Query params:
-- `division_id` (int, optional)
-- `status` (string, optional)
-- `keyword` (string, optional): search name / entity_code
-
-Response:
-```json
-{
-  "code": 0,
-  "data": {
-    "items": [
-      { "id": 1, "division_id": 1, "entity_code": "E001", "name": "山西喜跃发实业发展有限公司", "short_name": "实业公司", "status": "enabled", "created_at": "..." }
-    ],
-    "total": 5, "page": 1, "page_size": 50, "total_pages": 1
-  }
-}
-```
-
-### POST /api/entities
-Request:
-```json
-{ "division_id": 1, "entity_code": "E001", "name": "山西喜跃发实业发展有限公司", "short_name": "实业公司" }
-```
-
-### PUT /api/entities/{id}
-Request: same fields as POST, plus `status`.
-
----
-
-## 4. Master Data — Accounts
-
-### GET /api/accounts
-Query params:
-- `entity_id` (int, optional)
-- `status` (string, optional)
-- `keyword` (string, optional)
-- `account_type` (string, optional)
-- `instrument_type` (string, optional)
-
-Response:
-```json
-{
-  "code": 0,
-  "data": {
-    "items": [
-      {
-        "id": 1, "entity_id": 1, "account_code": "A001",
-        "account_alias": "中行手工户", "bank_name": "中国银行",
-        "account_type": "银行账户", "instrument_type": "银行存款",
-        "input_method": "manual", "currency": "CNY",
-        "initial_balance": 200000.00, "balance_date": "2026-03-01",
-        "status": "enabled", "entity_name": "实业公司"
-      }
-    ],
-    "total": 6, "page": 1, "page_size": 50, "total_pages": 1
-  }
-}
-```
-
-### GET /api/accounts/tree
-Response: accounts grouped by entity, with alias list per account.
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "entity_id": 1, "entity_name": "实业公司",
-      "accounts": [
-        { "id": 1, "account_code": "A001", "account_alias": "中行手工户", "account_type": "银行账户", "status": "enabled" }
-      ]
+    "artifact_id": 17,
+    "name": "ICBC_网银_v1",
+    "version": 1,
+    "status": "draft",
+    "confidence": 0.94,
+    "sample_check_log": {
+      "sample_rows": 50,
+      "parsed_rows": 50,
+      "canonical_violations": 0
     }
-  ]
-}
-```
-
-### POST /api/accounts
-Request:
-```json
-{
-  "entity_id": 1,
-  "account_code": "A001",
-  "account_alias": "中行手工户",
-  "bank_name": "中国银行",
-  "branch_name": "太原分行",
-  "account_number": "621700xxxxx",
-  "account_type": "银行账户",
-  "instrument_type": "银行存款",
-  "input_method": "manual",
-  "currency": "CNY",
-  "initial_balance": 200000.00,
-  "balance_date": "2026-03-01",
-  "notes": ""
-}
-```
-
-### PUT /api/accounts/{id}
-Same fields as POST.
-
-### POST /api/accounts/{id}/initial-balance
-Set or update initial balance (only if no fund_events exist for this account).
-```json
-{ "initial_balance": 200000.00, "balance_date": "2026-03-01" }
-```
-
-### GET /api/accounts/{id}/aliases
-Response:
-```json
-{ "code": 0, "data": [{ "id": 1, "alias_text": "中行户", "alias_type": "short_name" }] }
-```
-
-### POST /api/accounts/{id}/aliases
-```json
-{ "alias_text": "中行户", "alias_type": "short_name" }
-```
-
-### DELETE /api/accounts/{id}/aliases/{alias_id}
-Soft delete (sets status=disabled).
-
----
-
-## 5. Home Dashboard
-
-### GET /api/home/overview
-Returns today's dashboard summary.
-```json
-{
-  "code": 0,
-  "data": {
-    "date": "2026-04-10",
-    "pending_tasks": { "total": 7, "unimported": 2, "unconfirmed": 3, "ungenerated": 2 },
-    "alerts": { "total": 4, "payment_exceptions": 2, "rule_missed": 2 },
-    "generation_status": "incomplete",
-    "generation_status_detail": "基础数据表未生成，日报未更新",
-    "key_account_changes": 3,
-    "last_report_time": "2026-04-09T18:36:00",
-    "last_backup_time": "2026-04-10T08:10:00"
   }
 }
 ```
 
-### GET /api/home/tasks
-Returns pending task list.
+**错误响应**（样本校验未过）：
 ```json
 {
-  "code": 0,
-  "data": [
-    { "task_type": "待导入网银流水", "count": 2, "status": "未完成", "suggested_action": "进入工作台 / 网银导入" },
-    { "task_type": "待确认手工流水", "count": 3, "status": "未完成", "suggested_action": "进入工作台 / 手动维护" }
-  ]
-}
-```
-
-### GET /api/home/quick-links
-Returns configured quick links.
-```json
-{
-  "code": 0,
-  "data": [
-    { "label": "网银导入", "description": "上传银行流水，进入待处理池", "route": "/fund/workbench/bank-import" },
-    { "label": "手工流水", "description": "录入临时发生额和补录数据", "route": "/fund/workbench/manual-flow" }
-  ]
-}
-```
-
-### GET /api/home/system-status
-```json
-{
-  "code": 0,
+  "code": 3002,
+  "message": "样本校验未通过：50 行中 3 行金额互斥违反",
   "data": {
-    "last_base_data_generation": { "status": "未生成", "time": null },
-    "last_report_generation": { "status": "成功", "time": "2026-04-09T18:36:00" },
-    "last_backup": { "status": "成功", "time": "2026-04-10T08:10:00" },
-    "ocr_status": "正常",
-    "recent_actions": [
-      { "time": "08:12", "description": "出纳上传了中行流水文件 1 份。" }
+    "violations": [
+      {"row": 12, "reason": "amount_in 和 amount_out 同时 > 0"}
     ]
   }
 }
 ```
 
----
+### §A2.2 · `POST /api/fund/templates/upload`
 
-## 6. Parser Templates
+**请求**（multipart/form-data）：
+- `file`: 空白 .xlsx 模板
+- `kind`: "cash_journal" / "custom"
 
-### GET /api/parser-templates
-Query params:
-- `template_type` (string, optional): bank / manual
-- `status` (string, optional)
-
-Response:
+**成功响应**：
 ```json
 {
   "code": 0,
-  "data": [
-    { "id": 1, "template_name": "中国银行标准流水", "template_type": "bank", "file_format": "xls", "status": "active", "created_by": "manual", "created_at": "..." }
-  ]
-}
-```
-
-### POST /api/parser-templates
-Create or update parser template.
-```json
-{
-  "template_name": "中国银行标准流水",
-  "template_type": "bank",
-  "file_format": "xls",
-  "header_row": 5,
-  "skip_rows": 4,
-  "sample_headers": ["交易日期", "摘要", "收入", "支出", "余额"],
-  "mapping_json": {
-    "交易日期": "business_date",
-    "摘要": "summary_text",
-    "收入": "income_amount",
-    "支出": "expense_amount",
-    "余额": "previous_balance_input"
-  },
-  "created_by": "manual"
-}
-```
-
----
-
-## 7. Bank Import
-
-### POST /api/bank-import/upload
-Multipart upload.
-- `file` (binary): xlsx/xls/csv file
-
-Response:
-```json
-{
-  "code": 0,
+  "message": "ok",
   "data": {
-    "batch_code": "BANK_20260410_0001",
-    "file_name": "中行流水.xls",
-    "detected_format": "xls",
-    "row_count": 36,
-    "template_match": {
-      "matched": true,
-      "template_id": 1,
-      "template_name": "中国银行标准流水",
-      "confidence": "high"
-    }
+    "job_id": 42,
+    "detected_placeholders": ["报表标题", "月初余额", "..."],
+    "confidence": 0.87,
+    "rule_draft_id": 100,
+    "status": "pending"
   }
 }
 ```
 
-### POST /api/bank-import/preview
-Trigger parsing with template.
+### §A2.3 · `POST /api/reports/generate`
+
+**请求体**：
 ```json
 {
-  "batch_code": "BANK_20260410_0001",
-  "template_id": 1
+  "rule_id": 100,
+  "account_code": "ZH0001",
+  "period_start": "2026-04-01",
+  "period_end": "2026-04-30"
 }
 ```
-Response: parsed rows, abnormal rows, match suggestions.
 
-### POST /api/bank-import/commit
-Commit confirmed rows to fund_events.
-```json
-{
-  "batch_code": "BANK_20260410_0001",
-  "confirm_rows": [1, 2, 3],
-  "fixes": [
-    { "row_no": 5, "account_id": 3, "entity_id": 2 }
-  ]
-}
-```
-Response:
-```json
-{ "code": 0, "data": { "committed_count": 34, "abnormal_count": 2, "batch_status": "committed" } }
-```
-
----
-
-## 8. Manual Field Pool
-
-### GET /api/manual-field-pool
-Returns all field pool entries.
+**成功响应**：
 ```json
 {
   "code": 0,
-  "data": [
-    {
-      "id": 1, "field_code": "business_date", "field_name_cn": "业务日期",
-      "data_type": "date", "is_core": true, "is_default_visible": true,
-      "is_disable_allowed": false, "is_parse_key": true, "is_validation_key": true,
-      "is_batch_inheritable": false, "status": "active"
-    }
-  ]
-}
-```
-
----
-
-## 9. Manual Flow — Schemes
-
-### GET /api/manual-flow/schemes
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": 1, "scheme_code": "manual_multi_subject_basic",
-      "scheme_name": "多主体总表标准版", "description": "默认多主体手工总表",
-      "selected_fields": ["entity_match_key", "account_match_key", "business_date", "summary_text", "counterparty_name", "income_amount", "expense_amount"],
-      "is_default": true, "status": "active"
-    }
-  ]
-}
-```
-
-### POST /api/manual-flow/schemes
-```json
-{
-  "scheme_code": "custom_001",
-  "scheme_name": "自定义方案",
-  "description": "含部门和收支类型",
-  "selected_fields": ["entity_match_key", "account_match_key", "business_date", "summary_text", "counterparty_name", "income_amount", "expense_amount", "department", "income_expense_type"],
-  "is_default": false
-}
-```
-
-### PUT /api/manual-flow/schemes/{id}
-Same fields as POST.
-
----
-
-## 10. Manual Flow — Quick Entry
-
-### POST /api/manual-flow/quick-entry/save
-Save rows to a new batch with status=previewed.
-```json
-{
-  "scheme_code": "manual_multi_subject_basic",
-  "rows": [
-    {
-      "entity_match_key": "养护公司",
-      "account_match_key": "农商行手工户",
-      "business_date": "2026-03-02",
-      "summary_text": "支付零星采购",
-      "counterparty_name": "某文具店",
-      "income_amount": null,
-      "expense_amount": 320,
-      "note_text": "现金付款"
-    }
-  ]
-}
-```
-Response:
-```json
-{
-  "code": 0,
+  "message": "ok",
   "data": {
-    "batch_code": "MANUAL_20260302_0001",
-    "saved_count": 1,
-    "abnormal_count": 0
+    "report_id": "rpt-20260423-001",
+    "download_url": "/api/reports/download/rpt-20260423-001",
+    "placeholder_filled": 18,
+    "rows_written": 125,
+    "runtime_ms": 4230
+  }
+}
+```
+
+### §A2.4 · `POST /api/bank/import`
+
+**请求**（multipart/form-data）：
+- `file`: 银行流水 Excel
+- `account_code`: （可选）账户编码
+- `parser_artifact_id`: （可选）指定 Parser 版本
+
+**成功响应**：
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "batch_id": 88,
+    "parser_artifact_id": 17,
+    "total_rows": 200,
+    "succeeded": 195,
+    "pending": 3,
+    "failed": 2,
+    "detail_url": "/api/bank/batches/88"
   }
 }
 ```
 
 ---
 
-## 11. Manual Flow — Excel Upload
+## §A99 · 错误码表
 
-### POST /api/manual-flow/preview
-Multipart:
-- `file` (binary): Excel multi-subject workbook
-- `scheme_code` (string)
+> 注意：42 端点上限为 V3 设计约束。Agent V2 系统（`/api/agent_v2/*`）和 AI 解析端点（`/api/bank-import/ai-parse`, `/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent V2 智能体系统，不占用 Fund Agent 端点配额。
 
-Response:
+### Round 10-11 新增端点
+
+| # | 模块 | 方法 | 路径 | 职责 |
+|---|---|---|---|---|
+| N1 | Agent V2 | GET | `/api/agent_v2/agents` | 智能体列表 |
+| N2 | Agent V2 | POST | `/api/agent_v2/agents` | 创建智能体 |
+| N3 | Agent V2 | GET | `/api/agent_v2/agents/:id` | 智能体详情 |
+| N4 | Agent V2 | PUT | `/api/agent_v2/agents/:id` | 更新智能体 |
+| N5 | Agent V2 | DELETE | `/api/agent_v2/agents/:id` | 删除智能体 |
+| N6 | Agent V2 | GET | `/api/agent_v2/agents/:id/sessions` | 会话列表 |
+| N7 | Agent V2 | POST | `/api/agent_v2/agents/:id/sessions` | 创建会话 |
+| N8 | Agent V2 | POST | `/api/agent_v2/sessions/:id/messages` | 发送消息（SSE） |
+| N9 | Agent V2 | GET | `/api/agent_v2/sessions/:id/messages` | 消息历史 |
+| N10 | Agent V2 | GET | `/api/agent_v2/ai-configs` | AI 配置列表 |
+| N11 | Agent V2 | GET | `/api/agent_v2/agents/:id/skills` | 技能列表 |
+| N12 | Agent V2 | GET | `/api/agent_v2/agents/:id/files` | 工作区文件 |
+| N13 | Agent V2 | POST | `/api/agent_v2/agents/:id/files/upload` | 上传文件 |
+| N14 | 银行导入 | POST | `/api/bank-import/ai-parse` | AI 智能解析列映射 |
+| N15 | 银行导入 | POST | `/api/bank-import/commit-by-mapping` | 基于映射提交+自动保存规则 |
+| N16 | 银行导入 | POST | `/api/bank-import/save-template` | 手动保存规则模板 |
+| N17 | 手工流水 | POST | `/api/manual-flow/ai-parse` | AI 智能解析手工流水列映射 |
+
+### `POST /api/bank-import/ai-parse` 请求/响应
+
+**请求体**：
+```json
+{
+  "headers": ["交易日期", "收入金额", "支出金额", "对方户名", "摘要"],
+  "sample_rows": [["2026-04-28", "10000", "", "某公司", "货款"]],
+  "agent_id": 1
+}
+```
+
+**成功响应**：
 ```json
 {
   "code": 0,
+  "message": "ok",
   "data": {
-    "batch_code": "MANUAL_20260302_0002",
-    "parsed_rows": [
-      { "row_no": 1, "entity_match_key": "实业公司", "account_match_key": "中行手工户", "business_date": "2026-03-01", "summary_text": "期初承接", "income_amount": 0, "expense_amount": 0, "parse_status": "valid" }
-    ],
-    "abnormal_rows": [],
-    "match_suggestions": [],
-    "total_count": 12,
-    "valid_count": 12,
-    "abnormal_count": 0
+    "ok": true,
+    "mapping": {"交易日期": "business_date", "收入金额": "income_amount", "支出金额": "expense_amount", "对方户名": "counterparty_name", "摘要": "summary_text"},
+    "template_name": "招商银行标准流水",
+    "confidence": "high",
+    "matched_count": 5,
+    "total_columns": 5
   }
 }
 ```
 
-### POST /api/manual-flow/commit
+### `POST /api/manual-flow/ai-parse` 请求/响应
+
+**请求体**：
 ```json
 {
-  "batch_code": "MANUAL_20260302_0002",
-  "confirm_rows": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-  "fixes": []
+  "headers": ["日期", "摘要", "收入", "支出", "对方"],
+  "sample_rows": [],
+  "agent_id": 1,
+  "scheme_code": "manual_multi_subject_basic"
 }
 ```
-Response:
-```json
-{ "code": 0, "data": { "committed_count": 12, "abnormal_count": 0, "batch_status": "committed" } }
-```
 
-### POST /api/manual-flow/export-template
-Export empty Excel template based on scheme.
-```json
-{ "scheme_code": "manual_multi_subject_basic", "include_example_rows": true }
-```
-Response: binary xlsx file download.
-
----
-
-## 12. Base Data Table
-
-### GET /api/base-data
-Query params:
-- `start_date` / `end_date` (date, optional)
-- `entity_id` (int, optional)
-- `account_id` (int, optional)
-- `keyword` (string, optional)
-- `page` / `page_size`
-
-Response:
+**成功响应**：
 ```json
 {
   "code": 0,
+  "message": "ok",
   "data": {
-    "items": [
-      {
-        "id": 1, "batch_id": 1, "source_type": "manual_excel",
-        "business_date": "2026-03-02", "entity_id": 1, "entity_name": "实业公司",
-        "account_id": 1, "account_name": "中行手工户",
-        "direction": "income", "income_amount": 350000, "expense_amount": 0,
-        "summary_text": "收到工程款", "counterparty_name": "某工程建设单位",
-        "previous_balance_input": 200000, "rolling_balance": 550000,
-        "parse_status": "valid", "abnormal_code": null
-      }
-    ],
-    "total": 49, "page": 1, "page_size": 50, "total_pages": 1
+    "ok": true,
+    "mapping": {"日期": "business_date", "摘要": "summary_text", "收入": "income_amount", "支出": "expense_amount", "对方": "counterparty_name"},
+    "confidence": "high",
+    "matched_count": 5,
+    "total_columns": 5
   }
 }
 ```
 
-### POST /api/base-data/rebuild
-Rebuild base data from all committed batches (clears and regenerates).
-```json
-{ "confirm": true }
-```
-Response:
-```json
-{ "code": 0, "data": { "total_rows": 49, "valid_rows": 44, "abnormal_rows": 5, "rebuild_time": "2026-04-10T10:00:00" } }
-```
+| 码 | 消息（中文） | 典型场景 |
+|---|---|---|
+| `0` | `ok` | 成功 |
+| `1001` | `参数缺失` | 必填字段空 |
+| `1002` | `参数格式错误` | 日期 / 金额 / 编码格式 |
+| `1003` | `权限不足` | — |
+| `2001` | `账户不存在` | entity / account 未注册 |
+| `2002` | `金额互斥冲突` | amount_in 和 amount_out 同时 > 0 |
+| `2003` | `状态不允许` | 对已作废行做操作 |
+| `2004` | `占位符未绑定` | 模板中有占位符未在 Rule 中覆盖 |
+| `3001` | `Parser 生成失败` | Agent 返回非法产物 |
+| `3002` | `SAMPLE_CHECK 未通过` | 样本回归失败 |
+| `3003` | `基元库调用越界` | AST 扫描失败 |
+| `3004` | `沙箱超时` | 单次执行 > 60s |
+| `3005` | `Rule 占位符数量不符` | 不是 18 个 |
+| `4001` | `AI Provider 连接失败` | — |
+| `4002` | `AI Provider 返回非 JSON` | — |
+| `5001` | `数据库错误` | — |
+| `5002` | `文件 IO 错误` | — |
+| `5999` | `未知错误` | 兜底 |
 
 ---
 
-## 13. Reports — Generate & Query
+## §A-Route · 路由实现约束
 
-### POST /api/reports/generate
-Generate report for a date range.
-```json
-{
-  "start_date": "2026-03-01",
-  "end_date": "2026-03-05",
-  "report_name": "资金日报_2026年3月上旬"
-}
-```
-Response:
-```json
-{
-  "code": 0,
-  "data": {
-    "report_code": "RPT_20260301_0001",
-    "start_date": "2026-03-01",
-    "end_date": "2026-03-05",
-    "status": "confirmed",
-    "total_fund_events": 12,
-    "generated_at": "2026-04-10T10:05:00"
-  }
-}
-```
-
-### GET /api/reports/daily
-Query fund_events as daily report view.
-Query params:
-- `start_date` / `end_date` (required)
-- `entity_id` / `account_id` (optional)
-- `keyword` (optional)
-- `page` / `page_size`
-
-Response: same as `/api/base-data` but with rolling_balance guaranteed populated.
-
-### GET /api/reports/account-balance
-Account balance summary for a date range.
-Query params:
-- `start_date` / `end_date` (required)
-- `entity_id` (optional)
-
-Response:
-```json
-{
-  "code": 0,
-  "data": [
-    { "entity_code": "E001", "entity_name": "实业公司", "account_code": "A001", "account_name": "中行手工户", "account_type": "银行账户", "opening_balance": 200000, "total_income": 350000, "total_expense": 125600, "ending_balance": 424400 }
-  ]
-}
-```
-
-### GET /api/reports/income-detail
-Income entries within date range.
-Query params: same as `/api/reports/daily`.
-Response: filtered fund_events where `income_amount > 0`.
-
-### GET /api/reports/expense-detail
-Expense entries within date range.
-Query params: same as `/api/reports/daily`.
-Response: filtered fund_events where `expense_amount > 0`.
+| 约束 | 说明 |
+|---|---|
+| 路由层只做请求收发 | 业务逻辑**必须**在 `backend/services/` |
+| 路由层不得调用 `ai_call` | AI 调用由 `backend/agents/fund/` 封装 |
+| 每个端点必须有对应 pytest 用例 | 放在 `tests/api/test_*.py` |
+| 响应体必须走 `response.success()` / `response.error()` | 强制统一格式 |
+| 端点新增必须更新本文件 + guards 白名单 | pre-commit 拦截 |
 
 ---
 
-## 14. Export & Print
-
-### POST /api/export/excel
-Export specified data to Excel.
-```json
-{
-  "export_type": "base_data | account_balance | income_detail | expense_detail | full_report",
-  "start_date": "2026-03-01",
-  "end_date": "2026-03-05",
-  "entity_id": null,
-  "account_id": null,
-  "format": "xlsx"
-}
-```
-Response: binary xlsx file download.
-
-### GET /api/export/print-data
-Returns print-formatted data (no binary, just JSON for frontend print view).
-Query params: same as report query.
-Response: paginated data with print-friendly field names.
-
----
-
-## 15. Dashboard
-
-### GET /api/dashboard/metrics
-```json
-{
-  "code": 0,
-  "data": {
-    "today_income": 180000,
-    "today_expense": 125650,
-    "total_balance": 1646990,
-    "account_count": 6,
-    "entity_count": 5
-  }
-}
-```
-
-### GET /api/dashboard/trends
-Query params:
-- `period` (string): 7d / 30d / 90d
-- `entity_id` (int, optional)
-
-Response:
-```json
-{
-  "code": 0,
-  "data": {
-    "dates": ["2026-03-01", "2026-03-02", "..."],
-    "income": [0, 350500, "..."],
-    "expense": [0, 125920, "..."],
-    "balance": [200000, 424580, "..."]
-  }
-}
-```
-
----
-
-## 16. AI Configuration
-
-### GET /api/ai-configs
-```json
-{
-  "code": 0,
-  "data": [
-    { "id": 1, "provider": "zhipu", "display_name": "智谱 GLM-4", "base_url": "https://open.bigmodel.cn/api/paas/v4", "model_name": "glm-4-flash", "is_default": true, "status": "active" }
-  ]
-}
-```
-Note: `api_key_encrypted` is never returned in GET responses.
-
-### POST /api/ai-configs
-```json
-{ "provider": "zhipu", "display_name": "智谱 GLM-4", "api_key": "sk-xxx", "base_url": "https://open.bigmodel.cn/api/paas/v4", "model_name": "glm-4-flash", "is_default": true }
-```
-
-### PUT /api/ai-configs/{id}
-Same fields as POST. `api_key` is optional — omit to keep existing.
-
-### POST /api/ai-configs/{id}/test
-Test AI connection.
-```json
-{ "code": 0, "data": { "connected": true, "latency_ms": 230, "model_info": "glm-4-flash" } }
-```
-
----
-
-## 17. Agent Configuration
-
-### GET /api/agent-configs
-```json
-{
-  "code": 0,
-  "data": [
-    { "id": 1, "agent_code": "shared", "agent_name": "共享能力区", "agent_type": "shared", "workspace_dir": "agents/shared", "ai_config_id": 1, "description": "所有 agent 共享的通用能力", "status": "active" }
-  ]
-}
-```
-
-### PUT /api/agent-configs/{id}
-```json
-{ "agent_name": "共享能力区", "ai_config_id": 1, "description": "更新描述" }
-```
-
----
-
-## 18. Backup & Restore
-
-### POST /api/backup/create
-```json
-{ "backup_name": "手动备份_20260410", "description": "日报生成前备份" }
-```
-Response:
-```json
-{ "code": 0, "data": { "backup_id": "bk_20260410_001", "file_name": "bk_20260410_001.zip", "file_size_mb": 12.3, "created_at": "2026-04-10T10:00:00" } }
-```
-
-### GET /api/backup/list
-```json
-{
-  "code": 0,
-  "data": [
-    { "backup_id": "bk_20260410_001", "file_name": "bk_20260410_001.zip", "file_size_mb": 12.3, "description": "日报生成前备份", "created_at": "2026-04-10T10:00:00" }
-  ]
-}
-```
-
-### POST /api/backup/restore
-```json
-{ "backup_id": "bk_20260409_001" }
-```
-Response:
-```json
-{ "code": 0, "data": { "restored": true, "backup_time": "2026-04-09T18:00:00" } }
-```
-
----
-
-## 19. Batch Rollback
-
-### POST /api/batches/{batch_code}/rollback
-```json
-{ "confirm": true }
-```
-Response:
-```json
-{
-  "code": 0,
-  "data": {
-    "removed_row_count": 36,
-    "affected_report_hint": "1 份已生成的日报可能受影响，建议重新生成",
-    "batch_status": "rolled_back"
-  }
-}
-```
-
----
-
-## 20. Operation Logs
-
-### GET /api/operation-logs
-Query params:
-- `module` (string, optional): import / manual / report / backup / system
-- `batch_id` (int, optional)
-- `start_date` / `end_date` (optional)
-- `page` / `page_size`
-
-Response:
-```json
-{
-  "code": 0,
-  "data": {
-    "items": [
-      { "id": 1, "action": "batch_commit", "module": "import", "batch_id": 1, "detail_json": { "batch_code": "BANK_20260410_0001", "row_count": 36 }, "created_at": "2026-04-10T08:24:00" }
-    ],
-    "total": 100, "page": 1, "page_size": 50, "total_pages": 2
-  }
-}
-```
+**版本**
+- v3.2 · 2026-04-28 · Round 11：新增 Agent V2 + AI 解析端点（§A99 扩展）
+- v3.1 · 2026-04-27 · Round 10：登录认证 + 字段统一 + 模板修复
+- v3.0 · 2026-04-23 · 重写为 42 端点清单
+- v2 · 原版归档见 git 历史

@@ -6,21 +6,21 @@
 """
 import os
 import sys
-import webbrowser
 from contextlib import asynccontextmanager
-from sqlalchemy import text as sql_text
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles  # noqa: F401 — kept for potential future use
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 
 # 确保项目根目录在 sys.path 中
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
+sys.path.insert(0, BACKEND_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
-from config import HOST, PORT, FRONTEND_DIST, DATA_DIR
-from database import engine, Base
+from config import HOST, PORT, FRONTEND_DIST
 from db import tables as _  # noqa: F401 — 注册 ORM 模型到 Base.metadata
 from api.health import router as health_router
 from api.master_data import router as master_router
@@ -39,86 +39,56 @@ from api.batch import router as batch_router
 from api.logs import router as logs_router
 from api.auth import router as auth_router
 from api.reset import router as reset_router
+from api.bank_master import router as bank_master_router
+from api.report_template import router as report_template_router
+from api.events import router as events_router
+from api.agent_v2 import router as agent_v2_router
 
 
 def _init_db():
-    """建表 + 种子数据"""
-    from sqlalchemy import text, inspect
-
-    Base.metadata.create_all(bind=engine)
-
-    # 增量迁移：在任何 ORM 查询之前完成表结构变更
-    _migrate_schema()
-
-    insp = inspect(engine)
-    if not insp.get_table_names():
-        _ensure_default_user()
-        return
-
-    with engine.connect() as conn:
-        result = conn.execute(text("SELECT COUNT(*) FROM divisions"))
-        if result.scalar() > 0:
-            # 增量：补充手工字段池可选字段（如果只有7个核心字段）
-            field_count = conn.execute(text("SELECT COUNT(*) FROM manual_field_pool")).scalar()
-            if field_count <= 7:
-                print("补充手工字段池可选字段...")
-                _run_seed_increment(conn, DATA_DIR)
-            _ensure_default_user()
-            return
-
-        seed_path = os.path.join(DATA_DIR, "seed.sql")
-        if not os.path.exists(seed_path):
-            print("警告：未找到种子数据文件 data/seed.sql")
-            _ensure_default_user()
-            return
-
-        with open(seed_path, "r", encoding="utf-8") as f:
-            seed_sql = f.read()
-
-        lines = seed_sql.splitlines()
-        clean_lines = [line for line in lines if not line.strip().startswith("--")]
-        clean_sql = "\n".join(clean_lines)
-
-        for stmt in clean_sql.split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                conn.execute(text(stmt))
-        conn.commit()
-        print("种子数据已写入。")
-
+    """初始化数据库结构和最小系统数据。"""
+    _run_alembic_upgrade()
+    _patch_schema()
     _ensure_default_user()
+    _register_global_skills()
 
 
-def _migrate_schema():
-    """增量表结构迁移 — 在 create_all 之后、ORM 查询之前执行"""
-    from sqlalchemy import text
+def _patch_schema():
+    """增量补齐尚未通过 alembic 迁移的列（无害幂等）。"""
+    from sqlalchemy import text as _t
+    from database import engine
     with engine.connect() as conn:
-        # users.must_change_password
         try:
-            conn.execute(text(
-                "ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"
-            ))
+            conn.execute(_t("ALTER TABLE report_templates ADD COLUMN source_file_path VARCHAR(500)"))
             conn.commit()
-            print("已为 users 表添加 must_change_password 字段")
+            print("[schema] 已补齐 report_templates.source_file_path")
         except Exception:
             pass
 
-        # accounts 新增列（核算组织模板统一）
-        _try_add_col(conn, "accounts", "account_last_four", "VARCHAR(10)")
-        _try_add_col(conn, "accounts", "has_online_banking", "BOOLEAN NOT NULL DEFAULT 0")
-        _try_add_col(conn, "accounts", "include_in_daily_report", "BOOLEAN NOT NULL DEFAULT 1")
-        _try_add_col(conn, "accounts", "allow_manual_entry", "BOOLEAN NOT NULL DEFAULT 1")
+        try:
+            conn.execute(_t("ALTER TABLE agents_v2 ADD COLUMN llm_timeout INTEGER NOT NULL DEFAULT 300"))
+            conn.execute(_t("ALTER TABLE agents_v2 ADD COLUMN llm_max_tokens INTEGER NOT NULL DEFAULT 4096"))
+            conn.commit()
+            print("[schema] 已补齐 agents_v2.llm_timeout / llm_max_tokens")
+        except Exception:
+            pass
+
+        try:
+            conn.execute(_t("ALTER TABLE agent_messages ADD COLUMN reasoning_content TEXT"))
+            conn.commit()
+            print("[schema] 已补齐 agent_messages.reasoning_content")
+        except Exception:
+            pass
 
 
-def _try_add_col(conn, table: str, column: str, definition: str):
-    """安全添加列，已存在则忽略"""
-    from sqlalchemy import text
-    try:
-        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
-        conn.commit()
-        print(f"已为 {table} 表添加 {column} 字段")
-    except Exception:
-        pass
+def _run_alembic_upgrade():
+    """运行 Alembic 迁移到 head。"""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(os.path.join(PROJECT_ROOT, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(PROJECT_ROOT, "alembic"))
+    command.upgrade(cfg, "head")
 
 
 def _ensure_default_user():
@@ -129,50 +99,60 @@ def _ensure_default_user():
         get_or_create_default_user(db)
 
 
-def _run_seed_increment(conn, data_dir: str):
-    """增量种子：追加手工字段池可选字段 + 附加方案"""
+def _register_global_skills():
+    """注册全局系统技能（owner_agent_id=None）"""
+    import json
+    import os
     from datetime import datetime
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    from database import SessionLocal
+    from db.tables import SkillV2
+    from agents_v2.skill_loader import load_manifest
 
-    optional_fields = [
-        (8, 'previous_balance_input', '上期余额', 'number', 0, 0, 1, 0, 1, 0),
-        (9, 'ending_balance_input', '期末余额', 'number', 0, 0, 1, 0, 1, 0),
-        (10, 'business_time', '业务时间', 'text', 0, 0, 1, 0, 0, 0),
-        (11, 'group_name', '分组', 'text', 0, 0, 1, 0, 0, 0),
-        (12, 'department_name', '所属部门', 'text', 0, 0, 1, 0, 0, 0),
-        (13, 'income_expense_type', '收支类型', 'text', 0, 0, 1, 0, 0, 0),
-        (14, 'handler_name', '经办人', 'text', 0, 0, 1, 0, 0, 0),
-        (15, 'owner_name', '负责人', 'text', 0, 0, 1, 0, 0, 0),
-        (16, 'note_text', '备注', 'text', 0, 1, 1, 0, 0, 0),
-        (17, 'pending_recovery_flag', '待回补', 'bool', 0, 0, 1, 0, 0, 0),
-        (18, 'voucher_no', '凭证号', 'text', 0, 0, 1, 0, 0, 0),
-        (19, 'receipt_no', '回单编号', 'text', 0, 0, 1, 0, 0, 0),
-    ]
-    for f in optional_fields:
-        conn.execute(sql_text(
-            "INSERT OR IGNORE INTO manual_field_pool "
-            "(id, field_code, field_name_cn, data_type, is_core, is_default_visible, "
-            "is_disable_allowed, is_parse_key, is_validation_key, is_batch_inheritable, status, created_at, updated_at) "
-            "VALUES (:id, :fc, :cn, :dt, 0, :dv, :da, 0, :vk, 0, 'active', :now, :now)"
-        ), {"id": f[0], "fc": f[1], "cn": f[2], "dt": f[3], "dv": f[5], "da": f[6], "vk": f[8], "now": now})
+    system_skills_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "data", "agents", "system", "skills"
+    )
+    if not os.path.isdir(system_skills_dir):
+        return
 
-    extra_schemes = [
-        (2, 'manual_simple_cash', '现金简版', '现金类快速录入',
-         '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","note_text"]', 0),
-        (3, 'manual_bank_manual_account', '手工银行账户简版', '无网银账户',
-         '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","previous_balance_input","ending_balance_input","voucher_no","receipt_no"]', 0),
-        (4, 'manual_multi_subject_with_people', '多主体总表（含人员）', '带经办人负责人',
-         '["entity_match_key","account_match_key","business_date","summary_text","counterparty_name","income_amount","expense_amount","department_name","handler_name","owner_name","note_text"]', 0),
-    ]
-    for s in extra_schemes:
-        conn.execute(sql_text(
-            "INSERT OR IGNORE INTO manual_template_schemes "
-            "(id, scheme_code, scheme_name, description, selected_fields_json, is_default, status, created_at, updated_at) "
-            "VALUES (:id, :sc, :sn, :desc, :sf, :def, 'active', :now, :now)"
-        ), {"id": s[0], "sc": s[1], "sn": s[2], "desc": s[3], "sf": s[4], "def": s[5], "now": now})
+    db = SessionLocal()
+    try:
+        for skill_dir_name in os.listdir(system_skills_dir):
+            skill_path = os.path.join(system_skills_dir, skill_dir_name)
+            if not os.path.isdir(skill_path):
+                continue
 
-    conn.commit()
-    print(f"增量种子已写入：{len(optional_fields)} 个可选字段 + {len(extra_schemes)} 个方案")
+            manifest = load_manifest(skill_path)
+            if not manifest:
+                continue
+
+            skill_code = manifest.get("skill_code", skill_dir_name)
+            existing = db.query(SkillV2).filter(SkillV2.skill_code == skill_code).first()
+            if existing:
+                # 更新
+                existing.display_name = manifest.get("display_name", skill_code)
+                existing.description = manifest.get("description", "")
+                existing.manifest_json = json.dumps(manifest, ensure_ascii=False)
+                existing.source_path = skill_path
+                existing.status = "verified"
+                existing.updated_at = datetime.now()
+            else:
+                row = SkillV2(
+                    skill_code=skill_code,
+                    display_name=manifest.get("display_name", skill_code),
+                    description=manifest.get("description", ""),
+                    owner_agent_id=None,  # 全局
+                    manifest_json=json.dumps(manifest, ensure_ascii=False),
+                    source_path=skill_path,
+                    status="verified",
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+                db.add(row)
+        db.commit()
+    except Exception as e:
+        print(f"[skills] 全局技能注册失败: {e}")
+    finally:
+        db.close()
 
 
 @asynccontextmanager
@@ -181,9 +161,7 @@ async def lifespan(app: FastAPI):
     _init_db()
     from services.agent_init import init_agent_workspaces
     init_agent_workspaces()
-    url = f"http://{HOST}:{PORT}"
-    print(f"账房先生已启动 → {url}")
-    webbrowser.open(url)
+    print(f"账房先生已启动 → http://{HOST}:{PORT}")
     yield
 
 
@@ -217,6 +195,10 @@ app.include_router(batch_router, prefix="/api")
 app.include_router(logs_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(reset_router, prefix="/api")
+app.include_router(bank_master_router, prefix="/api")
+app.include_router(report_template_router, prefix="/api")
+app.include_router(events_router, prefix="/api")
+app.include_router(agent_v2_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──

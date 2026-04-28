@@ -1,9 +1,10 @@
 """手工流水 API — 快速录入 + Excel上传/预览/提交 + 方案管理"""
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from io import BytesIO
 
@@ -97,7 +98,13 @@ def preview(body: ManualPreviewBody, db: Session = Depends(get_db)):
 @router.post("/commit")
 def commit(body: ManualCommitBody, db: Session = Depends(get_db)):
     try:
-        result = flow_svc.commit_manual(db, body.batch_code, body.confirm_rows, body.fixes)
+        result = flow_svc.commit_manual(
+            db,
+            body.batch_code,
+            body.confirm_rows,
+            body.fixes,
+            body.parser_artifact_id,
+        )
         return success(result)
     except Exception as e:
         logger.error("手工流水提交失败: %s", str(e), exc_info=True)
@@ -116,3 +123,25 @@ def export_template(body: ManualExportTemplateBody, db: Session = Depends(get_db
     except Exception as e:
         logger.error("导出模板失败: %s", str(e), exc_info=True)
         return error(5000, "导出模板失败，请查看操作日志")
+
+
+# ── AI 智能解析（手工流水） ──
+
+class ManualAIParseBody(BaseModel):
+    headers: List[str]
+    sample_rows: Optional[List[List[str]]] = None
+    agent_id: Optional[int] = None
+    scheme_code: Optional[str] = None
+
+
+@router.post("/ai-parse")
+def ai_parse_manual(body: ManualAIParseBody, db: Session = Depends(get_db)):
+    try:
+        result = flow_svc.ai_parse_headers(
+            db, body.headers, body.sample_rows,
+            agent_id=body.agent_id, scheme_code=body.scheme_code,
+        )
+        return success(result)
+    except Exception as e:
+        logger.error("手工流水AI解析失败: %s", str(e), exc_info=True)
+        return error(5000, "AI解析失败，请查看操作日志")

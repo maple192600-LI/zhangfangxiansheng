@@ -104,6 +104,16 @@ PROVIDER_CONFIG = {
         "needs_api_key": False,
         "models": [],  # 自动从本地检测
     },
+    "deepseek": {
+        "label": "DeepSeek",
+        "base_url": "https://api.deepseek.com",
+        "chat_path": "/chat/completions",
+        "needs_api_key": True,
+        "models": [
+            {"id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "desc": "旗舰推理模型，复杂任务首选"},
+            {"id": "deepseek-v4-flash", "name": "DeepSeek V4 Flash", "desc": "快速推理，高性价比"},
+        ],
+    },
     "openai_compatible": {
         "label": "OpenAI 兼容",
         "base_url": "",

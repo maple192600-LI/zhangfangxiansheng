@@ -1,40 +1,15 @@
-"""API Key 对称加密工具
+"""API Key 本地存储工具。
 
-使用 base64 + FNV hash 做简单对称加密。
-V1 本地单机部署，不做复杂密钥管理。
+V1 是本地单机部署，不伪装成加密存储。函数名保留用于兼容旧调用点，
+实际语义是明确的本地明文保存。
 """
-import base64
-import hashlib
-import os
-
-# 本地固定盐值 — 仅用于本地部署场景
-_SALT = b"zhangfang_v1_local_salt_2026"
 
 
 def encrypt_key(plaintext: str) -> str:
-    """加密 API Key，返回可存储的字符串"""
-    if not plaintext:
-        return ""
-    raw = plaintext.encode("utf-8")
-    # XOR with salt-derived key stream
-    key = _derive_key(len(raw))
-    encrypted = bytes(a ^ b for a, b in zip(raw, key))
-    return base64.b64encode(encrypted).decode("ascii")
+    """返回本地可存储的 API Key 明文。"""
+    return plaintext or ""
 
 
 def decrypt_key(ciphertext: str) -> str:
-    """解密 API Key，返回明文"""
-    if not ciphertext:
-        return ""
-    encrypted = base64.b64decode(ciphertext)
-    key = _derive_key(len(encrypted))
-    decrypted = bytes(a ^ b for a, b in zip(encrypted, key))
-    return decrypted.decode("utf-8")
-
-
-def _derive_key(length: int) -> bytes:
-    """从盐值派生指定长度的 key stream"""
-    full_key = _SALT
-    while len(full_key) < length:
-        full_key += hashlib.sha256(full_key).digest()
-    return full_key[:length]
+    """返回本地保存的 API Key 明文。"""
+    return ciphertext or ""

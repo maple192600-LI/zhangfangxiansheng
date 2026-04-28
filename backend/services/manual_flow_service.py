@@ -1,6 +1,7 @@
 """手工流水服务 — Track A 快速录入 + Track B Excel上传，收敛到统一预览/提交流程"""
 import json
 import os
+import re
 import uuid
 from datetime import datetime, date as date_type
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from config import DATA_DIR
+from core import artifact_runtime
+from core.ai_call import chat
 from core.parser_engine import (
     detect_format,
     read_file_from_bytes,
@@ -16,6 +19,8 @@ from core.parser_engine import (
     normalize_date,
     normalize_amount,
 )
+from core.pii_masker import mask_row
+from core.security import decrypt_key
 from db.tables import FundEvent, ImportBatch, Account, Entity, AccountAlias
 from services.manual_scheme_service import get_scheme_by_code
 from services import log_service
@@ -163,32 +168,25 @@ def _create_batch(db: Session, source_type: str, source_name: str = None, status
 # ── Track A: 快速录入保存 ──────────────────────────────
 
 def quick_entry_save(db: Session, rows: List[Dict], scheme_code: str = "manual_multi_subject_basic") -> Dict:
-    batch = _create_batch(db, "manual_quick", "快速录入", "previewed")
-    saved = 0
-    abnormal = 0
-
-    for row in rows:
-        parsed = _process_row(db, row)
+    batch = _create_batch(db, "manual_quick", "quick_entry", status="committed")
+    inserted = 0
+    for raw in rows:
+        parsed = _process_row(db, raw)
         errors = _validate_row(parsed)
-        parsed["parse_status"] = "valid" if not errors else "abnormal"
-        parsed["abnormal_code"] = ",".join(errors) if errors else None
-        if errors:
-            abnormal += 1
-        else:
-            saved += 1
-        _create_fund_event(db, batch.id, "manual", parsed)
-
+        event = _canonical_event_from_manual(parsed)
+        event["state"] = "正常" if not errors else "待确认"
+        db.add(FundEvent(**event, batch_id=batch.id))
+        inserted += 1
+    batch.updated_at = datetime.now()
     db.commit()
-    log_service.write_log(db, action="batch_upload", module="manual_flow", detail={
-        "batch_code": batch.batch_code, "saved": saved, "abnormal": abnormal,
-    }, batch_id=batch.id)
-    return {
-        "batch_code": batch.batch_code,
-        "batch_id": batch.id,
-        "saved_count": saved,
-        "abnormal_count": abnormal,
-        "total_count": saved + abnormal,
-    }
+    log_service.write_log(
+        db,
+        action="manual_quick_entry",
+        module="manual_flow",
+        detail={"batch_code": batch.batch_code, "inserted_rows": inserted, "scheme_code": scheme_code},
+        batch_id=batch.id,
+    )
+    return {"batch_code": batch.batch_code, "inserted_rows": inserted}
 
 
 # ── Track B: Excel上传 ──────────────────────────────
@@ -228,18 +226,7 @@ def upload_workbook(db: Session, file_data: bytes, filename: str, scheme_code: s
 
 
 def preview_manual(db: Session, batch_code: str, scheme_code: str = None) -> Dict:
-    batch = db.query(ImportBatch).filter(ImportBatch.batch_code == batch_code).first()
-    if not batch:
-        raise ValueError(f"批次不存在: {batch_code}")
-
-    if not scheme_code:
-        scheme_code = "manual_multi_subject_basic"
-
-    # ── 分支：快速录入从DB读，Excel上传从文件读 ──
-    if batch.source_type == "manual_quick":
-        return _preview_from_events(db, batch)
-    else:
-        return _preview_from_file(db, batch, scheme_code)
+    raise NotImplementedError("Phase 1 后手工流水预览改由 parser.manual artifact 生成，当前由 Phase 3/5 接管。")
 
 
 def _preview_from_events(db: Session, batch: ImportBatch) -> Dict:
@@ -252,7 +239,7 @@ def _preview_from_events(db: Session, batch: ImportBatch) -> Dict:
     for i, ev in enumerate(events):
         row = _event_to_dict(ev)
         row["_row_no"] = i + 1
-        if ev.parse_status == "abnormal":
+        if ev.state in ("待确认", "异常"):
             abnormal_rows.append(row)
         else:
             parsed_rows.append(row)
@@ -327,96 +314,54 @@ def _preview_from_file(db: Session, batch: ImportBatch, scheme_code: str) -> Dic
     }
 
 
-def commit_manual(db: Session, batch_code: str, confirm_rows: List[int] = None, fixes: List[Dict] = None) -> Dict:
+def commit_manual(
+    db: Session,
+    batch_code: str,
+    confirm_rows: List[int] = None,
+    fixes: List[Dict] = None,
+    parser_artifact_id: Optional[int] = None,
+) -> Dict:
+    if parser_artifact_id is None:
+        if isinstance(confirm_rows, int):
+            parser_artifact_id = confirm_rows
+        else:
+            raise ValueError("提交手工 Excel 需要 parser_artifact_id")
     batch = db.query(ImportBatch).filter(ImportBatch.batch_code == batch_code).first()
     if not batch:
-        raise ValueError(f"批次不存在: {batch_code}")
+        raise ValueError("批次不存在")
+    file_path = _find_manual_upload(batch)
+    if not file_path:
+        raise ValueError("原始上传文件未找到")
 
-    # 获取预览数据
-    preview = preview_manual(db, batch_code)
-
-    if batch.source_type == "manual_quick":
-        # 快速录入：events 已存在，直接更新状态
-        committed = len(preview["parsed_rows"])
-        abnormal = len(preview["abnormal_rows"])
-
-        # 处理修复
-        if fixes:
-            fix_map = {f.get("_row_no"): f for f in fixes if f.get("_row_no")}
-            events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).order_by(FundEvent.id).all()
-            for i, ev in enumerate(events):
-                row_no = i + 1
-                if row_no in fix_map:
-                    fix = fix_map[row_no]
-                    if fix.get("entity_id"):
-                        ev.entity_id = fix["entity_id"]
-                    if fix.get("account_id"):
-                        ev.account_id = fix["account_id"]
-                    # 重新验证
-                    row = _event_to_dict(ev)
-                    row["_entity_id"] = ev.entity_id
-                    row["_account_id"] = ev.account_id
-                    errors = _validate_row(row)
-                    if not errors:
-                        ev.parse_status = "valid"
-                        ev.abnormal_code = None
-                        committed += 1
-                        abnormal -= 1
-                    else:
-                        ev.abnormal_code = ",".join(errors)
-        # 有效行状态确认
-        db.query(FundEvent).filter(
-            FundEvent.batch_id == batch.id,
-            FundEvent.parse_status == "valid"
-        ).update({"parse_status": "valid"})
-    else:
-        # Excel上传：删除旧events重新创建
-        db.query(FundEvent).filter(FundEvent.batch_id == batch.id).delete()
-
-        committed = 0
-        abnormal = 0
-
-        for row in preview["parsed_rows"]:
-            if confirm_rows and row.get("_row_no") not in confirm_rows:
-                continue
-            row["parse_status"] = "valid"
-            _create_fund_event(db, batch.id, "manual", row)
-            committed += 1
-
-        if fixes:
-            fix_map = {f.get("_row_no"): f for f in fixes if f.get("_row_no")}
-            for row in preview["abnormal_rows"]:
-                row_no = row.get("_row_no")
-                if row_no in fix_map:
-                    fix = fix_map[row_no]
-                    if fix.get("entity_id"):
-                        row["_entity_id"] = fix["entity_id"]
-                        row["_entity_name"] = fix.get("entity_name", "")
-                    if fix.get("account_id"):
-                        row["_account_id"] = fix["account_id"]
-                        row["_account_name"] = fix.get("account_name", "")
-                    errors = _validate_row(row)
-                    if not errors:
-                        row["parse_status"] = "valid"
-                        row["abnormal_code"] = None
-                        _create_fund_event(db, batch.id, "manual", row)
-                        committed += 1
-                    else:
-                        abnormal += 1
-                else:
-                    abnormal += 1
-
+    db.query(FundEvent).filter(FundEvent.batch_id == batch.id).delete()
+    rows = list(
+        artifact_runtime.run_parser(
+            db,
+            parser_artifact_id,
+            file_path,
+            {"batch_code": batch_code},
+        )
+    )
+    for row in rows:
+        db.add(FundEvent(**row, batch_id=batch.id, parser_artifact_id=parser_artifact_id))
     batch.status = "committed"
+    batch.updated_at = datetime.now()
     db.commit()
-
-    log_service.write_log(db, action="batch_commit", module="manual_flow", detail={
-        "batch_code": batch_code, "committed": committed, "abnormal": abnormal,
-    }, batch_id=batch.id)
+    log_service.write_log(
+        db,
+        action="manual_commit",
+        module="manual_flow",
+        detail={
+            "batch_code": batch_code,
+            "parser_artifact_id": parser_artifact_id,
+            "inserted_rows": len(rows),
+        },
+        batch_id=batch.id,
+    )
     return {
         "batch_code": batch_code,
-        "committed_count": committed,
-        "abnormal_count": abnormal,
-        "batch_status": batch.status,
+        "parser_artifact_id": parser_artifact_id,
+        "inserted_rows": len(rows),
     }
 
 
@@ -544,65 +489,232 @@ def _map_raw_row(headers: List[str], raw: List[str], mapping: Dict[str, str]) ->
 def _event_to_dict(ev: FundEvent) -> Dict:
     """FundEvent ORM → 预览用的 dict"""
     return {
-        "_entity_id": ev.entity_id,
-        "_entity_name": ev.entity.short_name if ev.entity else None,
-        "_account_id": ev.account_id,
-        "_account_name": ev.account.account_alias if ev.account else None,
+        "_entity_id": ev.entity.id if ev.entity else None,
+        "_entity_name": ev.entity_name,
+        "_account_id": ev.account.id if ev.account else None,
+        "_account_name": ev.account_name,
         "business_date": str(ev.business_date) if ev.business_date else "",
-        "business_time": ev.business_time,
-        "summary_text": ev.summary_text,
-        "counterparty_name": ev.counterparty_name,
-        "income_amount": float(ev.income_amount) if ev.income_amount else None,
-        "expense_amount": float(ev.expense_amount) if ev.expense_amount else None,
-        "previous_balance_input": float(ev.previous_balance_input) if ev.previous_balance_input else None,
-        "ending_balance_input": float(ev.ending_balance_input) if ev.ending_balance_input else None,
-        "parse_status": ev.parse_status,
-        "abnormal_code": ev.abnormal_code,
+        "summary_text": ev.summary,
+        "counterparty_name": ev.counterparty,
+        "income_amount": float(ev.amount_in) if ev.amount_in else None,
+        "expense_amount": float(ev.amount_out) if ev.amount_out else None,
+        "parse_status": ev.state,
+        "abnormal_code": None if ev.state == "正常" else ev.state,
     }
 
 
 def _create_fund_event(db: Session, batch_id: int, source_type: str, parsed: Dict):
-    biz_date = parsed.get("business_date", "")
-    if isinstance(biz_date, str) and biz_date:
-        try:
-            biz_date = datetime.strptime(biz_date[:10], "%Y-%m-%d").date()
-        except ValueError:
-            try:
-                biz_date = datetime.strptime(biz_date[:10], "%Y/%m/%d").date()
-            except ValueError:
-                biz_date = None
+    raise NotImplementedError("FundEvent 写入由后续 Parser artifact Runtime 负责。")
+
+
+def _find_manual_upload(batch: ImportBatch) -> Optional[str]:
+    upload_dir = os.path.join(DATA_DIR, "uploads")
+    if not os.path.isdir(upload_dir):
+        return None
+    source = batch.source_name or ""
+    for filename in os.listdir(upload_dir):
+        if source and filename.endswith(source):
+            path = os.path.join(upload_dir, filename)
+            if os.path.isfile(path):
+                return path
+    return None
+
+
+def _canonical_event_from_manual(parsed: Dict) -> Dict:
+    biz_date = parsed.get("business_date")
+    if isinstance(biz_date, str):
+        biz_date = datetime.strptime(biz_date[:10].replace("/", "-"), "%Y-%m-%d").date()
+    income = parsed.get("income_amount") or 0
+    expense = parsed.get("expense_amount") or 0
+    entity_code = str(parsed.get("entity_match_key") or parsed.get("_entity_name") or "").strip()
+    account_code = str(parsed.get("account_match_key") or parsed.get("_account_name") or "").strip()
+    return {
+        "business_date": biz_date,
+        "entity_code": entity_code,
+        "entity_name": parsed.get("_entity_name") or entity_code,
+        "account_code": account_code,
+        "account_name": parsed.get("_account_name") or account_code,
+        "summary": parsed.get("summary_text") or "",
+        "counterparty": parsed.get("counterparty_name") or "",
+        "amount_in": income,
+        "amount_out": expense,
+        "rolling_balance": parsed.get("ending_balance_input"),
+        "state": "正常",
+        "source": "手工录入",
+    }
+
+
+# ──────────────────────────────────────────
+# AI 智能解析（手工流水列映射）
+# ──────────────────────────────────────────
+
+def ai_parse_headers(
+    db: Session,
+    headers: list,
+    sample_rows: list = None,
+    agent_id: int = None,
+    scheme_code: str = None,
+) -> Dict[str, Any]:
+    """通过指定智能体分析手工流水表头，自动生成列映射。
+
+    使用当前方案的 field_pool 作为可用字段列表。
+    """
+    from db.tables import AgentV2, ManualFieldPool
+
+    # 查找指定的智能体
+    if agent_id:
+        agent = db.query(AgentV2).filter(
+            AgentV2.id == agent_id, AgentV2.status == "active",
+        ).first()
     else:
-        biz_date = None
+        agent = db.query(AgentV2).filter(
+            AgentV2.status == "active",
+        ).order_by(AgentV2.sort_order.desc()).first()
 
-    inc = parsed.get("income_amount")
-    exp = parsed.get("expense_amount")
-    if inc is not None:
-        try:
-            inc = float(inc)
-        except (ValueError, TypeError):
-            inc = None
-    if exp is not None:
-        try:
-            exp = float(exp)
-        except (ValueError, TypeError):
-            exp = None
+    if not agent or not agent.ai_config:
+        return {"ok": False, "error": "未找到可用的 AI 智能体，请先在「AI智能体」中创建并配置"}
 
-    event = FundEvent(
-        batch_id=batch_id,
-        source_type=source_type,
-        business_date=biz_date,
-        business_time=parsed.get("business_time"),
-        entity_id=parsed.get("_entity_id"),
-        account_id=parsed.get("_account_id"),
-        direction="income" if (inc and inc > 0) else ("expense" if (exp and exp > 0) else "unknown"),
-        income_amount=inc,
-        expense_amount=exp,
-        counterparty_name=parsed.get("counterparty_name"),
-        summary_text=parsed.get("summary_text", ""),
-        previous_balance_input=parsed.get("previous_balance_input"),
-        ending_balance_input=parsed.get("ending_balance_input"),
-        parse_status=parsed.get("parse_status", "pending"),
-        abnormal_code=parsed.get("abnormal_code"),
-        raw_data_json=json.dumps(parsed, ensure_ascii=False, default=str),
+    # 获取方案的可用字段
+    pool = db.query(ManualFieldPool).filter(ManualFieldPool.status == "active").all()
+    field_map = {f.field_code: f.field_name_cn for f in pool}
+
+    # 如果指定了方案，只使用方案选中的字段
+    available_fields = dict(field_map)
+    if scheme_code:
+        scheme = get_scheme_by_code(db, scheme_code)
+        if scheme:
+            available_fields = {fc: field_map.get(fc, fc) for fc in scheme.selected_fields if fc in field_map}
+
+    ai_cfg = agent.ai_config
+    api_key = decrypt_key(ai_cfg.api_key_local)
+
+    # 构建 prompt
+    field_desc = "\n".join(f"  - {k}: {v}" for k, v in available_fields.items())
+    short_headers = []
+    for h in headers:
+        bracket = h.find("[")
+        short_headers.append(h[:bracket].strip() if bracket > 0 else h)
+    header_list = ", ".join(f'"{h}"' for h in short_headers)
+
+    sample_text = ""
+    if sample_rows:
+        lines = []
+        for row in sample_rows[:2]:
+            if isinstance(row, (list, tuple)):
+                lines.append(" | ".join(mask_row(row, short_headers)))
+        if lines:
+            sample_text = f"\n\n前几行样本数据:\n" + "\n".join(lines)
+
+    user_message = f"""请分析以下手工流水表的表头列名，将每列映射到对应的标准字段。
+
+## 表头列名
+{header_list}
+{sample_text}
+
+## 可用标准字段
+{field_desc}
+
+## 要求
+1. 返回 JSON 格式：{{"Excel列名": "字段code"}}
+2. 只映射能匹配的列，不确定的不映射
+3. business_date、summary_text 是核心必填字段
+4. 如果列名含义不明确，参考样本数据判断
+5. entity_match_key 用于匹配法人简称/编码，account_match_key 用于匹配账户名称/编号
+
+请严格返回如下 JSON 格式（不要包含其他文字）:
+{{"mapping": {{"Excel列名1": "field_code1", "Excel列名2": "field_code2"}}}}"""
+
+    system_prompt = f"你是「{agent.display_name}」，一个 AI 智能体。"
+    if agent.role_prompt:
+        system_prompt += f"\n\n{agent.role_prompt}"
+    system_prompt += "\n\n【当前任务模式】你现在处于「列映射任务」模式，不要与用户对话，只需完成列映射并返回严格的 JSON 结果。不要输出任何 JSON 以外的内容。"
+
+    result = chat(
+        provider=ai_cfg.provider,
+        api_key=api_key,
+        base_url=ai_cfg.base_url,
+        model_name=ai_cfg.model_name,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        max_tokens=agent.llm_max_tokens or 4096,
+        timeout=agent.llm_timeout or 90,
     )
-    db.add(event)
+
+    if not result.get("ok"):
+        return {"ok": False, "error": f"AI 调用失败: {result.get('error', '未知错误')}"}
+
+    content = result["content"].strip()
+    content = _strip_thinking_tags(content)
+
+    parsed = _extract_and_parse_json(content)
+    if parsed is None:
+        return {
+            "ok": False,
+            "error": "AI 返回格式异常，请重试或手动配置映射",
+            "raw": content,
+        }
+
+    mapping = parsed.get("mapping", {})
+
+    # 将短列名映射回原始列名
+    short_to_original = {}
+    for orig in headers:
+        bracket = orig.find("[")
+        short = orig[:bracket].strip() if bracket > 0 else orig
+        short_to_original[short] = orig
+
+    restored_mapping = {}
+    for excel_col, field_code in mapping.items():
+        original_col = short_to_original.get(excel_col, excel_col)
+        restored_mapping[original_col] = field_code
+    mapping = restored_mapping
+
+    # 验证映射字段合法性
+    valid_mapping = {}
+    for excel_col, field_code in mapping.items():
+        if field_code in field_map:
+            valid_mapping[excel_col] = field_code
+
+    if not valid_mapping:
+        return {"ok": False, "error": "AI 未能识别出有效的列映射"}
+
+    has_date = any(v == "business_date" for v in valid_mapping.values())
+    confidence = "high" if has_date and len(valid_mapping) >= 3 else "medium" if has_date else "low"
+
+    return {
+        "ok": True,
+        "mapping": valid_mapping,
+        "confidence": confidence,
+        "matched_count": len(valid_mapping),
+        "total_columns": len(headers),
+    }
+
+
+def _strip_thinking_tags(text: str) -> str:
+    text = re.sub(r"<think[^>]*>.*?</think\s*>", "", text, flags=re.S)
+    text = re.sub(r"<reasoning[^>]*>.*?</reasoning\s*>", "", text, flags=re.S)
+    text = re.sub(r"<reflection[^>]*>.*?</reflection\s*>", "", text, flags=re.S)
+    return text.strip()
+
+
+def _extract_and_parse_json(text: str) -> Optional[dict]:
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    code_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, flags=re.S)
+    if code_match:
+        try:
+            return json.loads(code_match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+    obj_match = re.search(r"\{.*\}", text, flags=re.S)
+    if obj_match:
+        try:
+            return json.loads(obj_match.group(0))
+        except json.JSONDecodeError:
+            pass
+    return None

@@ -31,12 +31,22 @@ class PreviewBody(BaseModel):
 
 class CommitBody(BaseModel):
     batch_code: str
-    parsed_rows: List[Dict[str, Any]]
+    parser_artifact_id: int
 
 
 class AIParseBody(BaseModel):
     headers: List[str]
     sample_rows: Optional[List[List[str]]] = None
+    agent_id: Optional[int] = None
+
+
+class CommitByMappingBody(BaseModel):
+    batch_code: str
+    account_code: str
+    mapping: Optional[Dict[str, str]] = None
+    template_id: Optional[int] = None
+    template_name: Optional[str] = None
+    sample_headers: Optional[List[str]] = None
 
 
 class SaveTemplateBody(BaseModel):
@@ -86,7 +96,26 @@ def preview(body: PreviewBody, db: Session = Depends(get_db)):
 @router.post("/bank-import/commit")
 def commit(body: CommitBody, db: Session = Depends(get_db)):
     try:
-        result = svc.commit(db, body.batch_code, body.parsed_rows)
+        result = svc.commit(db, body.batch_code, body.parser_artifact_id)
+    except ValueError as e:
+        return error(ErrorCode.NOT_FOUND, str(e))
+    return success(result)
+
+
+# ── 基于映射直接提交 ──
+
+@router.post("/bank-import/commit-by-mapping")
+def commit_by_mapping(body: CommitByMappingBody, db: Session = Depends(get_db)):
+    try:
+        result = svc.commit_by_mapping(
+            db,
+            batch_code=body.batch_code,
+            account_code=body.account_code,
+            mapping=body.mapping,
+            template_id=body.template_id,
+            template_name=body.template_name,
+            sample_headers=body.sample_headers,
+        )
     except ValueError as e:
         return error(ErrorCode.NOT_FOUND, str(e))
     return success(result)
@@ -97,7 +126,7 @@ def commit(body: CommitBody, db: Session = Depends(get_db)):
 @router.post("/bank-import/ai-parse")
 def ai_parse(body: AIParseBody, db: Session = Depends(get_db)):
     try:
-        result = svc.ai_parse_headers(db, body.headers, body.sample_rows)
+        result = svc.ai_parse_headers(db, body.headers, body.sample_rows, agent_id=body.agent_id)
         return success(result)
     except Exception as e:
         logger.error("AI解析表头失败: %s", str(e), exc_info=True)
