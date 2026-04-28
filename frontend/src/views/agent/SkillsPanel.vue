@@ -1,0 +1,373 @@
+<template>
+  <div class="skills-page">
+    <div class="skills-main">
+      <div class="skills-block">
+        <div class="block-head">
+          <h3>技能列表</h3>
+          <span class="block-count">{{ skills.length }} 个技能</span>
+        </div>
+
+        <div v-if="skills.length === 0" class="skills-empty">
+          <div class="empty-icon">⚡</div>
+          <div class="empty-text">暂无可用技能</div>
+          <div class="empty-hint">系统预置技能将自动出现在这里</div>
+        </div>
+
+        <div v-for="sk in skills" :key="sk.id" class="skill-card">
+          <div class="skill-left">
+            <span class="skill-icon">⚡</span>
+            <div class="skill-info">
+              <div class="skill-name">
+                {{ sk.display_name }}
+                <span v-if="sk.is_global" class="tag tag-blue">全局</span>
+                <span :class="['tag', sk.status === 'verified' ? 'tag-green' : 'tag-yellow']">
+                  {{ sk.status === 'verified' ? '已验证' : '草稿' }}
+                </span>
+              </div>
+              <div class="skill-desc">{{ sk.description || '无描述' }}</div>
+            </div>
+          </div>
+          <div class="skill-meta">
+            <span class="skill-code">{{ sk.skill_code }}</span>
+            <div class="skill-btns">
+              <button class="btn-run" @click="handleRun(sk)" :disabled="runningCode === sk.skill_code">运行</button>
+              <button class="btn-test" @click="handleTest(sk)" :disabled="testingCode === sk.skill_code">测试</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 运行/测试结果弹窗 -->
+        <div v-if="resultModal" class="result-overlay" @click.self="resultModal = null">
+          <div class="result-box">
+            <div class="result-head">
+              <span>{{ resultModal.title }}</span>
+              <button class="btn-close" @click="resultModal = null">关闭</button>
+            </div>
+            <pre class="result-body" :class="{ 'result-ok': resultModal.ok, 'result-err': !resultModal.ok }">{{ resultModal.content }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="skills-side">
+      <div class="info-card">
+        <div class="info-head">技能说明</div>
+        <div class="tips">
+          <p><strong>全局技能</strong>由系统预置，所有智能体均可使用。</p>
+          <p><strong>自定义技能</strong>可由智能体在对话中自动创建，也可手动编写。</p>
+          <p>技能通过 <code>skill_run</code> 工具执行。在聊天中输入类似指令即可触发：</p>
+          <pre class="code-hint">"用招行解析技能解析 inbox 里的文件"</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, watch } from 'vue'
+import { useAgentsStore } from '@/stores/agents'
+import http from '@/api'
+
+const props = defineProps({ agentId: Number })
+const store = useAgentsStore()
+const skills = ref([])
+const runningCode = ref('')
+const testingCode = ref('')
+const resultModal = ref(null)
+
+onMounted(() => load())
+watch(() => props.agentId, () => load())
+
+async function load() {
+  try {
+    skills.value = await store.listSkills(props.agentId)
+  } catch { skills.value = [] }
+}
+
+async function handleRun(sk) {
+  runningCode.value = sk.skill_code
+  try {
+    const res = await http.post(`/agent_v2/agents/${props.agentId}/skill-run`, {
+      skill_code: sk.skill_code,
+    })
+    const data = res
+    resultModal.value = {
+      title: `运行 ${sk.display_name}`,
+      ok: data.ok !== false,
+      content: JSON.stringify(data, null, 2),
+    }
+  } catch (e) {
+    resultModal.value = {
+      title: `运行 ${sk.display_name}`,
+      ok: false,
+      content: e.message || '运行失败',
+    }
+  }
+  runningCode.value = ''
+}
+
+async function handleTest(sk) {
+  testingCode.value = sk.skill_code
+  try {
+    const res = await http.post(`/agent_v2/agents/${props.agentId}/skill-test`, {
+      skill_code: sk.skill_code,
+    })
+    const data = res
+    resultModal.value = {
+      title: `测试 ${sk.display_name}`,
+      ok: data.ok !== false,
+      content: JSON.stringify(data, null, 2),
+    }
+  } catch (e) {
+    resultModal.value = {
+      title: `测试 ${sk.display_name}`,
+      ok: false,
+      content: e.message || '测试失败',
+    }
+  }
+  testingCode.value = ''
+}
+</script>
+
+<style scoped>
+.skills-page {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.skills-main { min-width: 0; }
+
+.skills-block {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e7e0d5;
+  padding: 24px 28px;
+}
+
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #ede8df;
+}
+.block-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: #333; }
+.block-count { font-size: 13px; color: #aaa; }
+
+.skills-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #8c8680;
+}
+.empty-icon { font-size: 36px; opacity: .35; margin-bottom: 10px; }
+.empty-text { font-size: 15px; font-weight: 600; color: #555; margin-bottom: 6px; }
+.empty-hint { font-size: 13px; color: #aaa; }
+
+.skill-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid #ede8df;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  transition: background .15s;
+}
+.skill-card:hover { background: #faf8f3; }
+
+.skill-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skill-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: #eef3ec;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.skill-info { min-width: 0; }
+.skill-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.skill-desc {
+  font-size: 13px;
+  color: #8c8680;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+
+.skill-meta { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+.skill-code {
+  font-family: monospace;
+  font-size: 12px;
+  color: #aaa;
+  background: #f7f4ee;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+.skill-btns {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.skill-card:hover .skill-btns { opacity: 1; }
+.btn-run, .btn-test {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid;
+  font-family: inherit;
+  transition: background .15s;
+}
+.btn-run {
+  background: #eef3ec;
+  color: #2f4330;
+  border-color: #d7e5d4;
+}
+.btn-run:hover { background: #d7e5d4; }
+.btn-run[disabled] { opacity: .5; cursor: not-allowed; }
+.btn-test {
+  background: #f5f0e4;
+  color: #8a7a3a;
+  border-color: #e0d8c5;
+}
+.btn-test:hover { background: #e0d8c5; }
+.btn-test[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* 结果弹窗 */
+.result-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.result-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+.result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 16px;
+}
+.btn-close {
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: #f7f4ee;
+  color: #6b726c;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #e7e0d5;
+  font-family: inherit;
+}
+.btn-close:hover { background: #ede8df; }
+.result-body {
+  flex: 1;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 14px;
+  border-radius: 8px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.result-ok { background: #f0f7ef; color: #2f4330; }
+.result-err { background: #fdf2f2; color: #9b3b30; }
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.tag-blue { background: #eef5f8; color: #1a7a8a; }
+.tag-green { background: #eef3ec; color: #2f4330; }
+.tag-yellow { background: #f5f0e4; color: #8a7a3a; }
+
+/* 右侧信息 */
+.skills-side {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e7e0d5;
+  padding: 22px 24px;
+}
+
+.info-head {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ede8df;
+}
+
+.tips {
+  font-size: 13px;
+  color: #6b726c;
+  line-height: 1.8;
+}
+.tips p { margin: 0 0 10px; }
+.tips strong { color: #333; }
+.tips code {
+  background: #f7f4ee;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.code-hint {
+  background: #f7f4ee;
+  border: 1px solid #e7e0d5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #435046;
+  margin-top: 6px;
+}
+
+@media (max-width: 900px) {
+  .skills-page { grid-template-columns: 1fr; }
+}
+</style>

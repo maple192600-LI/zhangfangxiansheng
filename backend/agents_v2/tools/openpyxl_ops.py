@@ -1,8 +1,9 @@
-"""openpyxl 读写工具 — 读取 Excel 文件内容"""
+"""openpyxl 读写工具 — 读取/写入 Excel 文件"""
 import os
+import tempfile
 
 from agents_v2.tool_registry import register_tool, ToolContext
-from agents_v2.workspace import safe_path
+from agents_v2.workspace import safe_path, get_agent_root
 
 
 @register_tool(read_only=True)
@@ -70,3 +71,31 @@ def _read_csv(filepath: str, max_rows: int) -> dict:
         "total_data_rows": len(rows) - 1 if rows else 0,
         "truncated": False,
     }
+
+
+@register_tool(read_only=False)
+def openpyxl_write(path: str, headers: list, rows: list, sheet_name: str = "Sheet1", ctx: ToolContext = None) -> dict:
+    """将二维数据写入工作区内的 Excel 文件（xlsx）。如文件已存在则覆盖。"""
+    import openpyxl
+    abs_path = safe_path(ctx.agent_code, path)
+    if not abs_path:
+        return {"ok": False, "error": f"非法路径: {path}"}
+
+    # 确保目录存在
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+
+    # 写表头
+    if headers:
+        ws.append(headers)
+
+    # 写数据行
+    for row in rows:
+        ws.append(row)
+
+    wb.save(abs_path)
+    wb.close()
+    return {"ok": True, "path": path, "rows_written": len(rows), "columns": len(headers) if headers else 0}

@@ -312,6 +312,63 @@ async def upload_agent_file(agent_id: int, file: UploadFile = File(...), sub_dir
 
 # ── 技能管理 ──
 
+# ── 记忆管理 ──
+
+@router.get("/agents/{agent_id}/memories")
+def list_agent_memories(agent_id: int, db: Session = Depends(get_db)):
+    """列出 agent 的所有记忆"""
+    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    memories = memory_store.list_memories(db, agent_id)
+    return success(memories)
+
+
+@router.post("/agents/{agent_id}/memories")
+async def save_agent_memory(agent_id: int, request: Request, db: Session = Depends(get_db)):
+    """保存一条记忆"""
+    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    body = await request.json()
+    key = (body.get("key") or "").strip()
+    content = (body.get("content") or "").strip()
+    if not key or not content:
+        return error(1001, "标题和内容不能为空")
+    result = memory_store.save_memory(db, agent_id, key, content, source="user")
+    return success(result)
+
+
+@router.delete("/agents/{agent_id}/memories/{memory_id}")
+def delete_agent_memory(agent_id: int, memory_id: int, db: Session = Depends(get_db)):
+    """删除一条记忆"""
+    from db.tables import AgentMemory
+    mem = db.query(AgentMemory).filter(
+        AgentMemory.id == memory_id, AgentMemory.agent_id == agent_id
+    ).first()
+    if not mem:
+        return error(2001, "记忆不存在")
+    db.delete(mem)
+    db.commit()
+    return success(None, "已删除")
+
+
+@router.delete("/agents/{agent_id}/sessions/{session_id}")
+def delete_agent_session(agent_id: int, session_id: int, db: Session = Depends(get_db)):
+    """软删除会话"""
+    from db.tables import AgentSession
+    session = db.query(AgentSession).filter(
+        AgentSession.id == session_id, AgentSession.agent_id == agent_id
+    ).first()
+    if not session:
+        return error(2001, "会话不存在")
+    session.status = "deleted"
+    db.commit()
+    return success(None, "已删除")
+
+
+# ── 技能管理 ──
+
 @router.get("/agents/{agent_id}/skills")
 def list_agent_skills(agent_id: int, db: Session = Depends(get_db)):
     """列出 agent 的技能"""
@@ -336,3 +393,45 @@ def list_agent_skills(agent_id: int, db: Session = Depends(get_db)):
             "verified_at": s.verified_at.isoformat() if s.verified_at else None,
         })
     return success(skills)
+
+
+@router.post("/agents/{agent_id}/skill-run")
+async def run_agent_skill(agent_id: int, request: Request, db: Session = Depends(get_db)):
+    """手动运行一个技能"""
+    from agents_v2.tool_registry import ToolContext
+    from agents_v2.tools.skill_ops import skill_run
+
+    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+
+    body = await request.json()
+    skill_code = body.get("skill_code", "")
+    if not skill_code:
+        return error(1001, "请指定技能编码")
+
+    ctx = ToolContext(agent_id=agent_id, agent_code=agent.agent_code, db=db)
+    kwargs = {k: v for k, v in body.items() if k not in ("skill_code",)}
+    result = skill_run(skill_code, ctx=ctx, **kwargs)
+    return success(result)
+
+
+@router.post("/agents/{agent_id}/skill-test")
+async def test_agent_skill(agent_id: int, request: Request, db: Session = Depends(get_db)):
+    """手动测试一个技能"""
+    from agents_v2.tool_registry import ToolContext
+    from agents_v2.tools.skill_ops import skill_test
+
+    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+
+    body = await request.json()
+    skill_code = body.get("skill_code", "")
+    if not skill_code:
+        return error(1001, "请指定技能编码")
+
+    ctx = ToolContext(agent_id=agent_id, agent_code=agent.agent_code, db=db)
+    kwargs = {k: v for k, v in body.items() if k not in ("skill_code",)}
+    result = skill_test(skill_code, ctx=ctx, **kwargs)
+    return success(result)
