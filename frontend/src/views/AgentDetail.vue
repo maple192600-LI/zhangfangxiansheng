@@ -27,6 +27,7 @@
       <div v-if="activeTab === 'chat' && agent" class="chat-layout">
         <div class="chat-main">
           <ChatPanel
+            ref="chatPanelRef"
             :agent="agent"
             :session-id="currentSessionId"
             @session-created="onSessionCreated"
@@ -39,6 +40,7 @@
       <SkillsPanel
         v-if="activeTab === 'skills' && agent"
         :agent-id="agent.id"
+        @start-teach="onStartTeach"
       />
       <div v-if="activeTab === 'files' && agent" class="tab-full">
         <FilePanel :agent-id="agent.id" class="file-panel-full" />
@@ -81,6 +83,7 @@ const agentsStore = useAgentsStore()
 const agent = ref(null)
 const activeTab = ref('chat')
 const currentSessionId = ref(null)
+const chatPanelRef = ref(null)
 
 const tabs = [
   { key: 'chat', label: '聊天' },
@@ -111,6 +114,12 @@ async function loadAgent() {
 
 function onSessionCreated(sid) { currentSessionId.value = sid; activeTab.value = 'chat' }
 function onOpenSession(sid) { currentSessionId.value = sid; activeTab.value = 'chat' }
+function onStartTeach(prompt) {
+  activeTab.value = 'chat'
+  setTimeout(() => {
+    if (chatPanelRef.value) chatPanelRef.value.sendExternal(prompt)
+  }, 300)
+}
 async function onAgentUpdated() { agent.value = await agentsStore.getAgent(agent.value.id) }
 function onAgentDeleted() { router.push({ name: 'home' }) }
 </script>

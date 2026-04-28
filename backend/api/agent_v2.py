@@ -395,6 +395,49 @@ def list_agent_skills(agent_id: int, db: Session = Depends(get_db)):
     return success(skills)
 
 
+@router.get("/agents/{agent_id}/skills/{skill_code}")
+def get_skill_detail(agent_id: int, skill_code: str, db: Session = Depends(get_db)):
+    """获取技能详情（含源码）"""
+    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+
+    skill = db.query(SkillV2).filter(
+        SkillV2.skill_code == skill_code,
+        (SkillV2.owner_agent_id == agent_id) | (SkillV2.owner_agent_id.is_(None)),
+    ).first()
+    if not skill:
+        return error(2001, "技能不存在")
+
+    result = {
+        "id": skill.id,
+        "skill_code": skill.skill_code,
+        "display_name": skill.display_name,
+        "description": skill.description,
+        "status": skill.status,
+        "is_global": skill.owner_agent_id is None,
+        "verified_at": skill.verified_at.isoformat() if skill.verified_at else None,
+        "test_pass_count": skill.test_pass_count,
+        "test_fail_count": skill.test_fail_count,
+    }
+
+    # 读取源码
+    from agents_v2.skill_loader import get_skill_path
+    import os
+    skill_path = get_skill_path(agent.agent_code, skill_code)
+    if os.path.isdir(skill_path):
+        run_py = os.path.join(skill_path, "run.py")
+        if os.path.isfile(run_py):
+            with open(run_py, "r", encoding="utf-8", errors="replace") as f:
+                result["run_py"] = f.read()
+        manifest_path = os.path.join(skill_path, "manifest.yaml")
+        if os.path.isfile(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8", errors="replace") as f:
+                result["manifest"] = f.read()
+
+    return success(result)
+
+
 @router.post("/agents/{agent_id}/skill-run")
 async def run_agent_skill(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """手动运行一个技能"""

@@ -182,6 +182,22 @@ def _build_system_prompt(agent: AgentV2) -> str:
     parts.append("- 如果需要操作文件或执行命令，使用提供的工具")
     parts.append("- 如果不确定，使用 ask_user 工具向用户确认")
     parts.append("- 回答要简洁专业")
+
+    parts.append("\n## 技能创建指南")
+    parts.append("当用户要求你学习新技能时，按以下步骤操作：")
+    parts.append("1. 用 openpyxl_read 或 fs_read 读取用户上传的样本文件，分析表头和数据结构")
+    parts.append("2. 识别关键字段映射（日期、收入、支出、摘要、对方户名等）")
+    parts.append("3. 用 skill_create 工具创建技能，参数说明：")
+    parts.append("   - skill_code: 英文小写+下划线，如 parse_bank_xxx")
+    parts.append("   - display_name: 中文名称，如 'XX银行流水解析'")
+    parts.append("   - description: 简短描述技能功能")
+    parts.append("   - run_py: Python 代码字符串，必须包含 run(params) 函数")
+    parts.append("4. run(params) 函数规范：")
+    parts.append("   - params 是字典，通常包含 file_path")
+    parts.append("   - 返回 {'ok': True, 'rows': [...], 'count': N} 格式")
+    parts.append("   - 使用 openpyxl 读取 Excel，处理日期和金额格式")
+    parts.append("5. 创建后用 skill_test 测试，验证是否能正确解析样本文件")
+    parts.append("6. 告知用户技能已创建并通过测试")
     return "\n".join(parts)
 
 

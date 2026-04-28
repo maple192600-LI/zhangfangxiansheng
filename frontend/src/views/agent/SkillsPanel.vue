@@ -4,7 +4,37 @@
       <div class="skills-block">
         <div class="block-head">
           <h3>技能列表</h3>
-          <span class="block-count">{{ skills.length }} 个技能</span>
+          <div class="block-actions">
+            <span class="block-count">{{ skills.length }} 个技能</span>
+            <button class="btn-teach" @click="showTeachModal = true">教 agent 学新手艺</button>
+          </div>
+        </div>
+
+        <!-- 教 agent 学新手艺弹窗 -->
+        <div v-if="showTeachModal" class="result-overlay" @click.self="showTeachModal = false">
+          <div class="teach-box">
+            <div class="teach-head">
+              <span>教 agent 学新手艺</span>
+              <button class="btn-close" @click="showTeachModal = false">关闭</button>
+            </div>
+            <div class="teach-body">
+              <div class="teach-field">
+                <label>上传样本文件</label>
+                <label class="teach-upload">
+                  {{ teachFile ? teachFile.name : '点击选择文件（Excel/CSV）' }}
+                  <input type="file" @change="onTeachFile" hidden accept=".xlsx,.xls,.csv" />
+                </label>
+              </div>
+              <div class="teach-field">
+                <label>描述目标</label>
+                <textarea v-model="teachDesc" class="teach-textarea" rows="3"
+                  placeholder="例如：识别中行流水的字段，输出标准 fund_event 行" />
+              </div>
+              <div class="teach-actions">
+                <button class="btn-save" @click="startTeach" :disabled="!teachFile || !teachDesc.trim()">开始学习</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div v-if="skills.length === 0" class="skills-empty">
@@ -13,25 +43,46 @@
           <div class="empty-hint">系统预置技能将自动出现在这里</div>
         </div>
 
-        <div v-for="sk in skills" :key="sk.id" class="skill-card">
-          <div class="skill-left">
-            <span class="skill-icon">⚡</span>
-            <div class="skill-info">
-              <div class="skill-name">
-                {{ sk.display_name }}
-                <span v-if="sk.is_global" class="tag tag-blue">全局</span>
-                <span :class="['tag', sk.status === 'verified' ? 'tag-green' : 'tag-yellow']">
-                  {{ sk.status === 'verified' ? '已验证' : '草稿' }}
-                </span>
+        <div v-for="sk in skills" :key="sk.id" class="skill-card-wrapper">
+          <div class="skill-card">
+            <div class="skill-left" @click="toggleDetail(sk.skill_code)" style="cursor:pointer">
+              <span class="skill-icon">⚡</span>
+              <div class="skill-info">
+                <div class="skill-name">
+                  {{ sk.display_name }}
+                  <span v-if="sk.is_global" class="tag tag-blue">全局</span>
+                  <span :class="['tag', sk.status === 'verified' ? 'tag-green' : 'tag-yellow']">
+                    {{ sk.status === 'verified' ? '已验证' : '草稿' }}
+                  </span>
+                  <span class="detail-toggle">{{ expandedDetail[sk.skill_code] ? '▴' : '▾' }}</span>
+                </div>
+                <div class="skill-desc">{{ sk.description || '无描述' }}</div>
               </div>
-              <div class="skill-desc">{{ sk.description || '无描述' }}</div>
+            </div>
+            <div class="skill-meta">
+              <span class="skill-code">{{ sk.skill_code }}</span>
+              <div class="skill-btns">
+                <button class="btn-run" @click="handleRun(sk)" :disabled="runningCode === sk.skill_code">运行</button>
+                <button class="btn-test" @click="handleTest(sk)" :disabled="testingCode === sk.skill_code">测试</button>
+              </div>
             </div>
           </div>
-          <div class="skill-meta">
-            <span class="skill-code">{{ sk.skill_code }}</span>
-            <div class="skill-btns">
-              <button class="btn-run" @click="handleRun(sk)" :disabled="runningCode === sk.skill_code">运行</button>
-              <button class="btn-test" @click="handleTest(sk)" :disabled="testingCode === sk.skill_code">测试</button>
+          <!-- 展开的详情 -->
+          <div v-if="expandedDetail[sk.skill_code]" class="skill-detail">
+            <div v-if="detailLoading[sk.skill_code]" class="detail-loading">加载中...</div>
+            <div v-else-if="detailData[sk.skill_code]" class="detail-content">
+              <div class="detail-meta">
+                <span>测试通过: {{ detailData[sk.skill_code].test_pass_count || 0 }}</span>
+                <span>测试失败: {{ detailData[sk.skill_code].test_fail_count || 0 }}</span>
+              </div>
+              <div v-if="detailData[sk.skill_code].run_py" class="detail-section">
+                <div class="detail-label">源码 (run.py)</div>
+                <pre class="detail-code">{{ detailData[sk.skill_code].run_py }}</pre>
+              </div>
+              <div v-if="detailData[sk.skill_code].manifest" class="detail-section">
+                <div class="detail-label">配置 (manifest.yaml)</div>
+                <pre class="detail-code">{{ detailData[sk.skill_code].manifest }}</pre>
+              </div>
             </div>
           </div>
         </div>
@@ -69,11 +120,18 @@ import { useAgentsStore } from '@/stores/agents'
 import http from '@/api'
 
 const props = defineProps({ agentId: Number })
+const emit = defineEmits(['start-teach'])
 const store = useAgentsStore()
 const skills = ref([])
 const runningCode = ref('')
 const testingCode = ref('')
 const resultModal = ref(null)
+const showTeachModal = ref(false)
+const teachFile = ref(null)
+const teachDesc = ref('')
+const expandedDetail = ref({})
+const detailData = ref({})
+const detailLoading = ref({})
 
 onMounted(() => load())
 watch(() => props.agentId, () => load())
@@ -127,6 +185,38 @@ async function handleTest(sk) {
   }
   testingCode.value = ''
 }
+
+function onTeachFile(e) {
+  teachFile.value = e.target.files[0] || null
+}
+
+async function startTeach() {
+  if (!teachFile.value || !teachDesc.value.trim()) return
+  // 先上传样本文件到 inbox
+  try {
+    await store.uploadFile(props.agentId, teachFile.value, 'inbox')
+  } catch {}
+  // 通知父组件切换到聊天 tab 并发送学习指令
+  const prompt = `请学习一个新的技能。我已经上传了样本文件 "${teachFile.value.name}" 到 inbox 目录。请先用 openpyxl_read 读取它，分析结构后编写一个解析技能。\n\n目标：${teachDesc.value.trim()}\n\n请用 skill_create 工具创建技能，并用 skill_test 验证。`
+  showTeachModal.value = false
+  teachFile.value = null
+  teachDesc.value = ''
+  emit('start-teach', prompt)
+}
+
+async function toggleDetail(skillCode) {
+  expandedDetail.value = { ...expandedDetail.value, [skillCode]: !expandedDetail.value[skillCode] }
+  if (expandedDetail.value[skillCode] && !detailData.value[skillCode]) {
+    detailLoading.value = { ...detailLoading.value, [skillCode]: true }
+    try {
+      const data = await http.get(`/agent_v2/agents/${props.agentId}/skills/${skillCode}`)
+      detailData.value = { ...detailData.value, [skillCode]: data }
+    } catch {
+      detailData.value = { ...detailData.value, [skillCode]: { error: '加载失败' } }
+    }
+    detailLoading.value = { ...detailLoading.value, [skillCode]: false }
+  }
+}
 </script>
 
 <style scoped>
@@ -156,7 +246,96 @@ async function handleTest(sk) {
   border-bottom: 1px solid #ede8df;
 }
 .block-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: #333; }
+.block-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 .block-count { font-size: 13px; color: #aaa; }
+
+.btn-teach {
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #eef3ec;
+  color: #2f4330;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #d7e5d4;
+  font-family: inherit;
+  transition: background .15s;
+}
+.btn-teach:hover { background: #d7e5d4; }
+
+/* 教手艺弹窗 */
+.teach-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+.teach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 20px;
+}
+.teach-field {
+  margin-bottom: 16px;
+}
+.teach-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+}
+.teach-upload {
+  display: block;
+  padding: 10px 14px;
+  border: 2px dashed #d7e5d4;
+  border-radius: 10px;
+  text-align: center;
+  color: #6b726c;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.teach-upload:hover { border-color: #b8ccb5; color: #2f4330; }
+.teach-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid #e7e0d5;
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+.teach-textarea:focus { border-color: #b8ccb5; }
+.teach-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.teach-actions .btn-save {
+  padding: 8px 24px;
+  border-radius: 10px;
+  background: #eef3ec;
+  color: #2f4330;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #d7e5d4;
+  font-family: inherit;
+}
+.teach-actions .btn-save:hover { background: #d7e5d4; }
+.teach-actions .btn-save[disabled] { opacity: .5; cursor: not-allowed; }
 
 .skills-empty {
   text-align: center;
@@ -178,6 +357,54 @@ async function handleTest(sk) {
   transition: background .15s;
 }
 .skill-card:hover { background: #faf8f3; }
+
+.skill-card-wrapper {
+  margin-bottom: 10px;
+}
+
+.skill-detail {
+  background: #faf8f3;
+  border: 1px solid #ede8df;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 16px;
+  margin-top: -2px;
+}
+.detail-loading { color: #aaa; font-size: 13px; text-align: center; padding: 12px; }
+.detail-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #8c8680;
+  margin-bottom: 12px;
+}
+.detail-section { margin-bottom: 12px; }
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+}
+.detail-code {
+  background: #fff;
+  border: 1px solid #e7e0d5;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.detail-toggle {
+  font-size: 11px;
+  color: #aaa;
+  margin-left: 4px;
+}
 
 .skill-left {
   display: flex;
