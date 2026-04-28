@@ -453,9 +453,16 @@ async def run_agent_skill(agent_id: int, request: Request, db: Session = Depends
     if not skill_code:
         return error(1001, "请指定技能编码")
 
-    ctx = ToolContext(agent_id=agent_id, agent_code=agent.agent_code, db=db)
+    ctx = ToolContext(agent_id=agent_id, agent_code=agent.agent_code, session_id=0, db=db)
     kwargs = {k: v for k, v in body.items() if k not in ("skill_code",)}
-    result = skill_run(skill_code, ctx=ctx, **kwargs)
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: skill_run(skill_code, ctx=ctx, **kwargs))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return error(5000, f"技能执行失败: {e}")
     return success(result)
 
 
@@ -474,7 +481,14 @@ async def test_agent_skill(agent_id: int, request: Request, db: Session = Depend
     if not skill_code:
         return error(1001, "请指定技能编码")
 
-    ctx = ToolContext(agent_id=agent_id, agent_code=agent.agent_code, db=db)
+    ctx = ToolContext(agent_id=agent_id, agent_code=agent.agent_code, session_id=0, db=db)
     kwargs = {k: v for k, v in body.items() if k not in ("skill_code",)}
-    result = skill_test(skill_code, ctx=ctx, **kwargs)
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: skill_test(skill_code, ctx=ctx, **kwargs))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return error(5000, f"技能测试失败: {e}")
     return success(result)

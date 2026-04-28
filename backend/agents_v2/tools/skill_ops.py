@@ -45,6 +45,10 @@ def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
     # 构建参数
     params = dict(kwargs)
 
+    # 注入 agent 工作区路径
+    from agents_v2.workspace import get_agent_root
+    params["_agent_root"] = get_agent_root(agent_code)
+
     # 如果有 file_path，转为绝对路径
     if "file_path" in params:
         abs_path = safe_path(agent_code, params["file_path"])
