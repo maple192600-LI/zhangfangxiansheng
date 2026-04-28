@@ -10,8 +10,37 @@
       <div class="nav-group">
         <div class="nav-list">
           <template v-for="(item, key) in navData" :key="key">
+            <!-- AI智能体动态导航 -->
+            <template v-if="item._dynamic && key === 'AI智能体'">
+              <button
+                class="nav-main"
+                :class="{ active: nav.currentPrimary === key }"
+                @click="toggleSection(key)"
+              >
+                <span class="nav-icon">{{ item.icon }}</span>
+                <span class="nav-label">{{ key }}</span>
+                <span class="caret">{{ openState[key] ? '▾' : '▸' }}</span>
+              </button>
+              <div class="subnav" :class="{ open: openState[key] }">
+                <button
+                  v-for="agent in agentsStore.list"
+                  :key="agent.id"
+                  class="subnav-item"
+                  :class="{ active: nav.currentPrimary === key && Number(route.params.id) === agent.id }"
+                  @click="goToAgent(agent)"
+                >
+                  {{ agent.display_name }}
+                </button>
+                <button
+                  class="subnav-item add-agent-btn"
+                  @click="showCreateAgentModal = true"
+                >
+                  ＋ 新建 agent
+                </button>
+              </div>
+            </template>
             <!-- 有二级导航 -->
-            <template v-if="item.secondary">
+            <template v-else-if="item.secondary">
               <button
                 class="nav-main"
                 :class="{ active: nav.currentPrimary === key }"
@@ -88,10 +117,23 @@
       </div>
     </div>
 
+    <!-- 新建 Agent 弹窗 -->
+    <AgentCreateModal
+      v-if="showCreateAgentModal"
+      @close="showCreateAgentModal = false"
+      @created="onAgentCreated"
+    />
+
     <!-- 右侧内容区 -->
-    <main class="main-area">
-      <!-- 内容壳 -->
-      <div class="shell">
+    <main class="main-area" :class="{ 'main-area--full': isAgentPage }">
+      <!-- Agent 页面：无 shell 包裹，直接全屏 -->
+      <div v-if="isAgentPage" class="agent-page-wrap">
+        <router-view v-slot="{ Component }">
+          <component :is="Component" />
+        </router-view>
+      </div>
+      <!-- 普通 页面：有 shell + tabs -->
+      <div v-else class="shell">
         <div class="right-tabs" v-if="currentTabs.length">
           <button
             v-for="(tab, idx) in currentTabs"
@@ -116,22 +158,27 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNavStore } from '@/stores/nav'
 import { useAuthStore } from '@/stores/auth'
+import { useAgentsStore } from '@/stores/agents'
 import { changePassword } from '@/api/auth'
+import AgentCreateModal from '@/components/agent/AgentCreateModal.vue'
 
 const nav = useNavStore()
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const agentsStore = useAgentsStore()
 
 // 首次登录强制改密码检测
 onMounted(() => {
   if (route.query.forceChangePwd === '1' || auth.user?.must_change_password) {
     showPwdDialog.value = true
   }
+  // 加载 agent 列表
+  agentsStore.fetchAll()
 })
 
 // 修改密码相关
@@ -260,22 +307,14 @@ const navData = {
   },
   'AI智能体': {
     icon: '🤖',
-    secondary: {
-      '规则agent': { tabs: [{ name: '负责解析新上传的各种新文件和模板规则解析', explain: '规则 agent 页面。', route: 'agent-social' }] },
-      '日报agent': { tabs: [{ name: '负责日记账流水识别', explain: '日报 agent 页面。', route: 'agent-daily' }] },
-      '费用agent': { tabs: [{ name: '生成费用类会计凭证', explain: '费用 agent 页面。', route: 'agent-cost' }] },
-      '收入agent': { tabs: [{ name: '生成收入类会计凭证', explain: '收入 agent 页面。', route: 'agent-income' }] },
-      '材料agent': { tabs: [{ name: '生成材料类收入凭证', explain: '材料 agent 页面。', route: 'agent-material' }] },
-      '工资、税费agent': { tabs: [{ name: '工资税费类凭证生成', explain: '工资、税费 agent 页面。', route: 'agent-tax' }] },
-      '自定义agent': { tabs: [{ name: '自定义智能体', explain: '自定义 agent 页面。', route: 'agent-custom' }] }
-    }
+    _dynamic: true  // 标记为动态渲染
   },
   '系统设置': {
     icon: '⚙️',
     secondary: {
       '数据中心': {
         tabs: [
-          { name: '账户数据管理', explain: '数据中心下的账户数据管理页。', route: 'account-manage' },
+          { name: '账户数据管理', explain: '管理账户及其所属核算组织、单位、银行信息', route: 'account-manage' },
           { name: '报表模板管理', explain: '数据中心下的报表模板管理页。', route: 'data-report-tpl' },
           { name: '部门信息管理', explain: '数据中心下的部门信息管理页。', route: 'data-department' },
           { name: '合同台账管理', explain: '数据中心下的合同台账管理页。', route: 'data-contract' },
@@ -300,12 +339,7 @@ const navData = {
       },
       'AI配置': {
         tabs: [
-          { name: 'API KEY配置', explain: 'AI 配置下的 API KEY 配置页。', route: 'ai-config' },
-          { name: 'agent配置', explain: 'AI 配置下的 agent 配置页。', route: 'agent-config' },
-          { name: 'skill文件夹', explain: 'AI 配置下的 skill 文件夹页。', route: 'ai-skill' },
-          { name: '记忆配置区', explain: 'AI 配置下的记忆配置区。', route: 'ai-memory' },
-          { name: '定时任务区', explain: 'AI 配置下的定时任务区。', route: 'ai-task' },
-          { name: 'OCR配置', explain: 'AI 配置下的 OCR 配置页。', route: 'ai-ocr' }
+          { name: 'API KEY配置', explain: 'AI 配置下的 API KEY 配置页。', route: 'ai-config' }
         ]
       },
       '用户和权限': {
@@ -333,6 +367,23 @@ const openState = ref({
   'AI智能体': true,
   '系统设置': true
 })
+
+// Agent 页面检测 — 不套 shell，全屏渲染
+const isAgentPage = computed(() => route.name === 'agent-detail')
+
+// Agent 相关
+const showCreateAgentModal = ref(false)
+
+function goToAgent(agent) {
+  nav.navigate('AI智能体', agent.display_name, 0)
+  router.push({ name: 'agent-detail', params: { id: agent.id } })
+}
+
+async function onAgentCreated(agent) {
+  showCreateAgentModal.value = false
+  // store 已在 createAgent 中刷新
+  goToAgent(agent)
+}
 const currentTabs = computed(() => {
   const node = navData[nav.currentPrimary]
   if (!node) return []
@@ -524,6 +575,18 @@ watch(() => router.currentRoute.value, (route) => {
   font-weight: 600;
 }
 
+.add-agent-btn {
+  color: var(--green) !important;
+  font-weight: 500;
+  border-top: 1px dashed #ddd8ce;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.add-agent-btn:hover {
+  background: #eef3ec;
+}
+
 /* ── 右侧内容区 ── */
 .main-area {
   padding: 18px 20px;
@@ -531,6 +594,12 @@ watch(() => router.currentRoute.value, (route) => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.main-area--full {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
 }
 
 .shell {
@@ -655,17 +724,17 @@ watch(() => router.currentRoute.value, (route) => {
   display: flex; align-items: center; justify-content: center; z-index: 100;
 }
 .modal-box {
-  background: #fff; border-radius: var(--radius-lg, 16px); padding: 28px;
+  background: #faf8f3; border-radius: var(--radius-lg, 16px); padding: 28px;
   max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,.15);
 }
 .modal-box h3 { margin: 0 0 16px; font-size: var(--font-size-lg); }
 
 .form-group { margin-bottom: 14px; }
-.form-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
+.form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
 .form-input {
   width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line);
-  border-radius: var(--radius, 8px); font-size: 14px; color: var(--text);
-  background: var(--panel); outline: none; box-sizing: border-box;
+  border-radius: var(--radius-sm, 8px); font-size: 14px; color: var(--text);
+  background: var(--panel-2, #f7f4ee); outline: none; box-sizing: border-box;
 }
 .form-input:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-2); }
 </style>

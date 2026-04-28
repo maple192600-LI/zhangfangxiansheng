@@ -29,7 +29,34 @@ from services import log_service
 # 上传
 # ──────────────────────────────────────────
 
+def _fix_filename(filename: str) -> str:
+    """修复 multipart 上传中文文件名编码问题。
+
+    浏览器发送 UTF-8 编码的 filename，但 HTTP multipart 头部按 latin-1 解码，
+    导致中文变成乱码。通过反向操作恢复：encode('latin-1') → decode('utf-8')。
+    """
+    if not filename:
+        return filename
+    # 纯 ASCII 不需要修复
+    try:
+        filename.encode("ascii")
+        return filename
+    except UnicodeEncodeError:
+        pass
+    # 尝试 latin-1 → UTF-8 反向修复
+    try:
+        raw_bytes = filename.encode("latin-1")
+        decoded = raw_bytes.decode("utf-8")
+        # 如果解码成功且包含中文字符，说明修复成功
+        if any("\u4e00" <= c <= "\u9fff" for c in decoded):
+            return decoded
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        pass
+    return filename
+
+
 def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
+    filename = _fix_filename(filename)
     fmt = detect_format(filename)
     if fmt == "unknown":
         raise ValueError("不支持的文件格式，仅支持 xls/xlsx/csv")
@@ -167,6 +194,11 @@ def preview(
     abnormal_rows = []
 
     for row in parsed:
+        # 规范化日期字段显示
+        raw_date = row.get("business_date", "")
+        norm_date = normalize_date(raw_date)
+        if norm_date:
+            row["business_date"] = norm_date
         errors = _validate_row(row)
         if errors:
             row["_errors"] = errors
@@ -537,13 +569,15 @@ def ai_parse_headers(db: Session, headers: list, sample_rows: list = None, agent
     sample_text = ""
     if sample_rows:
         lines = []
-        for row in sample_rows[:2]:
+        for row in sample_rows[:3]:
             if isinstance(row, (list, tuple)):
-                lines.append(" | ".join(mask_row(row, short_headers)))
+                # 不脱敏，让 AI 看到真实数据来判断
+                cells = [str(c).strip()[:30] for c in row]
+                lines.append(" | ".join(cells))
         if lines:
             sample_text = f"\n\n前几行样本数据:\n" + "\n".join(lines)
 
-    user_message = f"""请分析以下银行流水的表头列名，将每列映射到对应的标准字段。
+    user_message = f"""请分析以下银行流水的表头和样本数据，将每列映射到对应的标准字段。
 
 ## 表头列名
 {header_list}
@@ -552,12 +586,19 @@ def ai_parse_headers(db: Session, headers: list, sample_rows: list = None, agent
 ## 可用标准字段
 {field_desc}
 
+## 关键说明
+- 这是银行对账单/流水，每行是一笔交易记录
+- 「收入金额」列为空表示该笔交易无收入（纯支出）
+- 「支出金额」列为空表示该笔交易无支出（纯收入）
+- 日期列可能包含时间信息（如 "2025-12-11 10:02:58"），应映射为 business_date
+- 「对方户名」是交易对方的公司/个人名称，应映射为 counterparty_name
+- 「摘要」或「用途」描述交易原因，应映射为 summary_text
+
 ## 要求
 1. 返回 JSON 格式：{{"银行列名": "标准字段code"}}
-2. 只映射能匹配的列，不确定的不映射
-3. business_date 是必须映射的核心字段
-4. 如果列名含义不明确，参考样本数据判断
-5. 同时建议一个模板名称（如：xx银行标准流水）
+2. 仔细分析样本数据确认每列的真实含义，不要只看列名
+3. business_date 和 summary_text 是必须映射的核心字段
+4. 同时建议一个模板名称（根据银行名称，如"农业银行流水模板"）
 
 请严格返回如下 JSON 格式（不要包含其他文字）:
 {{"mapping": {{"银行列名1": "field1", "银行列名2": "field2"}}, "template_name": "建议的模板名称"}}"""

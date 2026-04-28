@@ -93,13 +93,46 @@ def read_file_from_bytes(data: bytes, filename: str, fmt: str) -> List[List[str]
 def detect_header_row(rows: List[List[str]], max_scan: int = 15) -> int:
     """自动检测表头所在行
 
-    策略：找到第一个包含 3+ 个非空单元格的行。
+    策略：
+    1. 找到所有包含 3+ 个非空单元格的候选行
+    2. 如果第一个候选行包含「日期/金额/摘要/对方/余额/交易」等银行流水关键词，
+       它就是表头
+    3. 否则跳过元数据行（如"账号:xxx 户名:xxx"），找下一个候选行
     """
+    import re
+    # 银行流水常见表头关键词
+    header_keywords = {"交易", "日期", "金额", "摘要", "对方", "余额", "收入", "支出",
+                       "用途", "账号", "开户", "凭证", "币种", "备注", "类型"}
+
+    candidates = []
     for i, row in enumerate(rows[:max_scan]):
-        non_empty = sum(1 for c in row if c.strip())
+        non_empty = sum(1 for c in row if str(c).strip())
         if non_empty >= 3:
-            return i
-    return 0
+            candidates.append((i, row))
+
+    if not candidates:
+        return 0
+
+    # 对每个候选行检查是否含银行表头关键词
+    for idx, row in candidates:
+        all_text = " ".join(str(c) for c in row if c)
+        # 检查是否包含冒号分隔的元数据（如"账号:xxx"）
+        has_meta = bool(re.search(r'[:：]', all_text))
+        # 检查是否含表头关键词
+        keyword_hits = sum(1 for kw in header_keywords if kw in all_text)
+
+        if keyword_hits >= 2 and not has_meta:
+            return idx
+
+    # fallback: 如果只有一个候选，或都没有明显表头特征，返回第一个候选
+    # 但排除包含冒号的元数据行
+    for idx, row in candidates:
+        all_text = " ".join(str(c) for c in row if c)
+        has_meta = bool(re.search(r'[账号|户名|币种].*[:：]', all_text))
+        if not has_meta:
+            return idx
+
+    return candidates[0][0] if candidates else 0
 
 
 def match_template(
@@ -176,10 +209,19 @@ def apply_mapping(
 
 
 def normalize_date(val: str) -> Optional[str]:
-    """将各种日期格式统一为 YYYY-MM-DD"""
+    """将各种日期格式统一为 YYYY-MM-DD，支持带时间的格式"""
     if not val:
         return None
     val = val.strip()
+    # 先尝试带时间的格式
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                "%Y/%m/%d %H:%M", "%Y.%m.%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(val, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    # 纯日期格式
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"):
         try:
             dt = datetime.strptime(val, fmt)
