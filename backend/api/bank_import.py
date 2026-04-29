@@ -26,7 +26,7 @@ class PreviewBody(BaseModel):
     batch_code: str
     template_id: Optional[int] = None
     header_row: Optional[int] = None
-    mapping: Optional[Dict[str, str]] = None
+    mapping: Optional[Dict[str, Any]] = None
 
 
 class CommitBody(BaseModel):
@@ -43,7 +43,7 @@ class AIParseBody(BaseModel):
 class CommitByMappingBody(BaseModel):
     batch_code: str
     account_code: str
-    mapping: Optional[Dict[str, str]] = None
+    mapping: Optional[Dict[str, Any]] = None
     template_id: Optional[int] = None
     template_name: Optional[str] = None
     sample_headers: Optional[List[str]] = None
@@ -55,7 +55,7 @@ class SaveTemplateBody(BaseModel):
     header_row: int = 0
     skip_rows: int = 0
     sample_headers: List[str] = []
-    mapping_json: Dict[str, str]
+    mapping_json: Dict[str, Any]
 
 
 # ── 上传 ──

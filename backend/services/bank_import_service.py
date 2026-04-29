@@ -120,10 +120,19 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
     }
 
     if tpl:
+        # 提取模板的 mapping_json（可能是字符串或已解析的 dict）
+        tpl_mapping = tpl.get("mapping_json", {})
+        if isinstance(tpl_mapping, str):
+            try:
+                tpl_mapping = json.loads(tpl_mapping)
+            except json.JSONDecodeError:
+                tpl_mapping = {}
         result["template_match"] = {
             "matched": True,
             "template_id": tpl["id"],
             "template_name": tpl["template_name"],
+            "mapping": tpl_mapping,
+            "header_row": tpl.get("header_row", header_idx),
             "confidence": "high",
         }
 

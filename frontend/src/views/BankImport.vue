@@ -49,10 +49,36 @@
         <div><label>格式</label><strong>{{ uploadResult.detected_format }}</strong></div>
         <div><label>数据行</label><strong>{{ uploadResult.row_count }}</strong></div>
       </div>
+      <!-- 规则匹配结果提示 -->
+      <div v-if="ruleMatch" class="match-banner">
+        <span class="tag tag-green">匹配规则：{{ ruleMatch.template_name }}</span>
+        <span style="margin-left:8px;color:var(--muted);font-size:12px">
+          已有 {{ Object.keys(ruleMatch.mapping).length }} 个字段映射，无需 AI 解析
+        </span>
+      </div>
     </div>
 
-    <!-- Step 2: AI 解析 -->
-    <div v-if="step === 2" class="panel" style="margin-top:14px">
+    <!-- Step 2: 规则匹配详情 或 AI 解析（仅无规则匹配时显示） -->
+    <div v-if="step === 2 && ruleMatch" class="panel" style="margin-top:14px">
+      <div class="panel-title">规则匹配详情</div>
+      <table style="margin-top:10px">
+        <thead><tr><th>银行列名</th><th>→</th><th>标准字段</th></tr></thead>
+        <tbody>
+          <tr v-for="(field, col) in displayMapping" :key="col">
+            <td>{{ col }}</td>
+            <td style="color:var(--green)">→</td>
+            <td><strong>{{ fieldLabel(field) }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-secondary" @click="reset">重新上传</button>
+        <button class="btn btn-secondary" @click="ruleMatch = null; aiParse()">使用 AI 重新解析</button>
+        <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
+      </div>
+    </div>
+
+    <div v-if="step === 2 && !ruleMatch" class="panel" style="margin-top:14px">
       <div class="panel-title">AI 智能解析列映射</div>
       <div v-if="aiParsing" class="pending-line">
         AI 正在分析表头，请稍候...
@@ -66,7 +92,7 @@
         <table style="margin-top:10px">
           <thead><tr><th>银行列名</th><th>→</th><th>标准字段</th></tr></thead>
           <tbody>
-            <tr v-for="(field, col) in aiResult.mapping" :key="col">
+            <tr v-for="(field, col) in displayMapping" :key="col">
               <td>{{ col }}</td>
               <td style="color:var(--green)">→</td>
               <td><strong>{{ fieldLabel(field) }}</strong></td>
@@ -124,7 +150,7 @@
         </div>
       </div>
       <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-secondary" @click="step = 2">返回修改</button>
+        <button class="btn btn-secondary" @click="step = ruleMatch ? 2 : 2">返回修改</button>
         <button class="btn btn-primary" :disabled="committing" @click="doCommit">
           {{ committing ? '提交中...' : `确认提交 ${previewResult.valid_count} 条记录` }}
         </button>
@@ -170,12 +196,21 @@ const hint = ref('')
 const step = ref(1)
 const aiParsing = ref(false)
 const aiResult = ref({})
+const ruleMatch = ref(null)
 const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
 const savingRule = ref(false)
 
 const accountGroups = computed(() => accountTree.value || [])
+
+const displayMapping = computed(() => {
+  const m = ruleMatch.value?.mapping || aiResult.value?.mapping || {}
+  // 新格式：{ _columns: {...}, post_process: {...} }
+  if (m._columns) return m._columns
+  // 旧格式：纯 key-value
+  return m
+})
 
 const FIELD_LABELS = {
   business_date: '交易日期',
@@ -218,7 +253,30 @@ async function upload(file) {
   try {
     uploadResult.value = await bank.uploadBankFile(file)
     step.value = 2
-    await aiParse()
+
+    // 检测是否匹配到已有规则
+    const match = uploadResult.value.template_match
+    if (match && match.matched && match.mapping && Object.keys(match.mapping).length > 0) {
+      // 有匹配规则 → 直接用规则映射，跳过 AI 解析
+      ruleMatch.value = match
+      // 兼容新格式（_columns + post_process）和旧格式（纯 key-value）
+      const colMapping = match.mapping._columns || match.mapping
+      const fieldCount = Object.keys(colMapping).filter(k => !k.startsWith('_')).length
+      aiResult.value = {
+        ok: true,
+        mapping: match.mapping,
+        template_name: match.template_name,
+        confidence: match.confidence || 'high',
+        matched_count: fieldCount,
+        total_columns: uploadResult.value.headers?.length || 0,
+      }
+      // 自动预览
+      await doPreview()
+    } else {
+      // 无匹配规则 → 调用 AI 智能体解析
+      ruleMatch.value = null
+      await aiParse()
+    }
   } catch (e) {
     hint.value = e.message || '上传失败'
   }
@@ -250,6 +308,7 @@ async function doPreview() {
     previewResult.value = await bank.previewBankImport({
       batch_code: uploadResult.value.batch_code,
       mapping: aiResult.value.mapping,
+      header_row: ruleMatch.value?.header_row ?? uploadResult.value.header_row,
     })
     step.value = 3
   } catch (e) {
@@ -310,6 +369,7 @@ async function doCommit() {
       batch_code: uploadResult.value.batch_code,
       account_code: accountCode.value,
       mapping: aiResult.value.mapping,
+      template_id: ruleMatch.value?.template_id || null,
       template_name: aiResult.value.template_name,
       sample_headers: uploadResult.value.headers,
     })
@@ -327,6 +387,7 @@ function reset() {
   aiResult.value = {}
   previewResult.value = {}
   commitResult.value = {}
+  ruleMatch.value = null
   hint.value = ''
 }
 
@@ -396,6 +457,7 @@ onMounted(() => { loadAccounts(); loadAgents() })
 .pending-line { margin-top: 12px; color: var(--muted); font-size: 13px; display: flex; align-items: center; }
 .hint-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #e6c7b8; background: #fff4ef; color: #8b4f38; border-radius: var(--radius-sm); display: flex; align-items: center; }
 .mapping-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.match-banner { margin-top: 10px; padding: 8px 12px; background: #f0f9f4; border: 1px solid #c8e6d0; border-radius: var(--radius-sm); display: flex; align-items: center; }
 .btn-row { display: flex; gap: 10px; justify-content: flex-end; }
 @media (max-width: 900px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

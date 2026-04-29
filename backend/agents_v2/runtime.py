@@ -18,7 +18,7 @@ from agents_v2.session_store import load_recent_messages, save_message
 from agents_v2 import sse_helper as sse
 import agents_v2.tools  # 触发工具注册
 
-MAX_TURNS = 20
+MAX_TURNS = 40  # 提高上限以支持截断续写
 
 
 async def run_turn(
@@ -64,6 +64,7 @@ async def run_turn(
 
     turn = 0
     started_at = time.time()
+    accumulated_text = ""  # 累积完整文本（含截断续写）
 
     while turn < MAX_TURNS:
         turn += 1
@@ -73,6 +74,7 @@ async def run_turn(
 
         # 流式调用 LLM
         api_key_plain = decrypt_key(ai_config.api_key_local)
+        stop_reason = "end_turn"  # 跟踪本轮真实的 stop_reason
         async for chunk in stream_chat(
             provider=ai_config.provider,
             api_key=api_key_plain,
@@ -91,6 +93,7 @@ async def run_turn(
                 last_tool_call = chunk.get("tool_call")
 
             elif chunk["type"] == "done":
+                stop_reason = chunk.get("stop_reason", "end_turn")
                 reasoning_content = chunk.get("reasoning_content", "")
                 break
 
@@ -105,10 +108,23 @@ async def run_turn(
             save_message(db, session_id, "assistant", content="", reasoning_content=reasoning_content if reasoning_content else None)
             return
 
+        # finish_reason == "length" 表示输出被 max_tokens 截断，需要续写
+        if stop_reason == "length" and full_text and not last_tool_call:
+            accumulated_text += full_text
+            # 把已生成的文本追加到上下文，让模型继续
+            yield sse.sse_text("\n")
+            assistant_piece = {"role": "assistant", "content": full_text}
+            if reasoning_content:
+                assistant_piece["reasoning_content"] = reasoning_content
+            messages.append(assistant_piece)
+            messages.append({"role": "user", "content": "请继续"})
+            continue  # 继续下一轮 while 循环
+
         # 如果有文本但没 tool call，本轮结束
         if full_text and not last_tool_call:
+            accumulated_text += full_text
             duration = int((time.time() - started_at) * 1000)
-            save_message(db, session_id, "assistant", content=full_text, duration_ms=duration, reasoning_content=reasoning_content if reasoning_content else None)
+            save_message(db, session_id, "assistant", content=accumulated_text, duration_ms=duration, reasoning_content=reasoning_content if reasoning_content else None)
             yield sse.sse_done("end_turn")
             return
 
@@ -218,8 +234,11 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
     for msg in history:
         role = msg.get("role", "user")
         if role == "tool":
+            # 跳过孤立的 tool 消息（没有前面带 tool_calls 的 assistant 消息配对）
+            if pending_tool_call_id is None:
+                continue
             # OpenAI 要求 tool 消息携带 tool_call_id
-            tc_id = msg.get("tool_call_id") or pending_tool_call_id or "call_0"
+            tc_id = msg.get("tool_call_id") or pending_tool_call_id
             content = msg.get("content", msg.get("tool_result", ""))
             result.append({
                 "role": "tool",

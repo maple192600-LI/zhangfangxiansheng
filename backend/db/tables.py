@@ -462,7 +462,7 @@ class AgentV2(Base):
     ai_config_id = Column(Integer, ForeignKey("ai_configs.id", ondelete="SET NULL"), nullable=True)
     workspace_path = Column(String(500), nullable=False)
     llm_timeout = Column(Integer, nullable=False, default=300, server_default="300")
-    llm_max_tokens = Column(Integer, nullable=False, default=4096, server_default="4096")
+    llm_max_tokens = Column(Integer, nullable=False, default=16384, server_default="16384")
     permission_json = Column(Text, nullable=False, default="{}")
     status = Column(String(20), nullable=False, default="active")
     sort_order = Column(Integer, nullable=False, default=0)

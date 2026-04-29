@@ -142,8 +142,8 @@ async def update_agent(agent_id: int, request: Request, db: Session = Depends(ge
         agent.llm_timeout = val
     if "llm_max_tokens" in body:
         val = body["llm_max_tokens"]
-        if not isinstance(val, int) or val < 256 or val > 65536:
-            return error(1001, "最大 token 范围: 256~65536")
+        if not isinstance(val, int) or val < 1024 or val > 524288:
+            return error(1001, "最大 token 范围: 1024~524288")
         agent.llm_max_tokens = val
 
     db.commit()

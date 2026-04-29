@@ -45,8 +45,15 @@
 
         <div class="row">
           <label>最大输出 Token</label>
-          <input v-model.number="form.llm_max_tokens" type="number" class="inp" min="256" max="65536" placeholder="4096" />
-          <span class="hint">AI 单次回复的最大 token 数。较大的值允许更长的回复，但会增加耗时。</span>
+          <div class="token-presets">
+            <button v-for="p in tokenPresets" :key="p.value"
+              class="preset-btn" :class="{ active: form.llm_max_tokens === p.value }"
+              @click="form.llm_max_tokens = p.value" :title="p.desc">
+              {{ p.label }}
+            </button>
+          </div>
+          <input v-model.number="form.llm_max_tokens" type="number" class="inp" min="1024" max="524288" />
+          <span class="hint">单次回复的最大输出 token 数（非上下文窗口）。值太小会导致回复被截断（Agent 半路断掉）。请根据所选用模型的支持范围合理设置。</span>
         </div>
 
         <div class="sep"></div>
@@ -119,6 +126,15 @@ const aiConfigs = ref([])
 const saving = ref(false)
 const errMsg = ref('')
 const okMsg = ref('')
+
+const tokenPresets = [
+  { label: '4K', value: 4096, desc: '本地部署模型适用' },
+  { label: '16K', value: 16384, desc: '日常简单对话够用' },
+  { label: '32K', value: 32768, desc: '复杂任务，Agent 多轮工具调用推荐' },
+  { label: '64K', value: 65536, desc: '长文生成、复杂 Agent 任务' },
+  { label: '128K', value: 131072, desc: '超长生成' },
+  { label: '384K', value: 393216, desc: '极限输出' },
+]
 
 onMounted(async () => {
   form.value = {
@@ -222,6 +238,17 @@ function fmtTime(iso) {
 .textarea { min-height: 140px; max-height: 300px; resize: vertical; line-height: 1.6; }
 
 .hint { display: block; font-size: 12px; color: #aaa; margin-top: 6px; line-height: 1.5; }
+
+.token-presets {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.preset-btn {
+  padding: 5px 14px; border: 1px solid #e7e0d5; border-radius: 8px;
+  background: #f7f4ee; color: #435046; font-size: 12px; cursor: pointer;
+  font-family: inherit; transition: all .15s;
+}
+.preset-btn:hover { border-color: #7f9b7a; background: #eef3ec; }
+.preset-btn.active { background: #7f9b7a; color: #fff; border-color: #7f9b7a; font-weight: 600; }
 
 .sep { height: 1px; background: #ede8df; margin: 24px 0; }
 

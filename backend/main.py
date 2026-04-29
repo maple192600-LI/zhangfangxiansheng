@@ -99,6 +99,25 @@ def _ensure_default_user():
         get_or_create_default_user(db)
 
 
+def _open_browser(url: str):
+    """服务启动后自动打开默认浏览器（仅首次启动，热重载不重复打开）"""
+    import os
+    import threading
+    import webbrowser
+
+    # 热重载重启时不重复打开浏览器
+    if os.environ.get("_BROWSER_OPENED") == "1":
+        return
+    os.environ["_BROWSER_OPENED"] = "1"
+
+    def _do_open():
+        import time
+        time.sleep(1.5)
+        webbrowser.open(url)
+
+    threading.Thread(target=_do_open, daemon=True).start()
+
+
 def _register_global_skills():
     """注册全局系统技能（owner_agent_id=None）"""
     import json
@@ -162,6 +181,7 @@ async def lifespan(app: FastAPI):
     from services.agent_init import init_agent_workspaces
     init_agent_workspaces()
     print(f"账房先生已启动 → http://{HOST}:{PORT}")
+    _open_browser(f"http://{HOST}:{PORT}")
     yield
 
 
@@ -231,4 +251,19 @@ if os.path.isdir(frontend_dist):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
+    # 排除 data/（agent skill 脚本）、exports/、backups/，避免 Agent 工作时误触发重启。
+    # 用绝对路径，因为 watchfiles 传入的文件路径是绝对路径，
+    # uvicorn FileFilter 做 exclude_dir in path.parents 比较时需要绝对路径才能匹配。
+    _base = os.path.dirname(os.path.abspath(__file__))
+    uvicorn.run(
+        "main:app",
+        host=HOST,
+        port=PORT,
+        reload=True,
+        reload_includes=["*.py"],
+        reload_excludes=[
+            os.path.join(_base, "data"),
+            os.path.join(_base, "exports"),
+            os.path.join(_base, "backups"),
+        ],
+    )

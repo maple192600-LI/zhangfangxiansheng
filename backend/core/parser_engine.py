@@ -158,7 +158,9 @@ def match_template(
 ) -> Optional[Dict[str, Any]]:
     """根据表头匹配模板
 
-    匹配策略：表头集合与模板 sample_headers 的交集比例 >= 60%。
+    匹配策略：
+    - 核心指标：文件列命中率 = overlap / len(header_set)（文件的列有多少比例在模板中能找到）
+    - 最低要求：命中率 >= 60%，且至少命中 3 个列
     """
     header_set = {h.strip() for h in headers if h.strip()}
     if not header_set:
@@ -182,7 +184,11 @@ def match_template(
             continue
 
         overlap = len(header_set & sample_set)
-        score = overlap / max(len(header_set), len(sample_set))
+        if overlap < 3:
+            continue
+
+        # 文件列命中率：文件的列有多少能在模板中找到
+        score = overlap / len(header_set)
 
         if score > best_score and score >= 0.6:
             best_score = score
@@ -194,18 +200,37 @@ def match_template(
 def apply_mapping(
     rows: List[List[str]],
     header_idx: int,
-    mapping: Dict[str, str],
+    mapping: Dict[str, Any],
     skip_rows: int = 0,
 ) -> List[Dict[str, str]]:
-    """应用模板映射，将原始行转为标准字段字典列表"""
+    """应用模板映射，将原始行转为标准字段字典列表。
+
+    mapping 支持：
+    - 简单映射: {"银行列名": "标准字段code"}
+    - 带后处理: {"_columns": {"银行列名": "标准字段code"}, "post_process": {...}}
+    """
     if header_idx >= len(rows):
         return []
+
+    # 分离列映射和后处理规则
+    col_mapping: Dict[str, str] = {}
+    post_process: Dict[str, Any] = {}
+    if "_columns" in mapping:
+        col_mapping = mapping["_columns"]
+        post_process = mapping.get("post_process", {})
+    else:
+        # 兼容旧格式：顶层全部视为列映射，排除 post_process 键
+        post_process = mapping.get("post_process", {})
+        col_mapping = {k: v for k, v in mapping.items() if k != "post_process"}
 
     headers = [h.strip() for h in rows[header_idx]]
     col_map = {}  # col_index -> field_code
     for ci, h in enumerate(headers):
-        if h in mapping:
-            col_map[ci] = mapping[h]
+        if h in col_mapping:
+            col_map[ci] = col_mapping[h]
+
+    # 为条件映射构建额外的列索引
+    cond_cols = _build_conditional_indices(headers, post_process)
 
     data_start = header_idx + 1 + skip_rows
     result = []
@@ -220,9 +245,123 @@ def apply_mapping(
         for ci, field_code in col_map.items():
             val = row[ci] if ci < len(row) else ""
             item[field_code] = str(val).strip() if val else ""
+
+        # 执行后处理
+        if post_process:
+            _apply_post_process(item, row, post_process, cond_cols)
+
+        # 清除临时字段（以 _ 开头但不是 _row_no / _errors 的字段）
+        item = {k: v for k, v in item.items() if not (k.startswith("_") and k not in ("_row_no", "_errors"))}
+
         result.append(item)
 
     return result
+
+
+def _build_conditional_indices(
+    headers: List[str], post_process: Dict[str, Any]
+) -> Dict[str, int]:
+    """为后处理规则中的列引用构建列名→索引映射"""
+    cols = {}
+    if not post_process:
+        return cols
+
+    # 收集所有引用的列名
+    ref_names = set()
+    for rule in post_process.get("conditional_field", []):
+        if "condition_column" in rule:
+            ref_names.add(rule["condition_column"])
+        for branch in rule.get("branches", []):
+            if "source_column" in branch:
+                ref_names.add(branch["source_column"])
+
+    for rule in post_process.get("amount_split", []):
+        if "source_column" in rule:
+            ref_names.add(rule["source_column"])
+
+    for rule in post_process.get("priority_merge", []):
+        for src in rule.get("source_columns", []):
+            ref_names.add(src)
+
+    header_set = {h.strip(): i for i, h in enumerate(headers)}
+    for name in ref_names:
+        idx = header_set.get(name)
+        if idx is not None:
+            cols[name] = idx
+    return cols
+
+
+def _get_col_val(row: List[str], col_idx: int) -> str:
+    """安全取列值"""
+    val = row[col_idx] if col_idx < len(row) else ""
+    return str(val).strip() if val else ""
+
+
+def _apply_post_process(
+    item: Dict[str, str],
+    row: List[str],
+    post_process: Dict[str, Any],
+    cond_cols: Dict[str, int],
+) -> None:
+    """对单行数据执行后处理规则"""
+    import re
+
+    # 1. 金额拆分：单列金额按正负值拆为收入/支出
+    for rule in post_process.get("amount_split", []):
+        src_col = rule.get("source_column", "")
+        col_idx = cond_cols.get(src_col)
+        if col_idx is None:
+            continue
+        raw_val = _get_col_val(row, col_idx)
+        amount = normalize_amount(raw_val)
+        if amount is None:
+            continue
+        income_field = rule.get("income_field", "income_amount")
+        expense_field = rule.get("expense_field", "expense_amount")
+        if amount >= 0:
+            item[income_field] = str(amount) if amount > 0 else ""
+            item[expense_field] = ""
+        else:
+            item[expense_field] = str(abs(amount))
+            item[income_field] = ""
+
+    # 2. 条件字段：根据条件列的值选择不同的源列
+    for rule in post_process.get("conditional_field", []):
+        cond_col = rule.get("condition_column", "")
+        target_field = rule.get("target_field", "")
+        col_idx = cond_cols.get(cond_col)
+        if col_idx is None or not target_field:
+            continue
+        cond_val = _get_col_val(row, col_idx)
+        matched = False
+        for branch in rule.get("branches", []):
+            if not matched:
+                pattern = branch.get("match", "")
+                if re.search(pattern, cond_val):
+                    src_col = branch.get("source_column", "")
+                    src_idx = cond_cols.get(src_col)
+                    if src_idx is not None:
+                        item[target_field] = _get_col_val(row, src_idx)
+                    matched = True
+        if not matched:
+            default_col = rule.get("default_source", "")
+            if default_col:
+                src_idx = cond_cols.get(default_col)
+                if src_idx is not None:
+                    item[target_field] = _get_col_val(row, src_idx)
+
+    # 3. 优先级合并：从多个源列按优先级取第一个非空值
+    for rule in post_process.get("priority_merge", []):
+        target_field = rule.get("target_field", "")
+        if not target_field:
+            continue
+        for src_col in rule.get("source_columns", []):
+            src_idx = cond_cols.get(src_col)
+            if src_idx is not None:
+                val = _get_col_val(row, src_idx)
+                if val:
+                    item[target_field] = val
+                    break
 
 
 def normalize_date(val: str) -> Optional[str]:

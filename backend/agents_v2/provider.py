@@ -38,7 +38,7 @@ async def stream_chat(
         return
 
     if provider == "ollama":
-        async for evt in _stream_ollama(url, model_name, messages, tools, timeout):
+        async for evt in _stream_ollama(url, model_name, messages, tools, max_tokens, timeout):
             yield evt
     elif provider == "anthropic":
         # Anthropic 使用非流式 fallback（格式不同）
@@ -59,6 +59,7 @@ async def _stream_ollama(
     model_name: str,
     messages: list[dict],
     tools: Optional[list[dict]],
+    max_tokens: int,
     timeout: int,
 ) -> AsyncGenerator[dict, None]:
     """Ollama /api/chat 流式调用"""
@@ -67,6 +68,7 @@ async def _stream_ollama(
         "model": model_name,
         "messages": messages,
         "stream": True,
+        "options": {"num_predict": max_tokens},
     }
     if tools:
         body["tools"] = tools
@@ -168,6 +170,7 @@ async def _stream_openai_compatible(
     full_text = ""
     reasoning_text = ""
     tool_calls_acc: dict[int, dict] = {}  # index -> {name, arguments_str, id}
+    captured_finish_reason: str | None = None  # 捕获真实的 finish_reason
 
     try:
         resp = urlopen(req, timeout=timeout)
@@ -193,7 +196,7 @@ async def _stream_openai_compatible(
 
                     if not full_text and not tool_calls_acc:
                         yield {"type": "text", "text": ""}
-                    yield {"type": "done", "stop_reason": "end_turn", "reasoning_content": reasoning_text}
+                    yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
                     return
 
                 try:
@@ -205,7 +208,10 @@ async def _stream_openai_compatible(
                 if not choices:
                     continue
 
-                delta = choices[0].get("delta", {})
+                choice = choices[0]
+                delta = choice.get("delta", {})
+                # 捕获 finish_reason（stop / length / tool_calls）
+                finish_reason = choice.get("finish_reason")
 
                 # 文本内容
                 content = delta.get("content", "")
@@ -217,6 +223,10 @@ async def _stream_openai_compatible(
                 rc = delta.get("reasoning_content", "")
                 if rc:
                     reasoning_text += rc
+
+                # 捕获 finish_reason（最后一帧携带）
+                if finish_reason:
+                    captured_finish_reason = finish_reason
 
                 # tool calls（增量拼接）
                 tc_deltas = delta.get("tool_calls", [])
@@ -240,14 +250,14 @@ async def _stream_openai_compatible(
             if data_str == "[DONE]":
                 for idx in sorted(tool_calls_acc.keys()):
                     yield _emit_tool_call(tool_calls_acc[idx])
-                yield {"type": "done", "stop_reason": "end_turn", "reasoning_content": reasoning_text}
+                yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
                 return
 
         # 如果有内容但没收到 [DONE]，仍然发出 done
         if full_text or tool_calls_acc:
             for idx in sorted(tool_calls_acc.keys()):
                 yield _emit_tool_call(tool_calls_acc[idx])
-            yield {"type": "done", "stop_reason": "end_turn", "reasoning_content": reasoning_text}
+            yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
         else:
             # 没有收到任何内容 — 可能是非流式响应，尝试 fallback
             async for evt in _non_stream_fallback_fallback(
@@ -392,7 +402,12 @@ async def _non_stream_fallback(
         if content:
             yield {"type": "text", "text": content}
 
-        yield {"type": "done", "stop_reason": "end_turn"}
+        # Anthropic 返回 stop_reason: "end_turn" | "max_tokens" | "tool_use"
+        stop = data.get("stop_reason", "end_turn")
+        # Anthropic 的 "max_tokens" 等价于 OpenAI 的 "length"
+        if stop == "max_tokens":
+            stop = "length"
+        yield {"type": "done", "stop_reason": stop}
 
     except HTTPError as e:
         error_detail = _read_http_error_body(e)
