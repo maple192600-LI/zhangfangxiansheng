@@ -1,13 +1,12 @@
 """AI Provider 统一调用入口
 
 支持多种 AI 提供商的连接测试和模型列表查询。
-模型信息来源于各提供商官方文档（2025年4月）。
 """
 import json
 import time
 from typing import Any, Dict, List, Optional
-from urllib.request import Request, urlopen
-from urllib.error import URLError
+
+import httpx
 
 
 # ──────────────────────────────────────────
@@ -149,9 +148,9 @@ def detect_ollama_models(base_url: str = "http://localhost:11434") -> List[Dict[
     models = []
     try:
         url = base_url.rstrip("/") + "/api/tags"
-        req = Request(url, method="GET")
-        resp = urlopen(req, timeout=5)
-        data = json.loads(resp.read())
+        with httpx.Client(timeout=5) as client:
+            resp = client.get(url)
+            data = resp.json()
         for m in data.get("models", []):
             name = m.get("name", "")
             size_mb = round(m.get("size", 0) / 1024 / 1024)
@@ -187,64 +186,70 @@ def test_connection(
     full_url = url + chat_path
 
     if provider == "ollama":
-        body = json.dumps({
+        body = {
             "model": model_name,
             "messages": [{"role": "user", "content": "hi"}],
             "stream": False,
             "options": {"num_predict": 1},
-        }).encode()
+        }
         headers = {"Content-Type": "application/json"}
     elif provider == "anthropic":
-        body = json.dumps({
+        body = {
             "model": model_name,
             "messages": [{"role": "user", "content": "hi"}],
             "max_tokens": 1,
-        }).encode()
+        }
         headers = {
             "Content-Type": "application/json",
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
         }
     else:
-        body = json.dumps({
+        body = {
             "model": model_name,
             "messages": [{"role": "user", "content": "hi"}],
             "max_tokens": 1,
             "stream": False,
-        }).encode()
+        }
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
 
-    req = Request(full_url, data=body, headers=headers, method="POST")
-
     start = time.time()
     try:
-        resp = urlopen(req, timeout=timeout)
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(full_url, json=body, headers=headers)
         elapsed_ms = int((time.time() - start) * 1000)
-        _ = resp.read()
         return {
             "connected": True,
             "latency_ms": elapsed_ms,
             "model_info": model_name,
             "error": None,
         }
-    except URLError as e:
+    except httpx.TimeoutException:
         elapsed_ms = int((time.time() - start) * 1000)
-        reason = str(e.reason) if hasattr(e, "reason") else str(e)
-        if "timed out" in reason.lower():
-            return {
-                "connected": False,
-                "latency_ms": elapsed_ms,
-                "model_info": model_name,
-                "error": f"连接超时（>{timeout}s）",
-            }
         return {
             "connected": False,
             "latency_ms": elapsed_ms,
             "model_info": model_name,
-            "error": f"连接失败: {reason}",
+            "error": f"连接超时（>{timeout}s）",
+        }
+    except httpx.ConnectError as e:
+        elapsed_ms = int((time.time() - start) * 1000)
+        return {
+            "connected": False,
+            "latency_ms": elapsed_ms,
+            "model_info": model_name,
+            "error": f"连接失败: {e}",
+        }
+    except httpx.HTTPStatusError as e:
+        elapsed_ms = int((time.time() - start) * 1000)
+        return {
+            "connected": False,
+            "latency_ms": elapsed_ms,
+            "model_info": model_name,
+            "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}",
         }
     except Exception as e:
         elapsed_ms = int((time.time() - start) * 1000)

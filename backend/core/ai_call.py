@@ -1,26 +1,24 @@
 """AI 调用工具 — 统一 chat 请求封装"""
 import json
-import socket
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
+
+import httpx
 
 from core.ai_provider import PROVIDER_CONFIG
 
 
-def _read_http_error_body(e: HTTPError) -> str:
-    """读取 HTTPError 响应体中的真实错误信息"""
+def _extract_error_detail(exc: httpx.HTTPStatusError) -> str:
+    """从 HTTP 错误响应中提取可读错误信息"""
     try:
-        raw = e.read().decode("utf-8", errors="replace")
-        data = json.loads(raw)
+        data = exc.response.json()
         err_obj = data.get("error", {})
         if isinstance(err_obj, dict):
-            return err_obj.get("message", raw[:300])
+            return err_obj.get("message", exc.response.text[:300])
         return str(err_obj)[:300]
     except Exception:
-        return ""
+        return exc.response.text[:300]
 
 
 def chat(
@@ -47,45 +45,46 @@ def chat(
     full_url = url + chat_path
 
     if provider == "ollama":
-        body = json.dumps({
+        body = {
             "model": model_name,
             "messages": messages,
             "stream": False,
-        }).encode()
+        }
         headers = {"Content-Type": "application/json"}
     elif provider == "anthropic":
-        body = json.dumps({
+        body = {
             "model": model_name,
             "messages": messages,
             "max_tokens": max_tokens,
-        }).encode()
+        }
         headers = {
             "Content-Type": "application/json",
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
         }
     else:
-        body = json.dumps({
+        body = {
             "model": model_name,
             "messages": messages,
             "max_tokens": max_tokens,
             "stream": False,
-        }).encode()
+        }
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
 
-    req = Request(full_url, data=body, headers=headers, method="POST")
+    request_size = len(json.dumps(body).encode())
 
     started = time.time()
-    request_size = len(body)
     last_error: Dict[str, Any] = {}
     for attempt in range(2):
         try:
-            resp = urlopen(req, timeout=timeout)
-            raw = resp.read()
-            data = json.loads(raw)
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.post(full_url, json=body, headers=headers)
+            resp.raise_for_status()
+            raw = resp.content
+            data = resp.json()
 
             # 提取 content
             if provider == "anthropic":
@@ -115,23 +114,19 @@ def chat(
             err = _error("AI_RESPONSE_JSON_INVALID", "parse", f"AI 响应不是合法 JSON: {e}")
             _log_failure(provider, model_name, full_url, started, request_size, err)
             return err
-        except HTTPError as e:
-            detail = _read_http_error_body(e)
-            category = "auth" if e.code in (401, 403) else "http"
-            msg = f"AI 服务返回 HTTP {e.code}"
+        except httpx.HTTPStatusError as e:
+            detail = _extract_error_detail(e)
+            category = "auth" if e.response.status_code in (401, 403) else "http"
+            msg = f"AI 服务返回 HTTP {e.response.status_code}"
             if detail:
                 msg += f": {detail}"
-            err = _error(f"AI_HTTP_{e.code}", category, msg)
+            err = _error(f"AI_HTTP_{e.response.status_code}", category, msg)
             _log_failure(provider, model_name, full_url, started, request_size, err)
             return err
-        except (TimeoutError, socket.timeout) as e:
-            last_error = _error("AI_TIMEOUT", "timeout", f"AI 调用超时（>{timeout}s）: {e}")
-        except URLError as e:
-            reason = str(e.reason) if hasattr(e, "reason") else str(e)
-            if "timed out" in reason.lower():
-                last_error = _error("AI_TIMEOUT", "timeout", f"AI 调用超时（>{timeout}s）")
-            else:
-                last_error = _error("AI_CONNECTION_FAILED", "network", f"连接失败: {reason}")
+        except httpx.TimeoutException:
+            last_error = _error("AI_TIMEOUT", "timeout", f"AI 调用超时（>{timeout}s）")
+        except httpx.ConnectError as e:
+            last_error = _error("AI_CONNECTION_FAILED", "network", f"连接失败: {e}")
         except Exception as e:
             return _error("AI_CALL_FAILED", "unknown", f"AI 调用异常: {e}")
 

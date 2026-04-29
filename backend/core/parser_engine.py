@@ -125,6 +125,11 @@ def detect_header_row(rows: List[List[str]], max_scan: int = 30) -> int:
         non_empty = len(cells)
         all_text = " ".join(cells)
 
+        # 计算关键词命中
+        strong_hits = sum(1 for kw in strong_keywords if kw in all_text)
+        general_hits = sum(1 for kw in general_keywords if kw in all_text)
+        total_hits = strong_hits * 3 + general_hits
+
         # 排除元数据行：含冒号分隔的 key:value 对，或类似"接口版本 2.0 银行码 5456"的元数据模式
         has_colon_meta = bool(re.search(r'[：:]', all_text))
         # 检测 key-value 对模式：中文标签后面紧跟数字/日期/代码（非中文的值）
@@ -132,11 +137,6 @@ def detect_header_row(rows: List[List[str]], max_scan: int = 30) -> int:
         # 如果含数字值的 KV 对 >= 2，且关键词命中少，这是元数据行
         if kv_pairs and len(kv_pairs) >= 2 and total_hits < 5:
             continue
-
-        # 计算关键词命中
-        strong_hits = sum(1 for kw in strong_keywords if kw in all_text)
-        general_hits = sum(1 for kw in general_keywords if kw in all_text)
-        total_hits = strong_hits * 3 + general_hits
 
         # 评分：关键词权重 × 非空列数（真正表头通常 6+ 列）
         # 元数据行通常 2-4 列有价值信息，表头通常 6+ 列
