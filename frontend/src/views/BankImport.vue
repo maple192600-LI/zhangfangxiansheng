@@ -53,7 +53,7 @@
       <div v-if="ruleMatch" class="match-banner">
         <span class="tag tag-green">匹配规则：{{ ruleMatch.template_name }}</span>
         <span style="margin-left:8px;color:var(--muted);font-size:12px">
-          已有 {{ Object.keys(ruleMatch.mapping).length }} 个字段映射，无需 AI 解析
+          已有 {{ Object.keys(displayMapping).length }} 个字段映射，无需 AI 解析
         </span>
       </div>
     </div>

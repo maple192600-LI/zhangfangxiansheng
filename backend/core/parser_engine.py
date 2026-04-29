@@ -363,6 +363,11 @@ def _apply_post_process(
                     item[target_field] = val
                     break
 
+    # 4. 摘要生成：基于 priority_sources 或可用字段生成 fallback 摘要
+    sg = post_process.get("summary_generation")
+    if sg and not item.get("summary_text", "").strip():
+        _generate_summary(item, row, sg, cond_cols)
+
 
 def normalize_date(val: str) -> Optional[str]:
     """将各种日期格式统一为 YYYY-MM-DD，支持带时间的格式"""
@@ -403,3 +408,69 @@ def normalize_amount(val: str) -> Optional[float]:
         return round(float(val), 2)
     except ValueError:
         return None
+
+
+def _generate_summary(
+    item: Dict[str, str],
+    row: List[str],
+    sg: Dict[str, Any],
+    cond_cols: Dict[str, int],
+) -> None:
+    """基于 summary_generation 规则生成 fallback 摘要
+
+    策略：按 logic 中的 priority_sources 顺序，取第一个非空且不在
+    encoding_filter / meaningless_values 中的值作为摘要。
+    """
+    import re
+
+    encoding_patterns = sg.get("encoding_detection", {}).get("patterns", [])
+    logic_rules = sg.get("logic", [])
+
+    # 按业务类型匹配摘要规则
+    business_type_val = item.get("_business_type", "")
+    for rule in logic_rules:
+        match_types = rule.get("match_business_type", [])
+        if not match_types or any(mt in business_type_val for mt in match_types):
+            if rule.get("rule") == "fixed":
+                item["summary_text"] = rule.get("fixed_value", "")
+                return
+            if rule.get("rule") == "fixed_with_type":
+                type_mapping = rule.get("type_mapping", {})
+                for mt, label in type_mapping.items():
+                    if mt in business_type_val:
+                        item["summary_text"] = label
+                        return
+            # priority: 按 priority_sources 顺序找第一个有效值
+            for ps in rule.get("priority_sources", []):
+                src_field = ps.get("source", "")
+                # 先检查 item 中已有的映射值
+                val = item.get(src_field, "").strip()
+                if not val:
+                    # 再从原始行数据中取
+                    src_idx = cond_cols.get(src_field)
+                    if src_idx is not None:
+                        val = _get_col_val(row, src_idx)
+                if not val:
+                    continue
+                # 过滤编码类无意义值
+                if encoding_patterns and re.match(encoding_patterns[0], val):
+                    continue
+                meaningless = rule.get("meaningless_values", [])
+                if val in meaningless:
+                    continue
+                item["summary_text"] = val
+                return
+
+    # fallback: 尝试从常用字段取值
+    for field in ("_purpose", "_remark", "_reference", "_notes"):
+        val = item.get(field, "").strip()
+        if not val:
+            src_idx = cond_cols.get(field)
+            if src_idx is not None:
+                val = _get_col_val(row, src_idx)
+        if val and not (encoding_patterns and re.match(encoding_patterns[0], val)):
+            item["summary_text"] = val
+            return
+
+    # 最终兜底
+    item["summary_text"] = sg.get("final_fallback", "交易")

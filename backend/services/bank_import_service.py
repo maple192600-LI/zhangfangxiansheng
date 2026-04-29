@@ -208,6 +208,8 @@ def preview(
         norm_date = normalize_date(raw_date)
         if norm_date:
             row["business_date"] = norm_date
+        # 自动生成 fallback 摘要
+        _ensure_summary(row)
         errors = _validate_row(row)
         if errors:
             row["_errors"] = errors
@@ -336,6 +338,8 @@ def commit_by_mapping(
 
     inserted = 0
     for row in parsed:
+        # 自动生成 fallback 摘要
+        _ensure_summary(row)
         biz_date_str = normalize_date(row.get("business_date", ""))
         if not biz_date_str:
             continue
@@ -445,6 +449,33 @@ def _find_uploaded_file(batch_code: str, source_name: str) -> Optional[str]:
             if os.path.isfile(path):
                 return path
     return None
+
+
+def _ensure_summary(row: Dict) -> None:
+    """当 summary_text 为空时，基于已有字段自动生成 fallback 摘要"""
+    if row.get("summary_text", "").strip():
+        return
+    parts = []
+    # 按优先级从已有字段拼凑摘要
+    for field in ("_purpose", "_remark", "_notes", "_reference", "transaction_type"):
+        val = row.get(field, "").strip()
+        if val:
+            parts.append(val)
+    counterparty = row.get("counterparty_name", "").strip()
+    if counterparty:
+        parts.append(counterparty)
+    if parts:
+        row["summary_text"] = "-".join(parts[:3])
+    else:
+        # 最后兜底：用交易类型描述
+        income = normalize_amount(row.get("income_amount", "")) or 0
+        expense = normalize_amount(row.get("expense_amount", "")) or 0
+        if income > 0:
+            row["summary_text"] = "收入"
+        elif expense > 0:
+            row["summary_text"] = "支出"
+        else:
+            row["summary_text"] = "交易"
 
 
 def _validate_row(row: Dict) -> List[str]:
