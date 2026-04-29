@@ -61,7 +61,7 @@ def rollback_batch(batch_id: int, db: Session = Depends(get_db)):
         # 将关联事件标记为 rolled_back
         events = db.query(FundEvent).filter(FundEvent.batch_id == batch_id).all()
         for e in events:
-            e.parse_status = "rolled_back"
+            e.state = "已作废"
 
         batch.status = "rolled_back"
         db.commit()

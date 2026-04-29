@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
+from core import artifact_runtime
 from db.tables import FundEvent, Account, Entity
 from services.base_data_service import get_opening_balance, _parse_date
 from services import log_service
@@ -30,10 +31,11 @@ def daily_report(
 
     results = []
     for ent in entities:
-        # 该实体下所有账户
+        # 该实体下所有纳入日报的账户
         accounts = db.query(Account).filter(
             Account.entity_id == ent.id,
             Account.status == "enabled",
+            Account.include_in_daily_report == True,
         ).all()
 
         opening = 0.0
@@ -44,12 +46,12 @@ def daily_report(
             opening += get_opening_balance(db, acct.id, start_date)
             row = (
                 db.query(
-                    func.coalesce(func.sum(FundEvent.income_amount), 0),
-                    func.coalesce(func.sum(FundEvent.expense_amount), 0),
+                    func.coalesce(func.sum(FundEvent.amount_in), 0),
+                    func.coalesce(func.sum(FundEvent.amount_out), 0),
                 )
                 .filter(
-                    FundEvent.account_id == acct.id,
-                    FundEvent.parse_status == "valid",
+                    FundEvent.account_code == acct.account_code,
+                    FundEvent.state == "正常",
                     FundEvent.business_date >= start_date,
                     FundEvent.business_date <= end_date,
                 )
@@ -81,7 +83,10 @@ def cash_journal(
     account_id: Optional[int] = None,
 ) -> List[Dict]:
     """按账户分块，每块按日：上日余额/收入/支出/本日余额"""
-    aq = db.query(Account).filter(Account.status == "enabled")
+    aq = db.query(Account).filter(
+        Account.status == "enabled",
+        Account.include_in_daily_report == True,
+    )
     if account_id:
         aq = aq.filter(Account.id == account_id)
     accounts = aq.options(joinedload(Account.entity)).all()
@@ -94,12 +99,12 @@ def cash_journal(
         daily_rows = (
             db.query(
                 FundEvent.business_date,
-                func.coalesce(func.sum(FundEvent.income_amount), 0),
-                func.coalesce(func.sum(FundEvent.expense_amount), 0),
+                func.coalesce(func.sum(FundEvent.amount_in), 0),
+                func.coalesce(func.sum(FundEvent.amount_out), 0),
             )
             .filter(
-                FundEvent.account_id == acct.id,
-                FundEvent.parse_status == "valid",
+                FundEvent.account_code == acct.account_code,
+                FundEvent.state == "正常",
                 FundEvent.business_date >= start_date,
                 FundEvent.business_date <= end_date,
             )
@@ -110,11 +115,15 @@ def cash_journal(
 
         rows = []
         current_balance = opening
+        total_income = 0.0
+        total_expense = 0.0
         for dr in daily_rows:
             day_income = float(dr[1])
             day_expense = float(dr[2])
             prev = current_balance
             current_balance = current_balance + day_income - day_expense
+            total_income += day_income
+            total_expense += day_expense
             rows.append({
                 "business_date": str(dr[0]),
                 "prev_balance": round(prev, 2),
@@ -126,8 +135,14 @@ def cash_journal(
         if rows:
             blocks.append({
                 "account_id": acct.id,
-                "account_name": f"{acct.account_code} {acct.account_alias}",
+                "account_code": acct.account_code or "",
+                "account_name": acct.account_alias or "",
+                "account_bank": acct.branch_name or "",
                 "entity_name": acct.entity.short_name if acct.entity else "",
+                "opening_balance": round(opening, 2),
+                "total_income": round(total_income, 2),
+                "total_expense": round(total_expense, 2),
+                "ending_balance": round(opening + total_income - total_expense, 2),
                 "rows": rows,
             })
 
@@ -153,6 +168,7 @@ def account_balance(
         accounts = db.query(Account).filter(
             Account.entity_id == ent.id,
             Account.status == "enabled",
+            Account.include_in_daily_report == True,
         ).all()
 
         if not accounts:
@@ -166,12 +182,12 @@ def account_balance(
             opening = get_opening_balance(db, acct.id, start_date)
             row = (
                 db.query(
-                    func.coalesce(func.sum(FundEvent.income_amount), 0),
-                    func.coalesce(func.sum(FundEvent.expense_amount), 0),
+                    func.coalesce(func.sum(FundEvent.amount_in), 0),
+                    func.coalesce(func.sum(FundEvent.amount_out), 0),
                 )
                 .filter(
-                    FundEvent.account_id == acct.id,
-                    FundEvent.parse_status == "valid",
+                    FundEvent.account_code == acct.account_code,
+                    FundEvent.state == "正常",
                     FundEvent.business_date >= start_date,
                     FundEvent.business_date <= end_date,
                 )
@@ -253,14 +269,17 @@ def _direction_list(
         joinedload(FundEvent.entity),
         joinedload(FundEvent.account),
     ).filter(
-        FundEvent.parse_status == "valid",
-        FundEvent.direction == direction,
+        FundEvent.state == "正常",
         FundEvent.business_date >= start_date,
         FundEvent.business_date <= end_date,
     )
+    if direction == "income":
+        q = q.filter(FundEvent.amount_in > 0)
+    else:
+        q = q.filter(FundEvent.amount_out > 0)
 
     if entity_id:
-        q = q.filter(FundEvent.entity_id == entity_id)
+        q = q.filter(FundEvent.entity.has(Entity.id == entity_id))
 
     total = q.count()
     total_pages = math.ceil(total / page_size) if page_size else 1
@@ -281,16 +300,161 @@ def _direction_list(
 
 
 def _direction_row(ev: FundEvent, direction: str) -> Dict:
-    amount = float(ev.income_amount) if direction == "income" and ev.income_amount else (
-        float(ev.expense_amount) if direction == "expense" and ev.expense_amount else 0
+    amount = float(ev.amount_in) if direction == "income" and ev.amount_in else (
+        float(ev.amount_out) if direction == "expense" and ev.amount_out else 0
     )
     return {
         "id": ev.id,
         "business_date": str(ev.business_date) if ev.business_date else None,
-        "entity_name": ev.entity.short_name if ev.entity else None,
-        "account_name": ev.account.account_alias if ev.account else None,
-        "summary_text": ev.summary_text,
-        "counterparty_name": ev.counterparty_name,
+        "entity_name": ev.entity_name,
+        "account_name": ev.account_name,
+        "summary_text": ev.summary,
+        "counterparty_name": ev.counterparty,
         "amount": round(amount, 2),
         "rolling_balance": float(ev.rolling_balance) if ev.rolling_balance else None,
     }
+
+
+# ── 主要账户余额表 ──────────────────────────────
+
+def major_balance(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    entity_id: Optional[int] = None,
+) -> List[Dict]:
+    """主要账户余额表 — 只显示银行存款类型的账户"""
+    eq = db.query(Entity).filter(Entity.status == "enabled")
+    if entity_id:
+        eq = eq.filter(Entity.id == entity_id)
+    entities = eq.all()
+
+    rows = []
+    for ent in entities:
+        accounts = db.query(Account).filter(
+            Account.entity_id == ent.id,
+            Account.status == "enabled",
+            Account.instrument_type == "银行存款",
+        ).all()
+
+        if not accounts:
+            continue
+
+        ent_income = 0.0
+        ent_expense = 0.0
+        ent_opening = 0.0
+
+        for acct in accounts:
+            opening = get_opening_balance(db, acct.id, start_date)
+            row = (
+                db.query(
+                    func.coalesce(func.sum(FundEvent.amount_in), 0),
+                    func.coalesce(func.sum(FundEvent.amount_out), 0),
+                )
+                .filter(
+                    FundEvent.account_code == acct.account_code,
+                    FundEvent.state == "正常",
+                    FundEvent.business_date >= start_date,
+                    FundEvent.business_date <= end_date,
+                )
+                .first()
+            )
+
+            inc = float(row[0]) if row else 0
+            exp = float(row[1]) if row else 0
+            ending = opening + inc - exp
+
+            ent_opening += opening
+            ent_income += inc
+            ent_expense += exp
+
+            rows.append({
+                "entity_id": ent.id,
+                "entity_name": ent.short_name,
+                "account_id": acct.id,
+                "account_name": f"{acct.account_code} {acct.account_alias}",
+                "opening_balance": round(opening, 2),
+                "period_income": round(inc, 2),
+                "period_expense": round(exp, 2),
+                "ending_balance": round(ending, 2),
+                "is_subtotal": False,
+            })
+
+        if accounts:
+            rows.append({
+                "entity_id": ent.id,
+                "entity_name": f"{ent.short_name} 小计",
+                "account_id": None,
+                "account_name": None,
+                "opening_balance": round(ent_opening, 2),
+                "period_income": round(ent_income, 2),
+                "period_expense": round(ent_expense, 2),
+                "ending_balance": round(ent_opening + ent_income - ent_expense, 2),
+                "is_subtotal": True,
+            })
+
+    return rows
+
+
+# ── 月末盘点表 ──────────────────────────────
+
+def month_check(
+    db: Session,
+    year: int,
+    month: int,
+    entity_id: Optional[int] = None,
+) -> List[Dict]:
+    """月末盘点表 — 指定年月的账户余额"""
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year, 12, 31)
+    else:
+        end = date(year, month + 1, 1) - timedelta(days=1)
+    return account_balance(db, start, end, entity_id)
+
+
+# ── 资金周报 ──────────────────────────────
+
+def week_report(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    entity_id: Optional[int] = None,
+) -> List[Dict]:
+    """资金周报 — 按单位汇总（逻辑同日报，只是周期不同）"""
+    return daily_report(db, start_date, end_date, entity_id)
+
+
+# ── 资金月报 ──────────────────────────────
+
+def month_report(
+    db: Session,
+    year: int,
+    month: int,
+    entity_id: Optional[int] = None,
+) -> List[Dict]:
+    """资金月报 — 指定年月按单位汇总"""
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year, 12, 31)
+    else:
+        end = date(year, month + 1, 1) - timedelta(days=1)
+    return daily_report(db, start, end, entity_id)
+
+
+# ── 资金年报 ──────────────────────────────
+
+def year_report(
+    db: Session,
+    year: int,
+    entity_id: Optional[int] = None,
+) -> List[Dict]:
+    """资金年报 — 指定年份按单位汇总"""
+    start = date(year, 1, 1)
+    end = date(year, 12, 31)
+    return daily_report(db, start, end, entity_id)
+
+
+def generate_report(db: Session, rule_artifact_id: int, ctx: Dict):
+    """Run an approved RuleArtifact and return a filled workbook."""
+    return artifact_runtime.run_rule(db, rule_artifact_id, ctx)

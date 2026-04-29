@@ -28,24 +28,27 @@ def query_base_data(
     q = db.query(FundEvent).options(
         joinedload(FundEvent.entity),
         joinedload(FundEvent.account),
-    ).filter(FundEvent.parse_status == "valid")
+    ).filter(FundEvent.state == "正常")
 
     if date_from:
         q = q.filter(FundEvent.business_date >= _parse_date(date_from))
     if date_to:
         q = q.filter(FundEvent.business_date <= _parse_date(date_to))
     if entity_id:
-        q = q.filter(FundEvent.entity_id == entity_id)
+        q = q.filter(FundEvent.entity.has(Entity.id == entity_id))
     if account_id:
-        q = q.filter(FundEvent.account_id == account_id)
+        q = q.filter(FundEvent.account.has(Account.id == account_id))
     if direction:
-        q = q.filter(FundEvent.direction == direction)
+        if direction == "income":
+            q = q.filter(FundEvent.amount_in > 0)
+        elif direction == "expense":
+            q = q.filter(FundEvent.amount_out > 0)
     if keyword:
         escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         kw = f"%{escaped}%"
         q = q.filter(
-            (FundEvent.summary_text.like(kw, escape="\\")) |
-            (FundEvent.counterparty_name.like(kw, escape="\\"))
+            (FundEvent.summary.like(kw, escape="\\")) |
+            (FundEvent.counterparty.like(kw, escape="\\"))
         )
 
     total = q.count()
@@ -70,17 +73,21 @@ def _event_to_row(ev: FundEvent) -> Dict:
     return {
         "id": ev.id,
         "business_date": str(ev.business_date) if ev.business_date else None,
-        "entity_id": ev.entity_id,
-        "entity_name": ev.entity.short_name if ev.entity else None,
-        "account_id": ev.account_id,
-        "account_name": ev.account.account_alias if ev.account else None,
-        "direction": ev.direction,
-        "income_amount": float(ev.income_amount) if ev.income_amount else None,
-        "expense_amount": float(ev.expense_amount) if ev.expense_amount else None,
+        "entity_id": ev.entity.id if ev.entity else None,
+        "entity_code": ev.entity_code,
+        "entity_name": ev.entity_name,
+        "account_id": ev.account.id if ev.account else None,
+        "account_name": ev.account_name,
+        "account_code": ev.account_code,
+        "direction": "income" if ev.amount_in and ev.amount_in > 0 else ("expense" if ev.amount_out and ev.amount_out > 0 else "unknown"),
+        "income_amount": float(ev.amount_in) if ev.amount_in else None,
+        "expense_amount": float(ev.amount_out) if ev.amount_out else None,
         "rolling_balance": float(ev.rolling_balance) if ev.rolling_balance else None,
-        "counterparty_name": ev.counterparty_name,
-        "summary_text": ev.summary_text,
-        "abnormal_code": ev.abnormal_code,
+        "counterparty_name": ev.counterparty,
+        "summary_text": ev.summary,
+        "abnormal_code": None if ev.state == "正常" else ev.state,
+        "parse_status": ev.state,
+        "source_type": ev.source,
     }
 
 
@@ -98,8 +105,8 @@ def rebuild_rolling_balance(db: Session, account_id: Optional[int] = None) -> Di
         events = (
             db.query(FundEvent)
             .filter(
-                FundEvent.account_id == acct.id,
-                FundEvent.parse_status == "valid",
+                FundEvent.account_code == acct.account_code,
+                FundEvent.state == "正常",
             )
             .order_by(FundEvent.business_date.asc(), FundEvent.id.asc())
             .all()
@@ -107,16 +114,10 @@ def rebuild_rolling_balance(db: Session, account_id: Optional[int] = None) -> Di
 
         balance = float(acct.initial_balance or 0)
         for ev in events:
-            inc = float(ev.income_amount or 0)
-            exp = float(ev.expense_amount or 0)
+            inc = float(ev.amount_in or 0)
+            exp = float(ev.amount_out or 0)
             balance = balance + inc - exp
             ev.rolling_balance = Decimal(str(round(balance, 2)))
-
-            # 校验 ending_balance_input
-            if ev.ending_balance_input is not None:
-                diff = abs(balance - float(ev.ending_balance_input))
-                if diff > 0.01:
-                    ev.abnormal_code = "BALANCE_MISMATCH"
 
             total_events += 1
 
@@ -149,8 +150,8 @@ def get_opening_balance(db: Session, account_id: int, start_date: date) -> float
     last_ev = (
         db.query(FundEvent)
         .filter(
-            FundEvent.account_id == account_id,
-            FundEvent.parse_status == "valid",
+            FundEvent.account_code == acct.account_code,
+            FundEvent.state == "正常",
             FundEvent.business_date < start_date,
         )
         .order_by(FundEvent.business_date.desc(), FundEvent.id.desc())
@@ -174,12 +175,12 @@ def get_account_summary(
 
     row = (
         db.query(
-            func.coalesce(func.sum(FundEvent.income_amount), 0),
-            func.coalesce(func.sum(FundEvent.expense_amount), 0),
+            func.coalesce(func.sum(FundEvent.amount_in), 0),
+            func.coalesce(func.sum(FundEvent.amount_out), 0),
         )
         .filter(
-            FundEvent.account_id == account_id,
-            FundEvent.parse_status == "valid",
+            FundEvent.account_code == db.query(Account.account_code).filter(Account.id == account_id).scalar_subquery(),
+            FundEvent.state == "正常",
             FundEvent.business_date >= start_date,
             FundEvent.business_date <= end_date,
         )

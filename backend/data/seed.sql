@@ -1,44 +1,51 @@
 -- ========================================
--- Seed Data V1
--- 与 samples/manual/manual_sample_confirmed.xlsx 配套
+-- Seed Data V2
+-- 编码规则统一：HZ(核算组织) / DW(单位) / YH(银行) / ZH(账户)
 -- ========================================
 
--- 板块
-INSERT INTO divisions (id, name, sort_order, status, created_at, updated_at)
+-- 板块（核算组织）
+INSERT INTO divisions (id, division_code, name, sort_order, status, created_at, updated_at)
 VALUES
-  (1, '养护板块', 0, 'enabled', datetime('now'), datetime('now')),
-  (2, '票据板块', 1, 'enabled', datetime('now'), datetime('now'));
+  (1, 'HZ0001', '养护板块', 0, 'enabled', datetime('now'), datetime('now')),
+  (2, 'HZ0002', '票据板块', 1, 'enabled', datetime('now'), datetime('now'));
 
--- 法人实体
+-- 法人实体（单位）
 INSERT INTO entities (id, division_id, entity_code, name, short_name, status, created_at, updated_at)
 VALUES
-  (1, 1, 'E001', '山西喜跃发实业发展有限公司', '实业公司', 'enabled', datetime('now'), datetime('now')),
-  (2, 1, 'E002', '养护分公司', '养护公司', 'enabled', datetime('now'), datetime('now')),
-  (3, 2, 'E003', '路桥项目公司', '路桥公司', 'enabled', datetime('now'), datetime('now')),
-  (4, 1, 'E004', '建筑安装公司', '建筑公司', 'enabled', datetime('now'), datetime('now')),
-  (5, 1, 'E005', '设备租赁公司', '租赁公司', 'enabled', datetime('now'), datetime('now'));
+  (1, 1, 'DW0001', '山西喜跃发实业发展有限公司', '实业公司', 'enabled', datetime('now'), datetime('now')),
+  (2, 1, 'DW0002', '养护分公司', '养护公司', 'enabled', datetime('now'), datetime('now')),
+  (3, 2, 'DW0003', '路桥项目公司', '路桥公司', 'enabled', datetime('now'), datetime('now')),
+  (4, 1, 'DW0004', '建筑安装公司', '建筑公司', 'enabled', datetime('now'), datetime('now')),
+  (5, 1, 'DW0005', '设备租赁公司', '租赁公司', 'enabled', datetime('now'), datetime('now'));
+
+-- 银行
+INSERT INTO banks (id, bank_code, bank_name, short_name, status, sort_order, created_at, updated_at)
+VALUES
+  (1, 'YH0001', '中国银行', '中行', 'enabled', 0, datetime('now'), datetime('now')),
+  (2, 'YH0002', '农商行', '农商行', 'enabled', 1, datetime('now'), datetime('now')),
+  (3, 'YH0003', '工商银行', '工行', 'enabled', 2, datetime('now'), datetime('now'));
 
 -- 账户（含期初余额）
-INSERT INTO accounts (id, entity_id, account_code, account_alias, bank_name, branch_name,
+INSERT INTO accounts (id, entity_id, bank_id, account_code, account_alias, bank_name, branch_name,
   account_number, account_type, instrument_type, input_method, currency,
   initial_balance, balance_date, status, notes, created_at, updated_at)
 VALUES
-  (1, 1, 'A001', '中行手工户', '中国银行', '太原分行', '6217xxxx0001',
+  (1, 1, 1, 'ZH0001', '中行手工户', '中国银行', '太原分行', '6217xxxx0001',
    '银行账户', '银行存款', 'manual', 'CNY', 200000.00, '2026-03-01',
    'enabled', '无网银手工户', datetime('now'), datetime('now')),
-  (2, 2, 'A101', '现金账户', NULL, NULL, NULL,
+  (2, 2, NULL, 'ZH0002', '现金账户', NULL, NULL, NULL,
    '现金', '现金', 'manual', 'CNY', 12860.00, '2026-03-02',
    'enabled', '现金日记账', datetime('now'), datetime('now')),
-  (3, 3, 'A301', '票据登记簿', NULL, NULL, NULL,
+  (3, 3, NULL, 'ZH0003', '票据登记簿', NULL, NULL, NULL,
    '票据', '票据', 'manual', 'CNY', 0.00, '2026-03-02',
    'enabled', '仅记录影响资金口径的票据', datetime('now'), datetime('now')),
-  (4, 3, 'A302', '受限资金手工户', NULL, NULL, NULL,
+  (4, 3, NULL, 'ZH0004', '受限资金手工户', NULL, NULL, NULL,
    '其他', '受限资金', 'manual', 'CNY', 95000.00, '2026-03-02',
    'enabled', '手工资金载体', datetime('now'), datetime('now')),
-  (5, 4, 'A205', '农商行手工户', '农商行', '养护支行', '6210xxxx0005',
+  (5, 4, 2, 'ZH0005', '农商行手工户', '农商行', '养护支行', '6210xxxx0005',
    '银行账户', '银行存款', 'manual', 'CNY', 82000.00, '2026-03-03',
    'enabled', '低频手工补录', datetime('now'), datetime('now')),
-  (6, 5, 'A402', '无网银结算户', '工商银行', '太原支行', '6222xxxx0006',
+  (6, 5, 3, 'ZH0006', '无网银结算户', '工商银行', '太原支行', '6222xxxx0006',
    '银行账户', '银行存款', 'manual', 'CNY', 40600.00, '2026-03-04',
    'enabled', '无网银账户', datetime('now'), datetime('now'));
 
@@ -46,9 +53,9 @@ VALUES
 INSERT INTO account_aliases (id, account_id, alias_text, alias_type, created_at)
 VALUES
   (1, 1, '中行手工户', 'display_name', datetime('now')),
-  (2, 1, 'A001', 'code', datetime('now')),
+  (2, 1, 'ZH0001', 'code', datetime('now')),
   (3, 2, '现金账户', 'display_name', datetime('now')),
-  (4, 2, 'A101', 'code', datetime('now')),
+  (4, 2, 'ZH0002', 'code', datetime('now')),
   (5, 3, '票据登记簿', 'display_name', datetime('now')),
   (6, 4, '受限资金手工户', 'display_name', datetime('now')),
   (7, 5, '农商行手工户', 'display_name', datetime('now')),

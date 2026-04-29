@@ -34,6 +34,7 @@ class PaginatedResponse(BaseModel):
 # 板块
 # ──────────────────────────────────────────
 class DivisionCreate(BaseModel):
+    division_code: Optional[str] = Field(None, max_length=50)
     name: str = Field(..., max_length=100)
     sort_order: int = 0
     status: str = "enabled"
@@ -47,6 +48,7 @@ class DivisionUpdate(BaseModel):
 
 class DivisionOut(BaseModel):
     id: int
+    division_code: Optional[str] = None
     name: str
     sort_order: Optional[int]
     status: str
@@ -57,11 +59,18 @@ class DivisionOut(BaseModel):
 
 
 # ──────────────────────────────────────────
+# 通用状态切换
+# ──────────────────────────────────────────
+class StatusToggle(BaseModel):
+    status: str  # "enabled" 或 "disabled"
+
+
+# ──────────────────────────────────────────
 # 法人实体
 # ──────────────────────────────────────────
 class EntityCreate(BaseModel):
     division_id: Optional[int] = None
-    entity_code: str = Field(..., max_length=50)
+    entity_code: Optional[str] = Field(None, max_length=50)
     name: str = Field(..., max_length=200)
     short_name: str = Field(..., max_length=100)
     status: str = "enabled"
@@ -88,21 +97,69 @@ class EntityOut(BaseModel):
 
 
 # ──────────────────────────────────────────
+# 银行
+# ──────────────────────────────────────────
+class BankCreate(BaseModel):
+    bank_code: Optional[str] = Field(None, max_length=50)
+    bank_name: str = Field(..., max_length=100)
+    short_name: Optional[str] = Field(None, max_length=50)
+    cnaps_code: Optional[str] = None
+    contact_phone: Optional[str] = None
+    website: Optional[str] = None
+    notes: Optional[str] = None
+    status: str = "enabled"
+    sort_order: int = 0
+
+
+class BankUpdate(BaseModel):
+    bank_name: Optional[str] = None
+    short_name: Optional[str] = None
+    cnaps_code: Optional[str] = None
+    contact_phone: Optional[str] = None
+    website: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class BankOut(BaseModel):
+    id: int
+    bank_code: str
+    bank_name: str
+    short_name: Optional[str]
+    cnaps_code: Optional[str]
+    contact_phone: Optional[str]
+    website: Optional[str]
+    notes: Optional[str]
+    status: str
+    sort_order: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────
 # 账户
 # ──────────────────────────────────────────
 class AccountCreate(BaseModel):
     entity_id: int
-    account_code: str = Field(..., max_length=50)
-    account_alias: str = Field(..., max_length=100)
+    account_code: Optional[str] = Field(None, max_length=50)
+    account_alias: Optional[str] = Field(None, max_length=100)
+    bank_id: Optional[int] = None
     bank_name: Optional[str] = Field(None, max_length=100)
     branch_name: Optional[str] = Field(None, max_length=200)
     account_number: Optional[str] = Field(None, max_length=100)
+    account_last_four: Optional[str] = None
     account_type: str = Field(..., max_length=50)
     instrument_type: str = Field(..., max_length=50)
     input_method: str = "manual"
+    has_online_banking: bool = False
+    include_in_daily_report: bool = True
+    allow_manual_entry: bool = True
     currency: str = "CNY"
     initial_balance: float = 0
-    balance_date: date
+    balance_date: Optional[date] = None
     status: str = "enabled"
     notes: Optional[str] = None
 
@@ -110,12 +167,17 @@ class AccountCreate(BaseModel):
 class AccountUpdate(BaseModel):
     entity_id: Optional[int] = None
     account_alias: Optional[str] = Field(None, max_length=100)
+    bank_id: Optional[int] = None
     bank_name: Optional[str] = None
     branch_name: Optional[str] = None
     account_number: Optional[str] = None
+    account_last_four: Optional[str] = None
     account_type: Optional[str] = None
     instrument_type: Optional[str] = None
     input_method: Optional[str] = None
+    has_online_banking: Optional[bool] = None
+    include_in_daily_report: Optional[bool] = None
+    allow_manual_entry: Optional[bool] = None
     currency: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
@@ -129,20 +191,26 @@ class InitialBalanceSet(BaseModel):
 class AccountOut(BaseModel):
     id: int
     entity_id: int
+    bank_id: Optional[int] = None
     account_code: str
     account_alias: str
     bank_name: Optional[str]
     branch_name: Optional[str]
     account_number: Optional[str]
+    account_last_four: Optional[str] = None
     account_type: str
     instrument_type: str
     input_method: str
+    has_online_banking: bool = False
+    include_in_daily_report: bool = True
+    allow_manual_entry: bool = True
     currency: str
     initial_balance: float
     balance_date: date
     status: str
     notes: Optional[str]
     entity_name: Optional[str] = None
+    bank_short_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -198,20 +266,22 @@ class PaginatedData(BaseModel):
 class AIConfigCreate(BaseModel):
     provider: str = Field(..., max_length=50)
     display_name: str = Field(..., max_length=100)
-    api_key_encrypted: str
+    api_key_local: str
     base_url: Optional[str] = Field(None, max_length=255)
     model_name: Optional[str] = Field(None, max_length=100)
     is_default: bool = False
+    privacy_mode: str = "standard"
     status: str = "active"
 
 
 class AIConfigUpdate(BaseModel):
     provider: Optional[str] = None
     display_name: Optional[str] = None
-    api_key_encrypted: Optional[str] = None
+    api_key_local: Optional[str] = None
     base_url: Optional[str] = None
     model_name: Optional[str] = None
     is_default: Optional[bool] = None
+    privacy_mode: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -219,40 +289,13 @@ class AIConfigOut(BaseModel):
     id: int
     provider: str
     display_name: str
-    api_key_encrypted: str
+    api_key_local: str
     base_url: Optional[str]
     model_name: Optional[str]
     is_default: bool
+    privacy_mode: str
     status: str
     created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-# ──────────────────────────────────────────
-# Agent 配置
-# ──────────────────────────────────────────
-class AgentConfigCreate(BaseModel):
-    agent_code: str = Field(..., max_length=50)
-    agent_name: str = Field(..., max_length=100)
-    agent_type: str = Field(..., max_length=30)
-    workspace_dir: str = Field(..., max_length=200)
-    ai_config_id: Optional[int] = None
-    description: Optional[str] = None
-    status: str = "active"
-
-
-class AgentConfigOut(BaseModel):
-    id: int
-    agent_code: str
-    agent_name: str
-    agent_type: str
-    workspace_dir: str
-    ai_config_id: Optional[int]
-    description: Optional[str]
-    status: str
-    created_at: datetime
-    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -365,6 +408,7 @@ class ManualPreviewBody(BaseModel):
 
 class ManualCommitBody(BaseModel):
     batch_code: str
+    parser_artifact_id: int
     confirm_rows: Optional[List[int]] = None
     fixes: Optional[List[dict]] = None
 
@@ -436,3 +480,66 @@ class AccountBalanceRow(BaseModel):
     period_expense: float = 0
     ending_balance: float = 0
     is_subtotal: bool = False
+
+
+# ──────────────────────────────────────────
+# 报表模板
+# ──────────────────────────────────────────
+REPORT_TYPES = [
+    {"code": "base_data", "name": "基础数据表"},
+    {"code": "cash_journal", "name": "现金日记账"},
+    {"code": "account_balance", "name": "账户余额表"},
+    {"code": "income_list", "name": "收入明细表"},
+    {"code": "expense_list", "name": "支出明细表"},
+    {"code": "major_balance", "name": "主要账户余额表"},
+    {"code": "month_check", "name": "月末盘点表"},
+    {"code": "week_report", "name": "资金周报"},
+    {"code": "month_report", "name": "资金月报"},
+    {"code": "year_report", "name": "资金年报"},
+]
+
+
+class ColumnConfig(BaseModel):
+    field_key: str
+    header_name: str
+    width: int = 100
+    align: str = "left"
+    visible: bool = True
+    format: Optional[str] = None
+    sort_order: int = 0
+
+
+class ReportTemplateCreate(BaseModel):
+    template_code: Optional[str] = Field(None, max_length=50)
+    template_name: str = Field(..., max_length=100)
+    report_type: str = Field(..., max_length=30)
+    columns: List[ColumnConfig]
+    group_by: Optional[str] = None
+    is_default: bool = False
+    remark: Optional[str] = None
+
+
+class ReportTemplateUpdate(BaseModel):
+    template_name: Optional[str] = Field(None, max_length=100)
+    columns: Optional[List[ColumnConfig]] = None
+    group_by: Optional[str] = None
+    is_default: Optional[bool] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class ReportTemplateOut(BaseModel):
+    id: int
+    template_code: str
+    template_name: str
+    report_type: str
+    columns: List[ColumnConfig]
+    group_by: Optional[str] = None
+    is_default: bool
+    status: str
+    created_by: str
+    remark: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

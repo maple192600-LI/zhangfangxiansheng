@@ -10,14 +10,14 @@ from db.tables import FundEvent, Account, Entity
 
 def get_metrics(db: Session, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict:
     """看板指标：总收入/总支出/总余额 + 各账户余额"""
-    q = db.query(FundEvent).filter(FundEvent.parse_status == "valid")
+    q = db.query(FundEvent).filter(FundEvent.state == "正常")
     if start_date:
         q = q.filter(FundEvent.business_date >= start_date)
     if end_date:
         q = q.filter(FundEvent.business_date <= end_date)
 
-    total_income = q.with_entities(func.coalesce(func.sum(FundEvent.income_amount), 0)).scalar() or 0
-    total_expense = q.with_entities(func.coalesce(func.sum(FundEvent.expense_amount), 0)).scalar() or 0
+    total_income = q.with_entities(func.coalesce(func.sum(FundEvent.amount_in), 0)).scalar() or 0
+    total_expense = q.with_entities(func.coalesce(func.sum(FundEvent.amount_out), 0)).scalar() or 0
 
     # 各账户余额
     accounts = (
@@ -51,11 +51,11 @@ def get_trends(db: Session, days: int = 30) -> Dict:
     rows = (
         db.query(
             FundEvent.business_date,
-            func.coalesce(func.sum(FundEvent.income_amount), 0).label("income"),
-            func.coalesce(func.sum(FundEvent.expense_amount), 0).label("expense"),
+            func.coalesce(func.sum(FundEvent.amount_in), 0).label("income"),
+            func.coalesce(func.sum(FundEvent.amount_out), 0).label("expense"),
         )
         .filter(FundEvent.business_date >= start, FundEvent.business_date <= end)
-        .filter(FundEvent.parse_status == "valid")
+        .filter(FundEvent.state == "正常")
         .group_by(FundEvent.business_date)
         .order_by(FundEvent.business_date)
         .all()

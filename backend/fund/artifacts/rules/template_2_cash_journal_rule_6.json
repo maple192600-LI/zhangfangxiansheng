@@ -1,0 +1,121 @@
+{
+  "name": "template_2_cash_journal_rule",
+  "template_id": null,
+  "placeholder_bindings": {
+    "报表标题": {
+      "primitive": "const",
+      "value": "现金日记账"
+    },
+    "开始期间": {
+      "primitive": "date_range_start",
+      "params": {}
+    },
+    "结束期间": {
+      "primitive": "date_range_end",
+      "params": {}
+    },
+    "板块": {
+      "primitive": "entity_field",
+      "params": {
+        "field": "division_name"
+      }
+    },
+    "核算方式": {
+      "primitive": "const",
+      "value": "收付实现制"
+    },
+    "开户行": {
+      "primitive": "account_field",
+      "params": {
+        "field": "bank_name"
+      }
+    },
+    "账户信息": {
+      "primitive": "account_field",
+      "params": {
+        "field": "account_name"
+      }
+    },
+    "银行编号": {
+      "primitive": "account_field",
+      "params": {
+        "field": "account_last_four"
+      }
+    },
+    "月初余额": {
+      "primitive": "opening_balance",
+      "params": {}
+    },
+    "本月收入小计": {
+      "primitive": "sum_field",
+      "params": {
+        "field": "amount_in"
+      }
+    },
+    "本月支出小计": {
+      "primitive": "sum_field",
+      "params": {
+        "field": "amount_out"
+      }
+    },
+    "月末余额": {
+      "primitive": "closing_balance",
+      "params": {}
+    }
+  },
+  "loop": {
+    "anchor": "摘要_data_start",
+    "source": "list_events",
+    "filters": {
+      "account_code": "${ctx.account_code}",
+      "state_in": [
+        "正常"
+      ]
+    },
+    "columns": {
+      "月": {
+        "primitive": "format_amount",
+        "params": {
+          "from": "business_date",
+          "format": "MM"
+        }
+      },
+      "日": {
+        "primitive": "format_amount",
+        "params": {
+          "from": "business_date",
+          "format": "DD"
+        }
+      },
+      "摘要": {
+        "primitive": "const",
+        "value": "${row.summary}"
+      },
+      "收入": {
+        "primitive": "const",
+        "value": "${row.amount_in}"
+      },
+      "支出": {
+        "primitive": "const",
+        "value": "${row.amount_out}"
+      },
+      "余额": {
+        "primitive": "rolling_balance_of",
+        "params": {}
+      }
+    }
+  },
+  "primitives_imports": [
+    "fund.primitives.template_fill.const",
+    "fund.primitives.template_fill.date_range_start",
+    "fund.primitives.template_fill.date_range_end",
+    "fund.primitives.template_fill.format_amount",
+    "fund.primitives.base_queries.account_field",
+    "fund.primitives.base_queries.entity_field",
+    "fund.primitives.base_queries.opening_balance",
+    "fund.primitives.base_queries.closing_balance",
+    "fund.primitives.base_queries.rolling_balance_of",
+    "fund.primitives.base_queries.list_events",
+    "fund.primitives.aggregations.sum_field"
+  ]
+}

@@ -22,5 +22,12 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8000.*LISTENING"') d
 )
 
 cd backend
+
+REM Clear Python bytecode cache to prevent stale routes
+echo Clearing __pycache__...
+for /d /r %%d in (__pycache__) do (
+    if exist "%%d" rd /s /q "%%d" 2>nul
+)
+
 venv\Scripts\python.exe main.py
 pause

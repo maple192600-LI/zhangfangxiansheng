@@ -2,17 +2,22 @@
   <div class="section">
     <div class="top-bar">
       <button class="btn btn-primary" @click="showForm=true">+ 新建规则模板</button>
+      <button class="btn btn-danger" v-if="selectedIds.size" @click="doBatchDelete">
+        删除选中 ({{ selectedIds.size }})
+      </button>
     </div>
 
     <table v-if="templates.length">
       <thead>
         <tr>
+          <th style="width:36px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
           <th>规则名称</th><th>识别银行</th><th>文件格式</th><th>表头行</th><th>跳过行</th>
           <th>样本表头</th><th>映射字段数</th><th>状态</th><th>操作</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="t in templates" :key="t.id">
+        <tr v-for="t in templates" :key="t.id" :class="{ selected: selectedIds.has(t.id) }">
+          <td><input type="checkbox" :checked="selectedIds.has(t.id)" @change="toggleSelect(t.id)" /></td>
           <td><strong>{{ t.template_name }}</strong></td>
           <td>
             <div class="bank-tag" v-if="guessBank(t.template_name)">
@@ -35,6 +40,7 @@
               <button class="btn btn-secondary btn-sm" @click="viewDetail(t)">查看</button>
               <button class="btn btn-secondary btn-sm" v-if="t.status==='active'" @click="toggleStatus(t, 'disabled')">停用</button>
               <button class="btn btn-secondary btn-sm" v-else @click="toggleStatus(t, 'active')">启用</button>
+              <button class="btn btn-danger btn-sm" @click="doDelete(t)">删除</button>
             </div>
           </td>
         </tr>
@@ -121,13 +127,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/bank'
 
 const templates = ref([])
+const selectedIds = ref(new Set())
 const showDetail = ref(false)
 const showForm = ref(false)
 const detailData = ref({})
+
+const allSelected = computed(() => templates.value.length > 0 && selectedIds.value.size === templates.value.length)
 
 const form = ref({
   template_name: '',
@@ -144,7 +153,20 @@ async function loadTemplates() {
   } catch { /* ignore */ }
 }
 
-// 从规则名称中猜测对应的银行
+function toggleSelect(id) {
+  const s = new Set(selectedIds.value)
+  if (s.has(id)) s.delete(id); else s.add(id)
+  selectedIds.value = s
+}
+
+function toggleAll() {
+  if (allSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(templates.value.map(t => t.id))
+  }
+}
+
 const BANK_KEYWORDS = {
   '招商': '招商银行', '招行': '招商银行',
   '农业': '农业银行', '农行': '农业银行',
@@ -152,18 +174,12 @@ const BANK_KEYWORDS = {
   '建设': '建设银行', '建行': '建设银行',
   '中国银行': '中国银行', '中行': '中国银行',
   '交通': '交通银行', '交行': '交通银行',
-  '兴业': '兴业银行',
-  '广发': '广发银行',
-  '民生': '民生银行',
-  '浦发': '浦发银行',
-  '中信': '中信银行',
-  '光大': '光大银行',
-  '华夏': '华夏银行',
-  '邮储': '邮储银行',
-  '农商': '农商银行',
-  '信用社': '信用社',
-  '网商': '网商银行',
-  '微众': '微众银行',
+  '兴业': '兴业银行', '广发': '广发银行',
+  '民生': '民生银行', '浦发': '浦发银行',
+  '中信': '中信银行', '光大': '光大银行',
+  '华夏': '华夏银行', '邮储': '邮储银行',
+  '农商': '农商银行', '信用社': '信用社',
+  '网商': '网商银行', '微众': '微众银行',
   '平安': '平安银行',
 }
 
@@ -181,8 +197,28 @@ function viewDetail(t) {
 }
 
 async function toggleStatus(tpl, status) {
-  // 目前 template 没有 update API，这里通过后端预留
-  alert('模板状态切换功能将在后续版本实现')
+  try {
+    await api.updateParserTemplate(tpl.id, { status })
+    await loadTemplates()
+  } catch (e) { alert('操作失败: ' + e.message) }
+}
+
+async function doDelete(tpl) {
+  if (!confirm(`确定删除规则「${tpl.template_name}」？`)) return
+  try {
+    await api.deleteParserTemplate(tpl.id)
+    selectedIds.value = new Set([...selectedIds.value].filter(id => id !== tpl.id))
+    await loadTemplates()
+  } catch (e) { alert('删除失败: ' + e.message) }
+}
+
+async function doBatchDelete() {
+  if (!confirm(`确定删除选中的 ${selectedIds.value.size} 条规则？`)) return
+  try {
+    await api.batchDeleteParserTemplates([...selectedIds.value])
+    selectedIds.value = new Set()
+    await loadTemplates()
+  } catch (e) { alert('批量删除失败: ' + e.message) }
 }
 
 async function doCreate() {
@@ -213,7 +249,6 @@ onMounted(loadTemplates)
 <style scoped>
 @import './common.css';
 
-/* 页面特有样式 */
 .tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag-list .tag {
   padding: 2px 8px; font-size: var(--font-size-xs);
@@ -237,4 +272,13 @@ textarea.filter { font-family: inherit; resize: vertical; line-height: 1.6; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .field { background: #fff; border: 1px solid #e7e0d5; border-radius: var(--radius-sm); padding: 10px 12px; }
 .field .label { display: block; font-size: var(--font-size-xs); color: var(--muted); margin-bottom: 4px; }
+
+tr.selected { background: #fdf6ec; }
+
+.btn-danger {
+  background: #c0392b; color: #fff; border: 1px solid #a93226;
+  padding: 5px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px;
+}
+.btn-danger:hover { background: #e74c3c; }
+.btn-danger.btn-sm { padding: 3px 10px; font-size: 12px; }
 </style>

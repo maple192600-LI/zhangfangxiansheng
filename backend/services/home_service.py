@@ -20,7 +20,7 @@ def get_overview(db: Session) -> Dict:
     # 异常行数
     abnormal_count = (
         db.query(FundEvent)
-        .filter(FundEvent.parse_status == "abnormal")
+        .filter(FundEvent.state.in_(["待确认", "异常"]))
         .count()
     )
 
@@ -61,7 +61,7 @@ def get_overview(db: Session) -> Dict:
     total_batches = db.query(ImportBatch).count()
     committed_batches = db.query(ImportBatch).filter(ImportBatch.status == "committed").count()
     total_events = db.query(FundEvent).count()
-    normal_events = db.query(FundEvent).filter(FundEvent.parse_status == "normal").count()
+    normal_events = db.query(FundEvent).filter(FundEvent.state == "正常").count()
 
     return {
         "pending_tasks": pending_batches + abnormal_count,
@@ -95,17 +95,17 @@ def get_todos(db: Session) -> Dict:
     # 待确认：异常行
     abnormal_events = (
         db.query(FundEvent)
-        .filter(FundEvent.parse_status == "abnormal")
+        .filter(FundEvent.state.in_(["待确认", "异常"]))
         .all()
     )
     confirm_items = [
-        {"id": e.id, "summary": e.summary_text or "未填写摘要", "abnormal_code": e.abnormal_code}
+        {"id": e.id, "summary": e.summary or "未填写摘要", "abnormal_code": e.state}
         for e in abnormal_events[:20]
     ]
 
     # 待生成：检查基础数据表和日报
     to_generate = []
-    total_events = db.query(FundEvent).filter(FundEvent.parse_status == "normal").count()
+    total_events = db.query(FundEvent).filter(FundEvent.state == "正常").count()
     if total_events == 0:
         to_generate.append("基础数据表未生成")
     today_report = db.query(DailyReportRun).filter(DailyReportRun.status == "confirmed").first()
@@ -126,7 +126,7 @@ def get_todos(db: Session) -> Dict:
 
 def get_quick_links(db: Session) -> Dict:
     """快捷入口"""
-    abnormal_count = db.query(FundEvent).filter(FundEvent.parse_status == "abnormal").count()
+    abnormal_count = db.query(FundEvent).filter(FundEvent.state.in_(["待确认", "异常"])).count()
 
     links = [
         {"name": "进入工作台", "desc": "开始今天的导入、录入和维护", "route": "/bank-import", "icon": "💼"},
@@ -183,7 +183,7 @@ def get_system_status(db: Session) -> Dict:
         reminders.append({"type": "info", "message": "尚未创建过系统备份，建议定期备份"})
 
     # 异常提醒
-    abnormal_count = db.query(FundEvent).filter(FundEvent.parse_status == "abnormal").count()
+    abnormal_count = db.query(FundEvent).filter(FundEvent.state.in_(["待确认", "异常"])).count()
     if abnormal_count > 0:
         reminders.append({
             "type": "warn",

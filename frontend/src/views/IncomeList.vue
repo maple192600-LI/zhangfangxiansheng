@@ -17,26 +17,26 @@
         <div class="btn-row">
           <button class="btn btn-secondary" @click="doExport">导出</button>
           <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="page = 1; loadData()">查询</button>
+          <button class="btn btn-primary" @click="page = 1; loadData()">生成报表</button>
         </div>
       </div>
-      <table>
+      <div v-if="templateLoaded && !templateColumns && !templateExcelHtml" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h4>未配置报表模板</h4>
+        <p>请先在「系统设置 → 数据中心 → 报表模板管理」中上传收入明细表模板</p>
+      </div>
+      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+      <table v-else-if="templateColumns">
         <thead>
           <tr>
-            <th>日期</th><th>单位简称</th><th>账户名称</th><th>摘要</th><th>对方</th><th>收入金额</th><th>余额</th>
+            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in rows" :key="r.id">
-            <td>{{ r.business_date }}</td>
-            <td>{{ r.entity_name || '-' }}</td>
-            <td>{{ r.account_name || '-' }}</td>
-            <td>{{ r.summary_text }}</td>
-            <td>{{ r.counterparty_name || '-' }}</td>
-            <td class="money inc">{{ fmtAmt(r.amount) }}</td>
-            <td class="money balance">{{ fmtAmt(r.rolling_balance) }}</td>
+            <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
           </tr>
-          <tr v-if="!rows.length"><td colspan="7" style="text-align:center;color:var(--muted);padding:30px">暂无收入数据</td></tr>
+          <tr v-if="!rows.length"><td :colspan="templateColumns.length" class="empty-cell">暂无收入数据</td></tr>
         </tbody>
       </table>
     </div>
@@ -55,6 +55,7 @@ import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
+import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -65,6 +66,15 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const totalPages = ref(1)
+const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('income_list')
+
+const MONEY_KEYS = new Set(['amount', 'rolling_balance'])
+function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }
+function cellVal(r, key) {
+  if (MONEY_KEYS.has(key)) return fmtAmt(r[key])
+  if (r[key] === undefined || r[key] === null) return ''
+  return r[key]
+}
 
 async function loadData() {
   try {
@@ -91,6 +101,7 @@ async function doExport() {
 onMounted(async () => {
   try { entities.value = (await master.getAccountsTree()) || [] } catch (e) {}
   loadData()
+  loadTemplate()
 })
 </script>
 

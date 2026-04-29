@@ -1,0 +1,1 @@
+{"code":0,"message":"ok","data":{"ok":false,"error":"AI 返回格式异常，请重试或手动配置映射","error_code":"AI_JSON_PARSE_FAILED","error_category":"parse","hint":"建议改用手工映射","raw":""}}

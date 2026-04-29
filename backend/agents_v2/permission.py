@@ -21,6 +21,7 @@ DEFAULT_PERMISSION = {
         "python_exec",
         "skill_create", "skill_test",
         "db_insert_fund_event",
+        "db_save_parser_template",
     ],
     "allowed_paths": [
         "workspace",

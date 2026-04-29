@@ -1,13 +1,13 @@
 """主数据 API 路由
 
-板块 / 法人 / 账户 / 别名 — 共 14 个端点 + 批量导入。
-严格按 docs/30_contracts/23_api_contracts.md 实现。
+板块 / 法人 / 账户 / 别名 — CRUD + usage + 批量操作 + 批量导入。
 """
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from config import DATA_DIR
@@ -16,13 +16,19 @@ from database import get_db
 from db.schemas import (
     AccountCreate, AccountUpdate, AliasCreate,
     DivisionCreate, DivisionUpdate, EntityCreate, EntityUpdate,
-    InitialBalanceSet,
+    InitialBalanceSet, StatusToggle,
 )
 from services import master_data_service as svc
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class BatchAction(BaseModel):
+    ids: List[int]
+    action: str  # "enable" | "disable" | "delete"
+    cascade: bool = False  # 级联删除下属数据
 
 
 # ──────────────────────────────────────────
@@ -36,8 +42,9 @@ def get_divisions(
 ):
     items = svc.list_divisions(db, status=status)
     return success([{
-        "id": d.id, "name": d.name, "sort_order": d.sort_order,
-        "status": d.status, "created_at": d.created_at, "updated_at": d.updated_at,
+        "id": d.id, "division_code": d.division_code, "name": d.name,
+        "sort_order": d.sort_order, "status": d.status,
+        "created_at": d.created_at, "updated_at": d.updated_at,
     } for d in items])
 
 
@@ -48,8 +55,8 @@ def create_division(body: DivisionCreate, db: Session = Depends(get_db)):
     except ValueError as e:
         return error(2001, str(e))
     return success({
-        "id": obj.id, "name": obj.name, "sort_order": obj.sort_order,
-        "status": obj.status,
+        "id": obj.id, "division_code": obj.division_code, "name": obj.name,
+        "sort_order": obj.sort_order, "status": obj.status,
     })
 
 
@@ -62,9 +69,42 @@ def update_division(
     except ValueError as e:
         return error(2001, str(e))
     return success({
-        "id": obj.id, "name": obj.name, "sort_order": obj.sort_order,
-        "status": obj.status,
+        "id": obj.id, "division_code": obj.division_code, "name": obj.name,
+        "sort_order": obj.sort_order, "status": obj.status,
     })
+
+
+@router.put("/divisions/{division_id}/status")
+def toggle_division_status(
+    division_id: int, body: StatusToggle, db: Session = Depends(get_db),
+):
+    try:
+        obj = svc.toggle_division_status(db, division_id, body.status)
+    except ValueError as e:
+        return error(2001, str(e))
+    return success({"id": obj.id, "status": obj.status})
+
+
+@router.delete("/divisions/{division_id}")
+def delete_division(division_id: int, force: bool = Query(False), db: Session = Depends(get_db)):
+    try:
+        svc.delete_division(db, division_id, force=force)
+    except ValueError as e:
+        return error(2001, str(e))
+    return success(None, message="核算组织已删除")
+
+
+@router.get("/divisions/{division_id}/usage")
+def get_division_usage(division_id: int, db: Session = Depends(get_db)):
+    try:
+        return success(svc.get_division_usage(db, division_id))
+    except ValueError as e:
+        return error(2001, str(e))
+
+
+@router.post("/divisions/batch")
+def batch_divisions(body: BatchAction, db: Session = Depends(get_db)):
+    return success(svc.batch_action_divisions(db, body.ids, body.action, cascade=body.cascade))
 
 
 # ──────────────────────────────────────────
@@ -113,6 +153,39 @@ def update_entity(
     })
 
 
+@router.put("/entities/{entity_id}/status")
+def toggle_entity_status(
+    entity_id: int, body: StatusToggle, db: Session = Depends(get_db),
+):
+    try:
+        obj = svc.toggle_entity_status(db, entity_id, body.status)
+    except ValueError as e:
+        return error(2001, str(e))
+    return success({"id": obj.id, "status": obj.status})
+
+
+@router.delete("/entities/{entity_id}")
+def delete_entity(entity_id: int, db: Session = Depends(get_db)):
+    try:
+        svc.delete_entity(db, entity_id)
+    except ValueError as e:
+        return error(2001, str(e))
+    return success(None, message="单位已删除")
+
+
+@router.get("/entities/{entity_id}/usage")
+def get_entity_usage(entity_id: int, db: Session = Depends(get_db)):
+    try:
+        return success(svc.get_entity_usage(db, entity_id))
+    except ValueError as e:
+        return error(2001, str(e))
+
+
+@router.post("/entities/batch")
+def batch_entities(body: BatchAction, db: Session = Depends(get_db)):
+    return success(svc.batch_action_entities(db, body.ids, body.action, cascade=body.cascade))
+
+
 # ──────────────────────────────────────────
 # 账户
 # ──────────────────────────────────────────
@@ -133,7 +206,16 @@ def get_accounts(
         account_type=account_type, instrument_type=instrument_type,
         page=page, page_size=page_size,
     )
-    return success(result.model_dump())
+    data = result.model_dump()
+    # 附加列元数据（来自用户上次导入的模板列名）
+    data["columns"] = svc.load_column_meta()
+    return success(data)
+
+
+@router.get("/accounts/columns")
+def get_account_columns():
+    """获取当前账户列元数据（基于用户上次导入的模板）"""
+    return success(svc.load_column_meta())
 
 
 @router.get("/accounts/tree")
@@ -180,6 +262,15 @@ def set_initial_balance(
         "id": obj.id, "initial_balance": float(obj.initial_balance),
         "balance_date": obj.balance_date.isoformat(),
     })
+
+
+# ──────────────────────────────────────────
+# 别名
+# ──────────────────────────────────────────
+
+@router.post("/accounts/batch")
+def batch_accounts(body: BatchAction, db: Session = Depends(get_db)):
+    return success(svc.batch_action_accounts(db, body.ids, body.action))
 
 
 # ──────────────────────────────────────────

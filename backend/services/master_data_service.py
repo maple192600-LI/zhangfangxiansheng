@@ -2,7 +2,11 @@
 
 板块 / 法人 / 账户 / 别名 的全部业务逻辑。
 """
+import json
+import logging
 import math
+import os
+import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +22,37 @@ from db.schemas import (
     EntityUpdate, InitialBalanceSet, PaginatedData,
 )
 from core.parser_engine import read_file_from_bytes, detect_format
+
+logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────
+# 自动编码配置与生成
+# ──────────────────────────────────────────
+CODE_CONFIG = {
+    "division": {"prefix": "HZ", "digits": 4, "field": "division_code"},
+    "entity":   {"prefix": "DW", "digits": 4, "field": "entity_code"},
+    "bank":     {"prefix": "YH", "digits": 4, "field": "bank_code"},
+    "account":  {"prefix": "ZH", "digits": 4, "field": "account_code"},
+}
+
+
+def _next_code(db: Session, model_class, code_field: str, prefix: str, digits: int) -> str:
+    """查询当前最大编号，返回 prefix + 递增序号。允许断码（跳过已删除的）。"""
+    pattern = f"{prefix}%"
+    # 查找所有匹配前缀的编码，取最大序号
+    rows = db.query(getattr(model_class, code_field)).filter(
+        getattr(model_class, code_field).like(pattern)
+    ).all()
+    max_seq = 0
+    for (code,) in rows:
+        num_part = code[len(prefix):]
+        if num_part.isdigit():
+            seq = int(num_part)
+            if seq > max_seq:
+                max_seq = seq
+    next_seq = max_seq + 1
+    return f"{prefix}{str(next_seq).zfill(digits)}"
 
 
 # ──────────────────────────────────────────
@@ -35,7 +70,15 @@ def create_division(db: Session, data: DivisionCreate) -> Division:
     existing = db.query(Division).filter(Division.name == data.name).first()
     if existing:
         raise ValueError(f"板块名称已存在: {data.name}")
-    obj = Division(**data.model_dump())
+    cfg = CODE_CONFIG["division"]
+    code = data.division_code or _next_code(db, Division, cfg["field"], cfg["prefix"], cfg["digits"])
+    dump = data.model_dump()
+    dump["division_code"] = code
+    if "division_code" in dump and dump.get("division_code"):
+        dup = db.query(Division).filter(Division.division_code == dump["division_code"]).first()
+        if dup:
+            raise ValueError(f"核算组织编码已存在: {dump['division_code']}")
+    obj = Division(**dump)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -58,6 +101,50 @@ def update_division(db: Session, division_id: int, data: DivisionUpdate) -> Divi
     db.commit()
     db.refresh(obj)
     return obj
+
+
+def toggle_division_status(db: Session, division_id: int, status: str) -> Division:
+    obj = db.query(Division).filter(Division.id == division_id).first()
+    if not obj:
+        raise ValueError("板块不存在")
+    obj.status = status
+    obj.updated_at = datetime.now()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def get_division_usage(db: Session, division_id: int) -> Dict[str, Any]:
+    """查询核算组织下关联的单位列表"""
+    obj = db.query(Division).filter(Division.id == division_id).first()
+    if not obj:
+        raise ValueError("板块不存在")
+    units = db.query(Entity).filter(Entity.division_id == division_id).all()
+    return {
+        "unit_count": len(units),
+        "units": [{"id": u.id, "entity_code": u.entity_code, "name": u.name, "short_name": u.short_name} for u in units],
+    }
+
+
+def delete_division(db: Session, division_id: int, force: bool = False, cascade: bool = False) -> None:
+    """删除核算组织。cascade=True 时同时删除下属单位及其账户；force=True 仅解除关联。"""
+    obj = db.query(Division).filter(Division.id == division_id).first()
+    if not obj:
+        raise ValueError("板块不存在")
+    linked_entities = db.query(Entity).filter(Entity.division_id == division_id).all()
+    if linked_entities and not force and not cascade:
+        raise ValueError(f"该核算组织下存在 {len(linked_entities)} 个单位，请先确认后再删除")
+    if cascade:
+        # 级联删除：先删下属单位的账户，再删单位（用 SQL 避免触发 FundEvent relationship）
+        ent_ids = [ent.id for ent in linked_entities]
+        if ent_ids:
+            db.execute(Account.__table__.delete().where(Account.entity_id.in_(ent_ids)))
+            db.execute(Entity.__table__.delete().where(Entity.id.in_(ent_ids)))
+    else:
+        # force 模式：仅解除关联
+        db.query(Entity).filter(Entity.division_id == division_id).update({"division_id": None})
+    db.execute(Division.__table__.delete().where(Division.id == division_id))
+    db.commit()
 
 
 # ──────────────────────────────────────────
@@ -88,8 +175,14 @@ def list_entities(
         .limit(page_size)
         .all()
     )
+    # 批量查 division_name
+    div_ids = list({e.division_id for e in items if e.division_id})
+    div_map = {}
+    if div_ids:
+        for d in db.query(Division).filter(Division.id.in_(div_ids)).all():
+            div_map[d.id] = d.name
     return PaginatedData(
-        items=[_entity_to_dict(e) for e in items],
+        items=[_entity_to_dict(e, division_name=div_map.get(e.division_id)) for e in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -98,10 +191,15 @@ def list_entities(
 
 
 def create_entity(db: Session, data: EntityCreate) -> Entity:
-    existing = db.query(Entity).filter(Entity.entity_code == data.entity_code).first()
+    cfg = CODE_CONFIG["entity"]
+    code = data.entity_code or _next_code(db, Entity, cfg["field"], cfg["prefix"], cfg["digits"])
+    # 唯一性校验
+    existing = db.query(Entity).filter(Entity.entity_code == code).first()
     if existing:
-        raise ValueError(f"单位编码已存在: {data.entity_code}")
-    obj = Entity(**data.model_dump())
+        raise ValueError(f"单位编码已存在: {code}")
+    dump = data.model_dump()
+    dump["entity_code"] = code
+    obj = Entity(**dump)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -118,6 +216,45 @@ def update_entity(db: Session, entity_id: int, data: EntityUpdate) -> Entity:
     db.commit()
     db.refresh(obj)
     return obj
+
+
+def toggle_entity_status(db: Session, entity_id: int, status: str) -> Entity:
+    obj = db.query(Entity).filter(Entity.id == entity_id).first()
+    if not obj:
+        raise ValueError("单位不存在")
+    obj.status = status
+    obj.updated_at = datetime.now()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def get_entity_usage(db: Session, entity_id: int) -> Dict[str, Any]:
+    """查询单位下关联的账户列表"""
+    obj = db.query(Entity).filter(Entity.id == entity_id).first()
+    if not obj:
+        raise ValueError("单位不存在")
+    accounts = db.query(Account).filter(Account.entity_id == entity_id).all()
+    return {
+        "account_count": len(accounts),
+        "accounts": [{"id": a.id, "account_code": a.account_code, "account_alias": a.account_alias, "account_type": a.account_type} for a in accounts],
+    }
+
+
+def delete_entity(db: Session, entity_id: int, cascade: bool = False) -> None:
+    """删除单位。cascade=True 时同时删除关联账户。"""
+    obj = db.query(Entity).filter(Entity.id == entity_id).first()
+    if not obj:
+        raise ValueError("单位不存在")
+    linked_accounts = db.query(Account).filter(Account.entity_id == entity_id).all()
+    if linked_accounts and not cascade:
+        codes = ", ".join(a.account_code for a in linked_accounts[:5])
+        raise ValueError(f"该单位下存在 {len(linked_accounts)} 个账户（{codes}），请先删除账户或使用级联删除")
+    # 级联：先删除关联账户（用 SQL 避免触发 FundEvent relationship）
+    for acc in linked_accounts:
+        db.execute(Account.__table__.delete().where(Account.id == acc.id))
+    db.execute(Entity.__table__.delete().where(Entity.id == entity_id))
+    db.commit()
 
 
 # ──────────────────────────────────────────
@@ -208,10 +345,17 @@ def get_accounts_tree(db: Session) -> List[EntityTreeGroup]:
 
 
 def create_account(db: Session, data: AccountCreate) -> Account:
-    existing = db.query(Account).filter(Account.account_code == data.account_code).first()
+    cfg = CODE_CONFIG["account"]
+    code = data.account_code or _next_code(db, Account, cfg["field"], cfg["prefix"], cfg["digits"])
+    existing = db.query(Account).filter(Account.account_code == code).first()
     if existing:
-        raise ValueError(f"账户编码已存在: {data.account_code}")
-    obj = Account(**data.model_dump())
+        raise ValueError(f"账户编码已存在: {code}")
+    dump = data.model_dump()
+    dump["account_code"] = code
+    # 自动填充 account_alias
+    if not dump.get("account_alias"):
+        dump["account_alias"] = dump.get("account_type", code)
+    obj = Account(**dump)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -238,7 +382,7 @@ def set_initial_balance(
         raise ValueError("账户不存在")
     event_count = (
         db.query(FundEvent)
-        .filter(FundEvent.account_id == account_id)
+        .filter(FundEvent.account_code == obj.account_code)
         .count()
     )
     if event_count > 0:
@@ -291,12 +435,14 @@ def delete_alias(db: Session, account_id: int, alias_id: int) -> None:
 # 内部辅助
 # ──────────────────────────────────────────
 
-def _entity_to_dict(e: Entity) -> Dict[str, Any]:
+def _entity_to_dict(e: Entity, division_name: str = None) -> Dict[str, Any]:
     return {
         "id": e.id,
         "division_id": e.division_id,
+        "division_name": division_name,
         "entity_code": e.entity_code,
         "name": e.name,
+        "full_name": e.name,
         "short_name": e.short_name,
         "status": e.status,
         "created_at": e.created_at,
@@ -305,58 +451,315 @@ def _entity_to_dict(e: Entity) -> Dict[str, Any]:
 
 
 def _account_to_dict(a: Account) -> Dict[str, Any]:
+    div_name = None
+    div_code = None
+    ent_code = None
+    ent_full_name = None
+    if a.entity:
+        ent_code = a.entity.entity_code
+        ent_full_name = a.entity.name
+        if a.entity.division:
+            div_name = a.entity.division.name
+            div_code = a.entity.division.division_code
     return {
         "id": a.id,
         "entity_id": a.entity_id,
+        "bank_id": a.bank_id,
+        "division_name": div_name,
+        "division_code": div_code,
+        "entity_code": ent_code,
+        "entity_full_name": ent_full_name,
+        "entity_name": a.entity.short_name if a.entity else None,
         "account_code": a.account_code,
         "account_alias": a.account_alias,
         "bank_name": a.bank_name,
         "branch_name": a.branch_name,
         "account_number": a.account_number,
+        "account_last_four": a.account_last_four,
         "account_type": a.account_type,
         "instrument_type": a.instrument_type,
         "input_method": a.input_method,
+        "has_online_banking": a.has_online_banking if a.has_online_banking is not None else False,
+        "include_in_daily_report": a.include_in_daily_report if a.include_in_daily_report is not None else True,
+        "allow_manual_entry": a.allow_manual_entry if a.allow_manual_entry is not None else True,
         "currency": a.currency,
         "initial_balance": float(a.initial_balance) if a.initial_balance else 0,
         "balance_date": a.balance_date,
         "status": a.status,
         "notes": a.notes,
-        "entity_name": a.entity.short_name if a.entity else None,
+        "bank_short_name": a.bank.short_name if a.bank else None,
         "created_at": a.created_at,
         "updated_at": a.updated_at,
     }
 
 
 # ──────────────────────────────────────────
+# 批量操作
+# ──────────────────────────────────────────
+
+def batch_action_divisions(db: Session, ids: List[int], action: str, cascade: bool = False) -> Dict[str, Any]:
+    success, failed = 0, []
+    for did in ids:
+        try:
+            if action == "delete":
+                delete_division(db, did, cascade=cascade)
+            elif action in ("enable", "disable"):
+                toggle_division_status(db, did, "enabled" if action == "enable" else "disabled")
+            else:
+                raise ValueError(f"不支持的操作: {action}")
+            success += 1
+        except ValueError as e:
+            failed.append({"id": did, "message": str(e)})
+        except Exception as e:
+            db.rollback()
+            failed.append({"id": did, "message": str(e)})
+    return {"success": success, "failed": failed}
+
+
+def batch_action_entities(db: Session, ids: List[int], action: str, cascade: bool = False) -> Dict[str, Any]:
+    success, failed = 0, []
+    for eid in ids:
+        try:
+            if action == "delete":
+                delete_entity(db, eid, cascade=cascade)
+            elif action in ("enable", "disable"):
+                toggle_entity_status(db, eid, "enabled" if action == "enable" else "disabled")
+            else:
+                raise ValueError(f"不支持的操作: {action}")
+            success += 1
+        except ValueError as e:
+            failed.append({"id": eid, "message": str(e)})
+        except Exception as e:
+            db.rollback()
+            failed.append({"id": eid, "message": str(e)})
+    return {"success": success, "failed": failed}
+
+
+def batch_action_accounts(db: Session, ids: List[int], action: str) -> Dict[str, Any]:
+    success, failed = 0, []
+    for aid in ids:
+        try:
+            acc = db.query(Account).filter(Account.id == aid).first()
+            if not acc:
+                raise ValueError("账户不存在")
+            if action in ("enable", "disable"):
+                acc.status = "enabled" if action == "enable" else "disabled"
+                acc.updated_at = datetime.now()
+                db.commit()
+                success += 1
+            elif action == "delete":
+                # 用原始 SQL 检查是否有关联的资金流水（避免 ORM 模型列名不匹配问题）
+                try:
+                    from sqlalchemy import text as _sql_text
+                    result = db.execute(
+                        _sql_text("SELECT COUNT(*) FROM fund_events WHERE account_id = :aid OR account_code = :acode"),
+                        {"aid": acc.id, "acode": acc.account_code}
+                    )
+                    ref = result.scalar()
+                    if ref and ref > 0:
+                        raise ValueError(f"账户 {acc.account_code} 有 {ref} 条关联资金流水，无法删除")
+                except ValueError:
+                    raise
+                except Exception:
+                    pass  # 表可能不存在或无此列，跳过检查
+                # 用原始 SQL 删除，避免 ORM 的 fund_events relationship 触发加载不匹配的列
+                db.execute(Account.__table__.delete().where(Account.id == acc.id))
+                db.commit()
+                success += 1
+            else:
+                raise ValueError(f"不支持的操作: {action}")
+        except ValueError as e:
+            failed.append({"id": aid, "message": str(e)})
+        except Exception as e:
+            db.rollback()
+            failed.append({"id": aid, "message": str(e)})
+
+    # 删除操作后自动清理孤立数据（无账户的空单位、无单位的空核算组织）
+    if action == "delete" and success > 0:
+        _cleanup_orphans(db)
+
+    return {"success": success, "failed": failed}
+
+
+def _cleanup_orphans(db: Session) -> None:
+    """清理孤立数据：删除没有关联账户的空单位，以及没有关联单位的空核算组织。"""
+    # 1. 找出有账户的单位 ID
+    entity_ids_with_accounts = set(
+        eid for (eid,) in
+        db.query(Account.entity_id).filter(Account.entity_id.isnot(None)).distinct().all()
+    )
+
+    # 2. 找出没有账户的单位并删除
+    if entity_ids_with_accounts:
+        orphan_entities = db.query(Entity).filter(~Entity.id.in_(entity_ids_with_accounts)).all()
+    else:
+        orphan_entities = db.query(Entity).all()
+
+    if orphan_entities:
+        ent_ids = [e.id for e in orphan_entities]
+        db.execute(Entity.__table__.delete().where(Entity.id.in_(ent_ids)))
+
+    # 3. 找出有单位的核算组织 ID
+    division_ids_with_entities = set(
+        did for (did,) in
+        db.query(Entity.division_id).filter(Entity.division_id.isnot(None)).distinct().all()
+    )
+
+    # 4. 找出没有单位的核算组织并删除
+    if division_ids_with_entities:
+        orphan_divisions = db.query(Division).filter(~Division.id.in_(division_ids_with_entities)).all()
+    else:
+        orphan_divisions = db.query(Division).all()
+
+    if orphan_divisions:
+        div_ids = [d.id for d in orphan_divisions]
+        db.execute(Division.__table__.delete().where(Division.id.in_(div_ids)))
+
+    # 5. 如果所有账户都被删除了，清除 column_meta.json 缓存
+    remaining = db.query(Account).count()
+    if remaining == 0:
+        _clear_column_meta()
+
+    db.commit()
+
+
+# ──────────────────────────────────────────
 # 批量导入
 # ──────────────────────────────────────────
 
-# 新模板列顺序（与用户提供的 Excel 模板一致）:
-# 核算组织, 单位名称, 单位简称, 单位编码, 开户银行, 银行账号, 开户行名称,
-# 账户编号, 账户后四位, 账户类型, 资金类型, 是否网银, 录入方式, 币种,
-# 期初余额, 余额日期, 是否纳入日报, 是否允许手工录入, 状态, 备注
+# 字段别名映射：一个逻辑字段可以对应多个 Excel 列名
+# key = 内部逻辑字段名, value = 可能出现在 Excel 表头的列名列表
+FIELD_ALIASES = {
+    "division_name":   ["核算组织", "板块名称", "板块", "核算组织名称"],
+    "entity_name":     ["单位名称", "法人全称", "法人名称", "单位全称"],
+    "entity_short":    ["单位简称", "法人简称", "简称"],
+    "entity_code":     ["单位编码", "法人编码", "单位编号"],
+    "bank_name":       ["开户银行", "银行", "银行名称"],
+    "account_number":  ["银行账号", "账号", "银行账号/卡号"],
+    "branch_name":     ["银行账户", "开户行名称", "开户网点", "账户名称", "开户行", "网点名称", "开户行网点"],
+    "account_code":    ["账户编号", "账户编码", "账户代码"],
+    "last_four":       ["账户后四位", "后四位"],
+    "account_type":    ["账户类型"],
+    "instrument_type": ["资金类型", "工具类型", "资金性质"],
+    "has_online":      ["是否网银", "网银"],
+    "input_method":    ["录入方式"],
+    "currency":        ["币种"],
+    "initial_balance": ["期初余额", "余额"],
+    "balance_date":    ["余额日期", "日期"],
+    "in_report":       ["是否纳入日报", "纳入日报"],
+    "allow_manual":    ["是否允许手工录入", "允许手工录入", "是否允许手工"],
+    "status":          ["状态"],
+    "notes":           ["备注", "说明"],
+}
 
-# 旧模板列顺序（兼容旧文件）:
-# 板块名称, 法人编码, 法人全称, 法人简称, 账户编码, 账户名称,
-# 开户银行, 开户网点, 银行账号, 账户类型, 工具类型, 录入方式, 币种,
-# 期初余额, 余额日期, 备注
+# 导入字段名 → API 返回字段名 的映射
+FIELD_TO_API = {
+    "division_name": "division_name",
+    "entity_name": "entity_full_name",
+    "entity_short": "entity_name",
+    "entity_code": "entity_code",
+    "bank_name": "bank_name",
+    "account_number": "account_number",
+    "branch_name": "branch_name",
+    "account_code": "account_code",
+    "last_four": "account_last_four",
+    "account_type": "account_type",
+    "instrument_type": "instrument_type",
+    "has_online": "has_online_banking",
+    "input_method": "input_method",
+    "currency": "currency",
+    "initial_balance": "initial_balance",
+    "balance_date": "balance_date",
+    "in_report": "include_in_daily_report",
+    "allow_manual": "allow_manual_entry",
+    "status": "status",
+    "notes": "notes",
+}
 
-def _detect_template_version(header_row) -> str:
-    """根据表头判断模板版本"""
-    if not header_row:
-        return "unknown"
-    first_val = str(header_row[0] or "").strip()
-    # 新模板第一列是"核算组织"
-    if first_val == "核算组织":
-        return "v2"
-    # 旧模板第一列是"板块名称"
-    if first_val in ("板块名称", "板块"):
-        return "v1"
-    # 按列数判断：20列=new, 16列=old
-    non_empty = sum(1 for c in header_row if c and str(c).strip())
-    if non_empty >= 18:
-        return "v2"
-    return "v1"
+# 渲染类型（前端根据 type 决定如何渲染单元格）
+FIELD_RENDER_TYPES = {
+    "division_name": "text",
+    "entity_name": "text",
+    "entity_short": "text",
+    "entity_code": "text",
+    "bank_name": "text",
+    "account_number": "text",
+    "branch_name": "text",
+    "account_code": "code",
+    "last_four": "text",
+    "account_type": "tag",
+    "instrument_type": "tag",
+    "has_online": "bool",
+    "input_method": "input_method",
+    "currency": "text",
+    "initial_balance": "money",
+    "balance_date": "text",
+    "in_report": "bool",
+    "allow_manual": "bool",
+    "status": "status",
+    "notes": "text",
+}
+
+
+def _column_meta_path() -> str:
+    """列元数据文件路径"""
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "column_meta.json")
+
+
+def _clear_column_meta() -> None:
+    """删除列元数据缓存文件"""
+    path = _column_meta_path()
+    if os.path.isfile(path):
+        os.remove(path)
+
+
+def save_column_meta(matched_columns: Dict[str, str]) -> None:
+    """导入后保存列元数据：{api_field_key: {label, type}}"""
+    columns = []
+    for field_key, user_label in matched_columns.items():
+        api_key = FIELD_TO_API.get(field_key)
+        if not api_key:
+            continue
+        render_type = FIELD_RENDER_TYPES.get(field_key, "text")
+        columns.append({"key": api_key, "label": user_label, "type": render_type})
+    path = _column_meta_path()
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"columns": columns}, f, ensure_ascii=False, indent=2)
+
+
+def load_column_meta() -> List[Dict[str, str]]:
+    """读取已保存的列元数据，返回 [{key, label, type}, ...]"""
+    path = _column_meta_path()
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("columns", [])
+    except Exception:
+        return []
+
+
+def _build_column_map(header_row) -> Dict[str, int]:
+    """根据表头行动态构建 字段名→列索引 的映射。
+
+    遍历表头每个单元格，尝试匹配 FIELD_ALIASES 中的列名。
+    返回 {内部字段名: 列索引(0-based)} 字典。
+    """
+    col_map: Dict[str, int] = {}
+    for col_idx, cell in enumerate(header_row):
+        if not cell:
+            continue
+        header = str(cell).strip()
+        if not header:
+            continue
+        for field_name, aliases in FIELD_ALIASES.items():
+            if field_name in col_map:
+                continue  # 已匹配，不覆盖
+            if header in aliases:
+                col_map[field_name] = col_idx
+                break
+    return col_map
 
 
 def _parse_bool(val) -> bool:
@@ -400,15 +803,30 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
     if len(rows) < 2:
         raise ValueError("文件内容为空")
 
-    # 检测模板版本
-    version = _detect_template_version(rows[0])
+    # ── 动态表头映射：根据第一行表头自动识别列位置 ──
+    header_row = rows[0]
+    col_map = _build_column_map(header_row)
+
+    # 检查是否识别到足够的列
+    if not col_map:
+        raise ValueError("无法识别表头，请确保第一行包含列名（如：核算组织、单位名称、银行账号 等）")
+
+    # 辅助函数：安全取值
+    def _get(row_vals, field_name: str, default: str = "") -> str:
+        idx = col_map.get(field_name)
+        if idx is None or idx >= len(row_vals):
+            return default
+        v = row_vals[idx]
+        if v is None:
+            return default
+        return str(v).strip()
 
     # 跳过表头行
     data_rows = rows[1:]
     # 跳过提示行（如果第2行包含"必填"/"怎么理解"等说明文字）
     if data_rows and data_rows[0]:
         first_cell = str(data_rows[0][0] or "").strip()
-        if first_cell and ("必填" in first_cell or "怎么理解" in first_cell or "填写" in first_cell):
+        if first_cell and ("必填" in first_cell or "怎么理解" in first_cell or "字段名" in first_cell):
             data_rows = data_rows[1:]
 
     created_divisions = 0
@@ -432,71 +850,51 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
         row_no = ri + 2
         vals = [str(c).strip() if c and str(c).strip() else "" for c in row]
 
-        if version == "v2":
-            # 新模板：20列
-            while len(vals) < 20:
-                vals.append("")
-            div_name   = vals[0]   # 核算组织
-            ent_name   = vals[1]   # 单位名称
-            ent_short  = vals[2]   # 单位简称
-            ent_code   = vals[3]   # 单位编码
-            bank_name  = vals[4]   # 开户银行
-            acc_number = vals[5]   # 银行账号
-            branch     = vals[6]   # 开户行名称
-            acc_code   = vals[7]   # 账户编号
-            last_four  = vals[8]   # 账户后四位
-            acc_type   = vals[9]   # 账户类型
-            inst_type  = vals[10]  # 资金类型
-            has_online = vals[11]  # 是否网银
-            input_meth = vals[12]  # 录入方式
-            currency   = vals[13]  # 币种
-            balance_str = vals[14] # 期初余额
-            date_str   = vals[15]  # 余额日期
-            in_report  = vals[16]  # 是否纳入日报
-            allow_man  = vals[17]  # 是否允许手工录入
-            status_str = vals[18]  # 状态
-            notes      = vals[19]  # 备注
-        else:
-            # 旧模板：16列（兼容）
-            while len(vals) < 16:
-                vals.append("")
-            div_name   = vals[0]   # 板块名称
-            ent_code   = vals[1]   # 法人编码
-            ent_name   = vals[2]   # 法人全称
-            ent_short  = vals[3]   # 法人简称
-            acc_code   = vals[4]   # 账户编码
-            _acc_alias = vals[5]   # 账户名称
-            bank_name  = vals[6]   # 开户银行
-            branch     = vals[7]   # 开户网点
-            acc_number = vals[8]   # 银行账号
-            acc_type   = vals[9]   # 账户类型
-            inst_type  = vals[10]  # 工具类型
-            input_meth = vals[11]  # 录入方式
-            currency   = vals[12]  # 币种
-            balance_str = vals[13] # 期初余额
-            date_str   = vals[14]  # 余额日期
-            notes      = vals[15]  # 备注
-            last_four  = ""
-            has_online = ""
-            in_report  = ""
-            allow_man  = ""
-            status_str = ""
+        # 通过动态映射取值
+        div_name    = _get(vals, "division_name")
+        ent_name    = _get(vals, "entity_name")
+        ent_short   = _get(vals, "entity_short")
+        ent_code    = _get(vals, "entity_code")
+        bank_name   = _get(vals, "bank_name")
+        acc_number  = _get(vals, "account_number")
+        branch_name = _get(vals, "branch_name")
+        acc_code    = _get(vals, "account_code")
+        last_four   = _get(vals, "last_four")
+        acc_type    = _get(vals, "account_type")
+        inst_type   = _get(vals, "instrument_type")
+        has_online  = _get(vals, "has_online")
+        input_meth  = _get(vals, "input_method")
+        currency    = _get(vals, "currency")
+        balance_str = _get(vals, "initial_balance")
+        date_str    = _get(vals, "balance_date")
+        in_report   = _get(vals, "in_report")
+        allow_man   = _get(vals, "allow_manual")
+        status_str  = _get(vals, "status")
+        notes       = _get(vals, "notes")
 
         # 跳过空行
-        if not acc_code and not ent_code and not div_name:
+        if not acc_code and not ent_code and not div_name and not acc_number and not ent_name:
             continue
 
-        # 必填校验
+        # 自动生成账户编号（ZH0001）如果没填
         if not acc_code:
-            errors.append(f"第{row_no}行: 缺少账户编号")
-            continue
+            acc_cfg = CODE_CONFIG["account"]
+            acc_code = _next_code(db, Account, acc_cfg["field"], acc_cfg["prefix"], acc_cfg["digits"])
+
+        # 单位编码也支持自动生成
+        if not ent_code and ent_name:
+            ent_cfg = CODE_CONFIG["entity"]
+            ent_code = _next_code(db, Entity, ent_cfg["field"], ent_cfg["prefix"], ent_cfg["digits"])
+
         if not ent_code:
-            errors.append(f"第{row_no}行: 缺少单位编码")
+            errors.append(f"第{row_no}行: 缺少单位编码且无法自动生成")
             continue
 
         # 自动创建核算组织（板块）
         if div_name and div_name not in division_cache:
-            div = Division(name=div_name, sort_order=len(division_cache), status="enabled")
+            div_cfg = CODE_CONFIG["division"]
+            div_code = _next_code(db, Division, div_cfg["field"], div_cfg["prefix"], div_cfg["digits"])
+            div = Division(division_code=div_code, name=div_name, sort_order=len(division_cache), status="enabled")
             db.add(div)
             db.flush()
             division_cache[div_name] = div.id
@@ -504,9 +902,12 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
 
         # 自动创建单位（法人）
         if ent_code not in entity_cache:
-            if not ent_name or not ent_short:
-                errors.append(f"第{row_no}行: 新单位缺少名称或简称")
+            if not ent_name:
+                errors.append(f"第{row_no}行: 新单位缺少名称")
                 continue
+            # 自动生成简称：取名称前2-4个字
+            if not ent_short:
+                ent_short = ent_name[:4] if len(ent_name) > 4 else ent_name
             div_id = division_cache.get(div_name) if div_name else None
             ent = Entity(
                 division_id=div_id,
@@ -533,8 +934,8 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
             except ValueError:
                 init_balance = 0.0
 
-        # 解析日期
-        balance_date = None
+        # 解析日期（balance_date 是 NOT NULL，没填则默认今天）
+        balance_date = date.today()
         if date_str:
             from core.parser_engine import normalize_date
             ds = normalize_date(date_str)
@@ -549,9 +950,9 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
         acc = Account(
             entity_id=entity_cache[ent_code],
             account_code=acc_code,
-            account_alias=acc_type or acc_code,
+            account_alias=branch_name or acc_type or acc_code,
             bank_name=bank_name or None,
-            branch_name=branch or None,
+            branch_name=branch_name or None,
             account_number=acc_number or None,
             account_last_four=parsed_last_four or None,
             account_type=acc_type or "其他账户",
@@ -573,6 +974,12 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
 
     db.commit()
 
+    # 将列映射信息附加到返回结果，便于调试
+    matched_headers = {k: header_row[v] if v < len(header_row) else "?" for k, v in col_map.items()}
+
+    # 保存列元数据（用户模板的列名 → 前端显示用）
+    save_column_meta(matched_headers)
+
     return {
         "total_rows": len(data_rows),
         "created_divisions": created_divisions,
@@ -580,4 +987,5 @@ def batch_import_accounts(db: Session, file_data: bytes, filename: str) -> Dict[
         "created_accounts": created_accounts,
         "errors": errors[:20],
         "error_count": len(errors),
+        "matched_columns": matched_headers,
     }

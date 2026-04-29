@@ -1,0 +1,40 @@
+# .pre-commit-config.yaml · v3 Layer-2 guards
+# 详见 docs/00_governance/08_anti_drift.md §4。
+# 任一 guard exit ≠ 0 → 阻断提交。
+repos:
+  - repo: local
+    hooks:
+      - id: guard-contract-hash
+        name: "§ChangeFlow · 宪法 SHA256 锁（check_contract_hash）"
+        entry: python tools/guards/check_contract_hash.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-canonical-schema
+        name: "§C1 · fund_events 12 列锁（check_canonical_schema）"
+        entry: python tools/guards/check_canonical_schema.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-primitives-whitelist
+        name: "§C5 · 基元库白名单 AST 扫描（check_primitives_whitelist）"
+        entry: python tools/guards/check_primitives_whitelist.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-placeholder-binding
+        name: "§C2 · 18 占位符绑定锁（check_placeholder_binding）"
+        entry: python tools/guards/check_placeholder_binding.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-api-inventory
+        name: "§C7 · API ≤ 42 端点（check_api_inventory）"
+        entry: python tools/guards/check_api_inventory.py
+        language: system
+        pass_filenames: false
+        always_run: true

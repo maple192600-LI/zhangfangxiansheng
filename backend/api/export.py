@@ -22,17 +22,26 @@ class ExportRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     entity_id: Optional[int] = None
+    year: Optional[int] = None
+    month: Optional[int] = None
+
+
+VALID_EXPORT_TYPES = [
+    "base_data", "daily_report", "cash_journal", "account_balance",
+    "income_list", "expense_list", "major_balance", "month_check",
+    "week_report", "month_report", "year_report",
+]
 
 
 @router.post("/report")
 def export_report(req: ExportRequest, db: Session = Depends(get_db)):
-    valid_types = ["base_data", "daily_report", "cash_journal", "account_balance", "income_list", "expense_list"]
-    if req.export_type not in valid_types:
+    if req.export_type not in VALID_EXPORT_TYPES:
         return error(1001, f"不支持的导出类型: {req.export_type}")
 
     try:
         filepath = svc.generate_export(
-            db, req.export_type, req.start_date, req.end_date, req.entity_id
+            db, req.export_type, req.start_date, req.end_date,
+            req.entity_id, req.year, req.month,
         )
         log_service.write_log(db, action="export_excel", module="export", detail={
             "export_type": req.export_type,

@@ -89,6 +89,60 @@ def db_insert_fund_event(
         return {"ok": False, "error": str(e)}
 
 
+@register_tool(read_only=False)
+def db_save_parser_template(
+    template_name: str,
+    file_format: str = "xlsx",
+    header_row: int = 0,
+    skip_rows: int = 0,
+    sample_headers: str = "[]",
+    mapping_json: str = "{}",
+    ctx: ToolContext = None,
+) -> dict:
+    """保存银行流水解析规则模板到规则中心。template_name 规则名称（如"中国银行流水规则"），file_format 文件格式(xlsx/xls/csv)，header_row 表头所在行号(0起)，skip_rows 数据跳过行数，sample_headers 样本表头JSON数组字符串，mapping_json 列映射JSON字符串（银行列名→标准字段）。标准字段包括: business_date(交易日期), business_time(交易时间), income_amount(收入金额), expense_amount(支出金额), balance(余额), counterparty_name(对方户名), summary_text(摘要), counterpart_account(对方账号), counterpart_bank(对方开户行), transaction_type(交易类型), voucher_no(凭证号)。"""
+    from db.tables import ParserTemplate
+    import json as _json
+
+    # 解析 JSON 字符串
+    try:
+        headers = _json.loads(sample_headers) if isinstance(sample_headers, str) else sample_headers
+    except _json.JSONDecodeError:
+        return {"ok": False, "error": "sample_headers JSON 格式错误"}
+
+    try:
+        mapping = _json.loads(mapping_json) if isinstance(mapping_json, str) else mapping_json
+    except _json.JSONDecodeError:
+        return {"ok": False, "error": "mapping_json JSON 格式错误"}
+
+    if not isinstance(mapping, dict) or not mapping:
+        return {"ok": False, "error": "mapping_json 必须是非空的列映射字典"}
+
+    try:
+        obj = ParserTemplate(
+            template_name=template_name,
+            template_type="bank",
+            file_format=file_format,
+            header_row=header_row,
+            skip_rows=skip_rows,
+            sample_headers=_json.dumps(headers, ensure_ascii=False),
+            mapping_json=_json.dumps(mapping, ensure_ascii=False),
+            created_by="ai_assist",
+            status="active",
+        )
+        ctx.db.add(obj)
+        ctx.db.commit()
+        ctx.db.refresh(obj)
+        return {
+            "ok": True,
+            "id": obj.id,
+            "template_name": obj.template_name,
+            "message": f"规则模板「{template_name}」已保存到规则中心",
+        }
+    except Exception as e:
+        ctx.db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
 def _row_to_dict(row) -> dict:
     """将 ORM 对象转为可序列化字典"""
     result = {}

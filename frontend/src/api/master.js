@@ -1,5 +1,5 @@
 /**
- * 主数据 API — 板块 / 法人 / 账户 / 别名
+ * 主数据 API — 板块 / 法人 / 银行 / 账户 / 别名 / usage / 批量操作
  */
 import http from './index'
 
@@ -13,6 +13,18 @@ export const createDivision = (data) =>
 export const updateDivision = (id, data) =>
   http.put(`/divisions/${id}`, data)
 
+export const updateDivisionStatus = (id, status) =>
+  http.put(`/divisions/${id}/status`, { status })
+
+export const deleteDivision = (id, force = false) =>
+  http.delete(`/divisions/${id}`, { params: { force } })
+
+export const getDivisionUsage = (id) =>
+  http.get(`/divisions/${id}/usage`)
+
+export const batchActionDivisions = (ids, action, cascade = false) =>
+  http.post('/divisions/batch', { ids, action, cascade })
+
 // ── 法人 ──
 export const getEntities = (params) =>
   http.get('/entities', { params })
@@ -22,6 +34,43 @@ export const createEntity = (data) =>
 
 export const updateEntity = (id, data) =>
   http.put(`/entities/${id}`, data)
+
+export const updateEntityStatus = (id, status) =>
+  http.put(`/entities/${id}/status`, { status })
+
+export const deleteEntity = (id) =>
+  http.delete(`/entities/${id}`)
+
+export const getEntityUsage = (id) =>
+  http.get(`/entities/${id}/usage`)
+
+export const batchActionEntities = (ids, action, cascade = false) =>
+  http.post('/entities/batch', { ids, action, cascade })
+
+// ── 银行 ──
+export const getBanks = (params) =>
+  http.get('/banks', { params })
+
+export const getBank = (id) =>
+  http.get(`/banks/${id}`)
+
+export const createBank = (data) =>
+  http.post('/banks', data)
+
+export const updateBank = (id, data) =>
+  http.put(`/banks/${id}`, data)
+
+export const updateBankStatus = (id, status) =>
+  http.put(`/banks/${id}/status`, { status })
+
+export const deleteBank = (id) =>
+  http.delete(`/banks/${id}`)
+
+export const getBankUsage = (id) =>
+  http.get(`/banks/${id}/usage`)
+
+export const batchActionBanks = (ids, action) =>
+  http.post('/banks/batch', { ids, action })
 
 // ── 账户 ──
 export const getAccounts = (params) =>
@@ -38,6 +87,9 @@ export const updateAccount = (id, data) =>
 
 export const setInitialBalance = (id, data) =>
   http.post(`/accounts/${id}/initial-balance`, data)
+
+export const batchActionAccounts = (ids, action) =>
+  http.post('/accounts/batch', { ids, action })
 
 // ── 别名 ──
 export const getAliases = (accountId) =>

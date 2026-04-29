@@ -3,96 +3,301 @@
     <div class="section">
       <div class="section-title">
         <h3>账户数据管理</h3>
-        <span>管理所有核算组织下的单位账户</span>
+        <span>管理账户数据及其所属的核算组织、单位、银行基础信息</span>
       </div>
-      <div class="filters-bar">
-        <select v-model="filterDivision" class="filter" @change="loadData">
-          <option :value="null">全部核算组织</option>
-          <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
-        </select>
-        <select v-model="filterEntity" class="filter">
-          <option :value="null">全部单位</option>
 
-          <option v-for="e in filteredEntities" :key="e.id" :value="e.id">{{ e.short_name }}</option>
-        </select>
-        <input v-model="keyword" class="filter" placeholder="搜索账户编号/账户名称/银行/账号" style="width:220px" />
-        <select v-model="filterStatus" class="filter" style="width:90px">
-          <option value="">全部</option>
-          <option value="enabled">启用</option>
-          <option value="disabled">停用</option>
-        </select>
-        <div style="flex:1"></div>
-        <div class="btn-row">
-          <button class="btn btn-secondary" @click="downloadTemplate">下载导入模板</button>
-          <button class="btn btn-secondary" @click="triggerImport">批量导入</button>
-          <input ref="importInput" type="file" accept=".xls,.xlsx" style="display:none" @change="doImport" />
-          <button class="btn btn-primary" @click="openForm()">+ 新建账户</button>
+      <!-- 子标签页 -->
+      <div class="tabs-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'accounts' }" @click="activeTab = 'accounts'">账户列表</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'divisions' }" @click="activeTab = 'divisions'">核算组织</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'entities' }" @click="activeTab = 'entities'">单位维护</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'banks' }" @click="activeTab = 'banks'">银行账户</button>
+      </div>
+
+      <!-- ==================== 标签页1: 账户列表 ==================== -->
+      <div v-show="activeTab === 'accounts'">
+        <div class="filters-bar">
+          <select v-model="filterDivision" class="filter" @change="loadAccounts">
+            <option :value="null">全部核算组织</option>
+            <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select>
+          <select v-model="filterEntity" class="filter">
+            <option :value="null">全部单位</option>
+            <option v-for="e in filteredEntities" :key="e.id" :value="e.id">{{ e.short_name }}</option>
+          </select>
+          <input v-model="keyword" class="filter" placeholder="搜索账户编号/名称/银行/账号" style="width:220px" />
+          <select v-model="filterStatus" class="filter" style="width:90px">
+            <option value="">全部</option>
+            <option value="enabled">启用</option>
+            <option value="disabled">停用</option>
+          </select>
+          <div style="flex:1"></div>
+          <div class="btn-row">
+            <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
+              <button class="btn btn-secondary" @click="accDropdownOpen = !accDropdownOpen">批量操作 ({{ selectedAccountIds.length }})</button>
+              <div class="dropdown-menu">
+                <button @click="batchAccounts('enable'); accDropdownOpen = false">批量启用</button>
+                <button @click="batchAccounts('disable'); accDropdownOpen = false">批量停用</button>
+                <button @click="batchAccounts('delete'); accDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
+              </div>
+            </div>
+            <button class="btn btn-secondary" @click="downloadTemplate">下载导入模板</button>
+            <button class="btn btn-secondary" @click="triggerImport">批量导入</button>
+            <input ref="importInput" type="file" accept=".xls,.xlsx" style="display:none" @change="doImport" />
+            <button class="btn btn-primary" @click="openAccountForm()">+ 新建账户</button>
+          </div>
+        </div>
+
+        <!-- 无数据时：不显示任何表格 -->
+        <div v-if="!filteredAccounts.length" style="text-align:center;color:var(--muted);padding:40px 0">
+          暂无账户数据，请下载导入模板并批量导入
+        </div>
+        <!-- 有数据时：动态列表格 -->
+        <template v-else>
+        <div class="table-wrap table-wrap-wide">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-ck"><input type="checkbox" :checked="isAllAccountsSelected" @change="toggleAllAccounts" /></th>
+                <th v-for="col in activeAccountColumns" :key="col.key">{{ col.label }}</th>
+                <th class="col-action">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="a in filteredAccounts" :key="a.id"
+                  :class="{ disabled: a.status === 'disabled', selected: selectedAccountIds.includes(a.id) }"
+                  @dblclick="openAccountForm(a)">
+                <td class="col-ck"><input type="checkbox" :value="a.id" v-model="selectedAccountIds" /></td>
+                <td v-for="col in activeAccountColumns" :key="col.key" :class="col.type === 'money' ? 'money' : (col.type === 'code' || col.type === 'text' && (col.key === 'account_number' || col.key === 'account_last_four') ? 'mono' : '')">
+                  <template v-if="col.type === 'bool'">
+                    <span :class="getBoolVal(a, col.key) ? 'bool-yes' : 'bool-no'">{{ getBoolVal(a, col.key) ? '是' : '否' }}</span>
+                  </template>
+                  <span v-else-if="col.type === 'tag'" class="tag" :class="col.key === 'account_type' ? 'tag-blue' : 'tag-gray'">{{ a[col.key] || '-' }}</span>
+                  <span v-else-if="col.type === 'status'" class="tag" :class="a.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ a.status === 'enabled' ? '启用' : '停用' }}</span>
+                  <template v-else-if="col.type === 'money'">{{ fmtMoney(a[col.key]) }}</template>
+                  <strong v-else-if="col.type === 'code'">{{ a[col.key] }}</strong>
+                  <template v-else-if="col.type === 'input_method'">{{ a.input_method === 'bank_import' ? '银行导入' : (a.input_method === 'manual' ? '手工填写' : (a.input_method || '手工填写')) }}</template>
+                  <template v-else>{{ a[col.key] || '-' }}</template>
+                </td>
+                <td class="action-cell">
+                  <button class="btn btn-secondary btn-sm" @click="openAccountForm(a)">编辑</button>
+                  <button class="btn btn-secondary btn-sm" v-if="a.status==='enabled'" @click="toggleAccountStatus(a, 'disabled')">停用</button>
+                  <button class="btn btn-secondary btn-sm" v-else @click="toggleAccountStatus(a, 'enabled')">启用</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bottom-bar">
+          <span class="count-info">共 {{ filteredAccounts.length }} 条记录</span>
+        </div>
+        </template>
+      </div>
+
+      <!-- ==================== 标签页2: 核算组织 ==================== -->
+      <div v-show="activeTab === 'divisions'">
+        <div class="filters-bar">
+          <select v-model="divFilterStatus" class="filter" style="width:90px">
+            <option value="">全部状态</option>
+            <option value="enabled">启用</option>
+            <option value="disabled">停用</option>
+          </select>
+          <div style="flex:1"></div>
+          <div class="btn-row">
+            <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
+              <button class="btn btn-secondary" @click="divDropdownOpen = !divDropdownOpen">批量操作 ({{ selectedDivIds.length }})</button>
+              <div class="dropdown-menu">
+                <button @click="batchDivisions('enable'); divDropdownOpen = false">批量启用</button>
+                <button @click="batchDivisions('disable'); divDropdownOpen = false">批量停用</button>
+                <button @click="batchDivisions('delete'); divDropdownOpen = false">批量删除</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" @click="openDivForm()">+ 新建核算组织</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-ck"><input type="checkbox" :checked="isAllDivisionsSelected" @change="toggleAllDivisions" /></th>
+                <th style="width:50px">ID</th>
+                <th style="width:90px">编码</th>
+                <th style="min-width:140px">核算组织名称</th>
+                <th style="width:70px">排序</th>
+                <th style="width:70px">状态</th>
+                <th style="width:150px">创建时间</th>
+                <th style="width:180px">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="d in filteredDivisions" :key="d.id"
+                  :class="{ disabled: d.status === 'disabled', selected: selectedDivIds.includes(d.id) }" @dblclick="openDivForm(d)">
+                <td class="col-ck"><input type="checkbox" :value="d.id" v-model="selectedDivIds" /></td>
+                <td>{{ d.id }}</td>
+                <td><strong>{{ d.division_code || '-' }}</strong></td>
+                <td>{{ d.name }}</td>
+                <td>{{ d.sort_order ?? '-' }}</td>
+                <td><span class="tag" :class="d.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ d.status === 'enabled' ? '启用' : '停用' }}</span></td>
+                <td>{{ d.created_at ? d.created_at.slice(0, 19).replace('T', ' ') : '-' }}</td>
+                <td class="action-cell">
+                  <button class="btn btn-secondary btn-sm" @click="openDivForm(d)">编辑</button>
+                  <button class="btn btn-secondary btn-sm" v-if="d.status==='enabled'" @click="toggleDivStatus(d,'disabled')">停用</button>
+                  <button class="btn btn-secondary btn-sm" v-else @click="toggleDivStatus(d,'enabled')">启用</button>
+                  <button class="btn btn-warn btn-sm" @click="deleteDiv(d)">删除</button>
+                </td>
+              </tr>
+              <tr v-if="!filteredDivisions.length">
+                <td colspan="8" style="text-align:center;color:var(--muted);padding:30px">暂无核算组织</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th class="col-id">ID</th>
-              <th class="col-code">账户编号</th>
-              <th class="col-alias">账户名称</th>
-              <th class="col-entity">单位简称</th>
-              <th class="col-bank">开户银行</th>
-              <th class="col-number">银行账号</th>
-              <th class="col-type">账户类型</th>
-              <th class="col-instrument">资金类型</th>
-              <th class="col-balance">期初余额</th>
-              <th class="col-date">余额日期</th>
-              <th class="col-method">录入方式</th>
-              <th class="col-status">状态</th>
-              <th class="col-notes">备注</th>
-              <th class="col-action">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="a in filteredAccounts" :key="a.id"
-                :class="{ disabled: a.status === 'disabled' }"
-                @dblclick="openForm(a)">
-              <td>{{ a.id }}</td>
-              <td><strong>{{ a.account_code }}</strong></td>
-              <td>{{ a.account_alias }}</td>
-              <td>{{ a.entity_name || '-' }}</td>
-              <td>{{ a.bank_name || '-' }}</td>
-              <td class="mono">{{ a.account_number || '-' }}</td>
-              <td><span class="tag tag-blue">{{ a.account_type }}</span></td>
-              <td><span class="tag tag-gray">{{ a.instrument_type }}</span></td>
-              <td class="money">{{ fmtMoney(a.initial_balance) }}</td>
-              <td>{{ a.balance_date || '-' }}</td>
-              <td>{{ a.input_method === 'bank_import' ? '银行导入' : '手工' }}</td>
-              <td><span class="tag" :class="a.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ a.status === 'enabled' ? '启用' : '停用' }}</span></td>
-              <td class="ellipsis" :title="a.notes">{{ a.notes || '-' }}</td>
-              <td class="action-cell">
-                <button class="btn btn-secondary btn-sm" @click="openForm(a)">编辑</button>
-                <button class="btn btn-secondary btn-sm" v-if="a.status==='enabled'" @click="toggleStatus(a, 'disabled')">停用</button>
-                <button class="btn btn-secondary btn-sm" v-else @click="toggleStatus(a, 'enabled')">启用</button>
-              </td>
-            </tr>
-            <tr v-if="!filteredAccounts.length">
-              <td colspan="14" style="text-align:center;color:var(--muted);padding:30px">暂无账户数据</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- ==================== 标签页3: 单位维护 ==================== -->
+      <div v-show="activeTab === 'entities'">
+        <div class="filters-bar">
+          <select v-model="entFilterDiv" class="filter">
+            <option :value="null">全部核算组织</option>
+            <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select>
+          <input v-model="entKeyword" class="filter" placeholder="搜索单位编码/名称" style="width:200px" />
+          <select v-model="entFilterStatus" class="filter" style="width:90px">
+            <option value="">全部状态</option>
+            <option value="enabled">启用</option>
+            <option value="disabled">停用</option>
+          </select>
+          <div style="flex:1"></div>
+          <div class="btn-row">
+            <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
+              <button class="btn btn-secondary" @click="entDropdownOpen = !entDropdownOpen">批量操作 ({{ selectedEntIds.length }})</button>
+              <div class="dropdown-menu">
+                <button @click="batchEntities('enable'); entDropdownOpen = false">批量启用</button>
+                <button @click="batchEntities('disable'); entDropdownOpen = false">批量停用</button>
+                <button @click="batchEntities('delete'); entDropdownOpen = false">批量删除</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" @click="openEntForm()">+ 新建单位</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-ck"><input type="checkbox" :checked="isAllEntitiesSelected" @change="toggleAllEntities" /></th>
+                <th style="width:50px">ID</th>
+                <th style="min-width:120px">所属核算组织</th>
+                <th style="width:90px">单位编码</th>
+                <th style="min-width:160px">单位全称</th>
+                <th style="width:100px">单位简称</th>
+                <th style="width:70px">状态</th>
+                <th style="width:150px">创建时间</th>
+                <th style="width:180px">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="e in filteredEntities_list" :key="e.id"
+                  :class="{ disabled: e.status === 'disabled', selected: selectedEntIds.includes(e.id) }" @dblclick="openEntForm(e)">
+                <td class="col-ck"><input type="checkbox" :value="e.id" v-model="selectedEntIds" /></td>
+                <td>{{ e.id }}</td>
+                <td>{{ e.division_name || '-' }}</td>
+                <td><strong>{{ e.entity_code }}</strong></td>
+                <td>{{ e.name || '-' }}</td>
+                <td>{{ e.short_name || '-' }}</td>
+                <td><span class="tag" :class="e.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ e.status === 'enabled' ? '启用' : '停用' }}</span></td>
+                <td>{{ e.created_at ? e.created_at.slice(0, 19).replace('T', ' ') : '-' }}</td>
+                <td class="action-cell">
+                  <button class="btn btn-secondary btn-sm" @click="openEntForm(e)">编辑</button>
+                  <button class="btn btn-secondary btn-sm" v-if="e.status==='enabled'" @click="toggleEntStatus(e,'disabled')">停用</button>
+                  <button class="btn btn-secondary btn-sm" v-else @click="toggleEntStatus(e,'enabled')">启用</button>
+                  <button class="btn btn-warn btn-sm" @click="deleteEnt(e)">删除</button>
+                </td>
+              </tr>
+              <tr v-if="!filteredEntities_list.length">
+                <td colspan="9" style="text-align:center;color:var(--muted);padding:30px">暂无单位数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ==================== 标签页4: 银行账户管理 ==================== -->
+      <div v-show="activeTab === 'banks'">
+        <div class="filters-bar">
+          <input v-model="bankKeyword" class="filter" placeholder="搜索账户编号/开户银行/银行账号" style="width:220px" />
+          <select v-model="bankFilterStatus" class="filter" style="width:90px">
+            <option value="">全部状态</option>
+            <option value="enabled">启用</option>
+            <option value="disabled">停用</option>
+          </select>
+          <div style="flex:1"></div>
+          <div class="btn-row">
+            <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">
+              <button class="btn btn-secondary" @click="bankDropdownOpen = !bankDropdownOpen">批量操作 ({{ selectedBankIds.length }})</button>
+              <div class="dropdown-menu">
+                <button @click="batchBanks('enable'); bankDropdownOpen = false">批量启用</button>
+                <button @click="batchBanks('disable'); bankDropdownOpen = false">批量停用</button>
+                <button @click="batchBanks('delete'); bankDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" @click="openBankForm()">+ 新建银行账户</button>
+          </div>
+        </div>
+        <!-- 无数据时 -->
+        <div v-if="!filteredBankAccounts.length" style="text-align:center;color:var(--muted);padding:40px 0">
+          暂无银行账户数据
+        </div>
+        <!-- 有数据时：动态列表格 -->
+        <template v-else>
+        <div class="table-wrap table-wrap-wide">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-ck"><input type="checkbox" :checked="isAllBanksSelected" @change="toggleAllBanks" /></th>
+                <th v-for="col in activeBankColumns" :key="col.key">{{ col.label }}</th>
+                <th class="col-action">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="a in filteredBankAccounts" :key="a.id"
+                  :class="{ disabled: a.status === 'disabled', selected: selectedBankIds.includes(a.id) }" @dblclick="openBankForm(a)">
+                <td class="col-ck"><input type="checkbox" :value="a.id" v-model="selectedBankIds" /></td>
+                <td v-for="col in activeBankColumns" :key="col.key" :class="col.type === 'money' ? 'money' : (col.type === 'code' || col.type === 'text' && (col.key === 'account_number' || col.key === 'account_last_four') ? 'mono' : '')">
+                  <template v-if="col.type === 'bool'">
+                    <span :class="getBoolVal(a, col.key) ? 'bool-yes' : 'bool-no'">{{ getBoolVal(a, col.key) ? '是' : '否' }}</span>
+                  </template>
+                  <span v-else-if="col.type === 'tag'" class="tag" :class="col.key === 'account_type' ? 'tag-blue' : 'tag-gray'">{{ a[col.key] || '-' }}</span>
+                  <span v-else-if="col.type === 'status'" class="tag" :class="a.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ a.status === 'enabled' ? '启用' : '停用' }}</span>
+                  <template v-else-if="col.type === 'money'">{{ fmtMoney(a[col.key]) }}</template>
+                  <strong v-else-if="col.type === 'code'">{{ a[col.key] }}</strong>
+                  <template v-else-if="col.type === 'input_method'">{{ a.input_method === 'bank_import' ? '银行导入' : (a.input_method === 'manual' ? '手工填写' : (a.input_method || '手工填写')) }}</template>
+                  <template v-else>{{ a[col.key] || '-' }}</template>
+                </td>
+                <td class="action-cell">
+                  <button class="btn btn-secondary btn-sm" @click="openBankForm(a)">编辑</button>
+                  <button class="btn btn-secondary btn-sm" v-if="a.status==='enabled'" @click="toggleBankAccountStatus(a,'disabled')">停用</button>
+                  <button class="btn btn-secondary btn-sm" v-else @click="toggleBankAccountStatus(a,'enabled')">启用</button>
+                  <button class="btn btn-warn btn-sm" @click="deleteBank(a)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bottom-bar">
+          <span class="count-info">共 {{ filteredBankAccounts.length }} 条银行账户记录</span>
+        </div>
+        </template>
       </div>
     </div>
 
-    <div class="bottom-bar" v-if="filteredAccounts.length">
-      <span class="count-info">共 {{ filteredAccounts.length }} 条记录</span>
-    </div>
-
-    <!-- 账户表单弹窗 -->
-    <div class="modal-mask" v-if="showForm" @click.self="showForm=false">
+    <!-- ==================== 弹窗：账户表单 ==================== -->
+    <div class="modal-mask" v-if="showAccountForm" @click.self="showAccountForm=false">
       <div class="modal modal-lg">
-        <h3>{{ editing ? '编辑账户' : '新建账户' }}</h3>
+        <h3>{{ editingAccount ? '编辑账户' : '新建账户' }}</h3>
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <select v-model="form.entity_id" class="form-input">
+            <select v-model="accountForm.entity_id" class="form-input">
               <option :value="null" disabled>-- 请选择所属单位 --</option>
               <optgroup v-for="d in divisions" :key="d.id" :label="d.name">
                 <option v-for="e in getEntitiesForDivision(d.id)" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
@@ -102,27 +307,27 @@
           </div>
           <div class="form-group">
             <label class="form-label">账户编号 *</label>
-            <input v-model="form.account_code" class="form-input" placeholder="如 ZH0001" :disabled="!!editing" />
+            <input v-model="accountForm.account_code" class="form-input" placeholder="留空自动生成（ZH0001）" :disabled="!!editingAccount" />
           </div>
           <div class="form-group">
             <label class="form-label">开户银行</label>
-            <input v-model="form.bank_name" class="form-input" placeholder="如 中国银行" />
+            <input v-model="accountForm.bank_name" class="form-input" placeholder="如 中国银行" />
           </div>
           <div class="form-group">
             <label class="form-label">银行账号</label>
-            <input v-model="form.account_number" class="form-input" placeholder="完整账号，不加空格" />
+            <input v-model="accountForm.account_number" class="form-input" placeholder="完整账号，不加空格" />
           </div>
           <div class="form-group">
-            <label class="form-label">开户行名称</label>
-            <input v-model="form.branch_name" class="form-input" placeholder="如 中国银行上海浦东支行" />
+            <label class="form-label">账户名称</label>
+            <input v-model="accountForm.branch_name" class="form-input" placeholder="如 中国银行上海浦东支行" />
           </div>
           <div class="form-group">
             <label class="form-label">账户后四位</label>
-            <input v-model="form.account_last_four" class="form-input" placeholder="银行账号后四位" />
+            <input v-model="accountForm.account_last_four" class="form-input" placeholder="银行账号后四位" />
           </div>
           <div class="form-group">
             <label class="form-label">账户类型 *</label>
-            <select v-model="form.account_type" class="form-input">
+            <select v-model="accountForm.account_type" class="form-input">
               <option value="" disabled>-- 请选择 --</option>
               <option value="基本户">基本户</option>
               <option value="一般户">一般户</option>
@@ -137,7 +342,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">资金类型 *</label>
-            <select v-model="form.instrument_type" class="form-input">
+            <select v-model="accountForm.instrument_type" class="form-input">
               <option value="" disabled>-- 请选择 --</option>
               <option value="银行存款">银行存款</option>
               <option value="现金">现金</option>
@@ -149,59 +354,239 @@
           </div>
           <div class="form-group">
             <label class="form-label">是否网银 *</label>
-            <select v-model="form.has_online_banking" class="form-input">
+            <select v-model="accountForm.has_online_banking" class="form-input">
               <option :value="true">是</option>
               <option :value="false">否</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">录入方式 *</label>
-            <select v-model="form.input_method" class="form-input">
+            <select v-model="accountForm.input_method" class="form-input">
               <option value="网银导入">网银导入</option>
               <option value="手工填写">手工填写</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">币种</label>
-            <input v-model="form.currency" class="form-input" placeholder="CNY" />
+            <input v-model="accountForm.currency" class="form-input" placeholder="CNY" />
           </div>
-          <div class="form-group" v-if="!editing">
+          <div class="form-group" v-if="!editingAccount">
             <label class="form-label">期初余额 *</label>
-            <input v-model.number="form.initial_balance" type="number" step="0.01" class="form-input" placeholder="系统起算余额" />
+            <input v-model.number="accountForm.initial_balance" type="number" step="0.01" class="form-input" placeholder="系统起算余额" />
           </div>
-          <div class="form-group" v-if="!editing">
+          <div class="form-group" v-if="!editingAccount">
             <label class="form-label">余额日期 *</label>
-            <input v-model="form.balance_date" type="date" class="form-input" />
+            <input v-model="accountForm.balance_date" type="date" class="form-input" />
           </div>
           <div class="form-group">
             <label class="form-label">是否纳入日报</label>
-            <select v-model="form.include_in_daily_report" class="form-input">
+            <select v-model="accountForm.include_in_daily_report" class="form-input">
               <option :value="true">是</option>
               <option :value="false">否</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">是否允许手工录入</label>
-            <select v-model="form.allow_manual_entry" class="form-input">
+            <select v-model="accountForm.allow_manual_entry" class="form-input">
               <option :value="true">是</option>
               <option :value="false">否</option>
             </select>
           </div>
-          <div class="form-group" v-if="editing">
+          <div class="form-group" v-if="editingAccount">
             <label class="form-label">状态</label>
-            <select v-model="form.status" class="form-input">
+            <select v-model="accountForm.status" class="form-input">
               <option value="enabled">启用</option>
               <option value="disabled">停用</option>
             </select>
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>
-            <input v-model="form.notes" class="form-input" placeholder="补充说明" />
+            <input v-model="accountForm.notes" class="form-input" placeholder="补充说明" />
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-secondary" @click="showForm=false">取消</button>
+          <button class="btn btn-secondary" @click="showAccountForm=false">取消</button>
           <button class="btn btn-primary" @click="saveAccount">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：核算组织表单 ==================== -->
+    <div class="modal-mask" v-if="showDivForm" @click.self="showDivForm=false">
+      <div class="modal">
+        <h3>{{ editingDiv ? '编辑核算组织' : '新建核算组织' }}</h3>
+        <div class="form-grid">
+          <div class="form-group" v-if="editingDiv">
+            <label class="form-label">编码</label>
+            <input :value="editingDiv.division_code" class="form-input" disabled />
+          </div>
+          <div class="form-group">
+            <label class="form-label">名称 *</label>
+            <input v-model="divForm.name" class="form-input" placeholder="核算组织名称" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">排序</label>
+            <input v-model.number="divForm.sort_order" type="number" class="form-input" placeholder="数值越小越靠前" />
+          </div>
+          <div class="form-group" v-if="editingDiv">
+            <label class="form-label">状态</label>
+            <select v-model="divForm.status" class="form-input">
+              <option value="enabled">启用</option>
+              <option value="disabled">停用</option>
+            </select>
+          </div>
+        </div>
+        <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-secondary" @click="showDivForm=false">取消</button>
+          <button class="btn btn-primary" @click="saveDiv">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：单位表单 ==================== -->
+    <div class="modal-mask" v-if="showEntForm" @click.self="showEntForm=false">
+      <div class="modal modal-lg">
+        <h3>{{ editingEnt ? '编辑单位' : '新建单位' }}</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">所属核算组织 *</label>
+            <select v-model="entForm.division_id" class="form-input">
+              <option :value="null" disabled>-- 请选择核算组织 --</option>
+              <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">单位编码</label>
+            <input v-if="editingEnt" :value="editingEnt.entity_code" class="form-input" disabled />
+            <input v-else v-model="entForm.entity_code" class="form-input" placeholder="留空自动生成" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">单位全称 *</label>
+            <input v-model="entForm.name" class="form-input" placeholder="单位全称" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">单位简称 *</label>
+            <input v-model="entForm.short_name" class="form-input" placeholder="单位简称" />
+          </div>
+          <div class="form-group" v-if="editingEnt">
+            <label class="form-label">状态</label>
+            <select v-model="entForm.status" class="form-input">
+              <option value="enabled">启用</option>
+              <option value="disabled">停用</option>
+            </select>
+          </div>
+        </div>
+        <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-secondary" @click="showEntForm=false">取消</button>
+          <button class="btn btn-primary" @click="saveEnt">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 弹窗：银行账户表单 ==================== -->
+    <div class="modal-mask" v-if="showBankForm" @click.self="showBankForm=false">
+      <div class="modal modal-lg">
+        <h3>{{ editingBank ? '编辑银行账户' : '新建银行账户' }}</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">所属单位 *</label>
+            <select v-model="bankForm.entity_id" class="form-input">
+              <option :value="null" disabled>-- 请选择所属单位 --</option>
+              <optgroup v-for="d in divisions" :key="d.id" :label="d.name">
+                <option v-for="e in getEntitiesForDivision(d.id)" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
+              </optgroup>
+              <option v-for="e in ungroupedEntities" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">开户银行</label>
+            <input v-model="bankForm.bank_name" class="form-input" placeholder="如 中国银行" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">银行账号</label>
+            <input v-model="bankForm.account_number" class="form-input" placeholder="完整账号，不加空格" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">开户行名称</label>
+            <input v-model="bankForm.branch_name" class="form-input" placeholder="如 中国银行上海浦东支行" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">账户后四位</label>
+            <input v-model="bankForm.account_last_four" class="form-input" placeholder="留空自动从银行账号提取" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">账户类型</label>
+            <select v-model="bankForm.account_type" class="form-input">
+              <option value="银行账户">银行账户</option>
+              <option value="现金">现金</option>
+              <option value="票据">票据</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">资金类型</label>
+            <select v-model="bankForm.instrument_type" class="form-input">
+              <option value="银行存款">银行存款</option>
+              <option value="现金">现金</option>
+              <option value="票据">票据</option>
+              <option value="受限资金">受限资金</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">是否网银</label>
+            <select v-model="bankForm.has_online_banking" class="form-input">
+              <option :value="true">是</option>
+              <option :value="false">否</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">录入方式</label>
+            <select v-model="bankForm.input_method" class="form-input">
+              <option value="手工填写">手工填写</option>
+              <option value="网银导入">网银导入</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">币种</label>
+            <input v-model="bankForm.currency" class="form-input" placeholder="CNY" />
+          </div>
+          <div class="form-group" v-if="!editingBank">
+            <label class="form-label">期初余额</label>
+            <input v-model.number="bankForm.initial_balance" type="number" step="0.01" class="form-input" placeholder="系统起算余额" />
+          </div>
+          <div class="form-group" v-if="!editingBank">
+            <label class="form-label">余额日期</label>
+            <input v-model="bankForm.balance_date" type="date" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">是否纳入日报</label>
+            <select v-model="bankForm.include_in_daily_report" class="form-input">
+              <option :value="true">是</option>
+              <option :value="false">否</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">是否允许手工录入</label>
+            <select v-model="bankForm.allow_manual_entry" class="form-input">
+              <option :value="true">是</option>
+              <option :value="false">否</option>
+            </select>
+          </div>
+          <div class="form-group" v-if="editingBank">
+            <label class="form-label">状态</label>
+            <select v-model="bankForm.status" class="form-input">
+              <option value="enabled">启用</option>
+              <option value="disabled">停用</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:span 2">
+            <label class="form-label">备注</label>
+            <input v-model="bankForm.notes" class="form-input" placeholder="补充说明" />
+          </div>
+        </div>
+        <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-secondary" @click="showBankForm=false">取消</button>
+          <button class="btn btn-primary" @click="saveBank">保存</button>
         </div>
       </div>
     </div>
@@ -213,27 +598,94 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 
+// ── 公共数据 ──
 const divisions = ref([])
 const allEntities = ref([])
 const accounts = ref([])
+const banks = ref([])
 const importInput = ref(null)
+const activeTab = ref('accounts')
 
+// ── 动态列定义：从后端获取（基于用户导入的模板列名） ──
+const accountColumns = ref([])
+
+// 银行账户标签页用的列（从账户列中筛选银行相关字段）
+const bankAccountColumns = computed(() => {
+  const bankKeys = ['bank_name', 'account_number', 'branch_name', 'account_code',
+    'account_last_four', 'account_type', 'instrument_type', 'has_online_banking',
+    'input_method', 'currency', 'initial_balance', 'balance_date',
+    'include_in_daily_report', 'allow_manual_entry', 'status']
+  return accountColumns.value.filter(c => bankKeys.includes(c.key))
+})
+
+// ── 批量选择 ──
+const selectedAccountIds = ref([])
+const selectedDivIds = ref([])
+const selectedEntIds = ref([])
+const selectedBankIds = ref([])
+
+// ── 下拉菜单开关 ──
+const accDropdownOpen = ref(false)
+const divDropdownOpen = ref(false)
+const entDropdownOpen = ref(false)
+const bankDropdownOpen = ref(false)
+
+// ── 账户筛选 ──
 const filterDivision = ref(null)
 const filterEntity = ref(null)
 const filterStatus = ref('')
 const keyword = ref('')
 
-const showForm = ref(false)
-const editing = ref(null)
-const form = ref({
+// ── 核算组织筛选 ──
+const divFilterStatus = ref('')
+
+// ── 单位筛选 ──
+const entFilterDiv = ref(null)
+const entFilterStatus = ref('')
+const entKeyword = ref('')
+
+// ── 银行筛选 ──
+const bankKeyword = ref('')
+const bankFilterStatus = ref('')
+
+// ── 账户表单 ──
+const showAccountForm = ref(false)
+const editingAccount = ref(null)
+const accountForm = ref(makeAccountForm())
+
+function makeAccountForm() {
+  return {
+    entity_id: null, account_code: '', bank_name: '', branch_name: '',
+    account_number: '', account_last_four: '', account_type: '', instrument_type: '',
+    has_online_banking: false, input_method: '手工填写', currency: 'CNY',
+    include_in_daily_report: true, allow_manual_entry: true,
+    initial_balance: 0, balance_date: '',
+    status: 'enabled', notes: '',
+  }
+}
+
+// ── 核算组织表单 ──
+const showDivForm = ref(false)
+const editingDiv = ref(null)
+const divForm = ref({ name: '', sort_order: 0, status: 'enabled' })
+
+// ── 单位表单 ──
+const showEntForm = ref(false)
+const editingEnt = ref(null)
+const entForm = ref({ division_id: null, entity_code: '', name: '', short_name: '', status: 'enabled' })
+
+// ── 银行账户表单 ──
+const showBankForm = ref(false)
+const editingBank = ref(null)
+const bankForm = ref({
   entity_id: null, account_code: '', bank_name: '', branch_name: '',
-  account_number: '', account_last_four: '', account_type: '', instrument_type: '',
-  has_online_banking: false, input_method: '手工填写', currency: 'CNY',
-  include_in_daily_report: true, allow_manual_entry: true,
-  initial_balance: 0, balance_date: '',
-  status: 'enabled', notes: '',
+  account_number: '', account_last_four: '', account_type: '银行账户',
+  instrument_type: '银行存款', has_online_banking: false, input_method: '手工填写',
+  currency: 'CNY', include_in_daily_report: true, allow_manual_entry: true,
+  initial_balance: 0, balance_date: '', status: 'enabled', notes: ''
 })
 
+// ── 计算属性 ──
 const filteredEntities = computed(() => {
   if (!filterDivision.value) return allEntities.value
   return allEntities.value.filter(e => e.division_id === filterDivision.value)
@@ -264,23 +716,252 @@ const filteredAccounts = computed(() => {
   return list
 })
 
-async function loadData() {
+const filteredDivisions = computed(() => {
+  let items = divisions.value
+  if (divFilterStatus.value) items = items.filter(d => d.status === divFilterStatus.value)
+  return items
+})
+
+const filteredEntities_list = computed(() => {
+  let items = allEntities.value
+  if (entFilterDiv.value) items = items.filter(e => e.division_id === entFilterDiv.value)
+  if (entFilterStatus.value) items = items.filter(e => e.status === entFilterStatus.value)
+  if (entKeyword.value) {
+    const kw = entKeyword.value.toLowerCase()
+    items = items.filter(e =>
+      (e.entity_code || '').toLowerCase().includes(kw) ||
+      (e.name || '').toLowerCase().includes(kw) ||
+      (e.short_name || '').toLowerCase().includes(kw)
+    )
+  }
+  return items
+})
+
+const BANK_ACCOUNT_TYPES = ['银行账户', '基本户', '一般户', '临时户', '农民工工资专用账户', '信用证账户', '贷款账户']
+
+const filteredBankAccounts = computed(() => {
+  let items = accounts.value.filter(a =>
+    a.bank_name ||
+    BANK_ACCOUNT_TYPES.includes(a.account_type) ||
+    a.instrument_type === '银行存款'
+  )
+  if (bankFilterStatus.value) items = items.filter(a => a.status === bankFilterStatus.value)
+  if (bankKeyword.value) {
+    const kw = bankKeyword.value.toLowerCase()
+    items = items.filter(a =>
+      (a.account_code || '').toLowerCase().includes(kw) ||
+      (a.bank_name || '').toLowerCase().includes(kw) ||
+      (a.account_number || '').toLowerCase().includes(kw)
+    )
+  }
+  return items
+})
+
+// 动态列：根据实际数据过滤掉全空列
+const activeAccountColumns = computed(() => {
+  const accs = accounts.value
+  const cols = accountColumns.value
+  if (!accs.length || !cols.length) return []
+  return cols.filter(col => {
+    return accs.some(a => {
+      const v = a[col.key]
+      if (v === null || v === undefined) return false
+      if (typeof v === 'string' && v.trim() === '') return false
+      return true
+    })
+  })
+})
+
+const activeBankColumns = computed(() => {
+  const accs = filteredBankAccounts.value
+  const cols = bankAccountColumns.value
+  if (!accs.length || !cols.length) return []
+  return cols.filter(col => {
+    return accs.some(a => {
+      const v = a[col.key]
+      if (v === null || v === undefined) return false
+      if (typeof v === 'string' && v.trim() === '') return false
+      return true
+    })
+  })
+})
+
+function getBoolVal(account, key) {
+  return account[key] !== false
+}
+
+// ── 全选计算属性 ──
+const isAllAccountsSelected = computed(() => {
+  const list = filteredAccounts.value
+  return list.length > 0 && list.every(a => selectedAccountIds.value.includes(a.id))
+})
+
+const isAllDivisionsSelected = computed(() => {
+  const list = filteredDivisions.value
+  return list.length > 0 && list.every(d => selectedDivIds.value.includes(d.id))
+})
+
+const isAllEntitiesSelected = computed(() => {
+  const list = filteredEntities_list.value
+  return list.length > 0 && list.every(e => selectedEntIds.value.includes(e.id))
+})
+
+const isAllBanksSelected = computed(() => {
+  const list = filteredBankAccounts.value
+  return list.length > 0 && list.every(a => selectedBankIds.value.includes(a.id))
+})
+
+function toggleAllAccounts() {
+  if (isAllAccountsSelected.value) {
+    selectedAccountIds.value = []
+  } else {
+    selectedAccountIds.value = filteredAccounts.value.map(a => a.id)
+  }
+}
+
+function toggleAllDivisions() {
+  if (isAllDivisionsSelected.value) {
+    selectedDivIds.value = []
+  } else {
+    selectedDivIds.value = filteredDivisions.value.map(d => d.id)
+  }
+}
+
+function toggleAllEntities() {
+  if (isAllEntitiesSelected.value) {
+    selectedEntIds.value = []
+  } else {
+    selectedEntIds.value = filteredEntities_list.value.map(e => e.id)
+  }
+}
+
+function toggleAllBanks() {
+  if (isAllBanksSelected.value) {
+    selectedBankIds.value = []
+  } else {
+    selectedBankIds.value = filteredBankAccounts.value.map(a => a.id)
+  }
+}
+
+// ── 批量操作 ──
+async function batchAccounts(action) {
+  const ids = [...selectedAccountIds.value]
+  if (!ids.length) return
+  const labels = { enable: '启用', disable: '停用', delete: '删除' }
+  const label = labels[action] || action
+  if (!confirm(`确定批量${label} ${ids.length} 个账户？${action === 'delete' ? '此操作不可撤销！' : ''}`)) return
   try {
-    const [divs, ents, accs] = await Promise.all([
+    const result = await api.batchActionAccounts(ids, action)
+    const failedCount = result.failed?.length || 0
+    if (failedCount > 0) {
+      const msgs = result.failed.map(f => f.message).join('\n')
+      alert(`${result.success} 条成功，${failedCount} 条失败：\n${msgs}`)
+    }
+    selectedAccountIds.value = []
+    if (action === 'delete') {
+      await loadAll()
+    } else {
+      await loadAccounts()
+    }
+  } catch (e) { alert(e.message || '批量操作失败') }
+}
+
+async function batchDivisions(action) {
+  const ids = [...selectedDivIds.value]
+  if (!ids.length) return
+  const labels = { enable: '启用', disable: '停用', delete: '删除' }
+  const label = labels[action] || action
+  if (action === 'delete') {
+    if (!confirm(`确定批量删除 ${ids.length} 个核算组织？将同时删除其下属单位和账户！此操作不可撤销！`)) return
+  } else {
+    if (!confirm(`确定批量${label} ${ids.length} 个核算组织？`)) return
+  }
+  try {
+    const result = await api.batchActionDivisions(ids, action, action === 'delete')
+    const failedCount = result.failed?.length || 0
+    if (failedCount > 0) {
+      const msgs = result.failed.map(f => f.message).join('\n')
+      alert(`${result.success} 条成功，${failedCount} 条失败：\n${msgs}`)
+    }
+    selectedDivIds.value = []
+    await loadAll()
+  } catch (e) { alert(e.message || '批量操作失败') }
+}
+
+async function batchEntities(action) {
+  const ids = [...selectedEntIds.value]
+  if (!ids.length) return
+  const labels = { enable: '启用', disable: '停用', delete: '删除' }
+  const label = labels[action] || action
+  if (action === 'delete') {
+    if (!confirm(`确定批量删除 ${ids.length} 个单位？将同时删除其下属账户！此操作不可撤销！`)) return
+  } else {
+    if (!confirm(`确定批量${label} ${ids.length} 个单位？`)) return
+  }
+  try {
+    const result = await api.batchActionEntities(ids, action, action === 'delete')
+    const failedCount = result.failed?.length || 0
+    if (failedCount > 0) {
+      const msgs = result.failed.map(f => f.message).join('\n')
+      alert(`${result.success} 条成功，${failedCount} 条失败：\n${msgs}`)
+    }
+    selectedEntIds.value = []
+    await loadAll()
+  } catch (e) { alert(e.message || '批量操作失败') }
+}
+
+async function batchBanks(action) {
+  const ids = [...selectedBankIds.value]
+  if (!ids.length) return
+  const labels = { enable: '启用', disable: '停用', delete: '删除' }
+  const label = labels[action] || action
+  if (!confirm(`确定批量${label} ${ids.length} 个银行账户？${action === 'delete' ? '此操作不可撤销！' : ''}`)) return
+  try {
+    const result = await api.batchActionAccounts(ids, action)
+    const failedCount = result.failed?.length || 0
+    if (failedCount > 0) {
+      const msgs = result.failed.map(f => f.message).join('\n')
+      alert(`${result.success} 条成功，${failedCount} 条失败：\n${msgs}`)
+    }
+    selectedBankIds.value = []
+    if (action === 'delete') {
+      await loadAll()
+    } else {
+      await loadAccounts()
+    }
+  } catch (e) { alert(e.message || '批量操作失败') }
+}
+
+// ── 数据加载 ──
+async function loadAccounts() {
+  try {
+    const res = await api.getAccounts({ page: 1, page_size: 200 })
+    accounts.value = res?.items || []
+    if (res?.columns) accountColumns.value = res.columns
+  } catch (e) { console.error(e) }
+}
+
+async function loadAll() {
+  try {
+    const [divs, ents, accs, bnks] = await Promise.all([
       api.getDivisions(),
       api.getEntities({ page: 1, page_size: 200 }),
-      api.getAccounts({ page: 1, page_size: 500 }),
+      api.getAccounts({ page: 1, page_size: 200 }),
+      api.getBanks({ page: 1, page_size: 200 }),
     ])
     divisions.value = divs || []
     allEntities.value = ents?.items || []
     accounts.value = accs?.items || []
+    if (accs?.columns) accountColumns.value = accs.columns
+    banks.value = Array.isArray(bnks) ? bnks : (bnks?.items || [])
   } catch (e) { console.error(e) }
 }
 
-function openForm(acc) {
+// ── 账户操作 ──
+function openAccountForm(acc) {
   if (acc) {
-    editing.value = acc
-    form.value = {
+    editingAccount.value = acc
+    accountForm.value = {
       entity_id: acc.entity_id, account_code: acc.account_code,
       bank_name: acc.bank_name || '', branch_name: acc.branch_name || '',
       account_number: acc.account_number || '', account_last_four: acc.account_last_four || '',
@@ -293,114 +974,355 @@ function openForm(acc) {
       status: acc.status, notes: acc.notes || '',
     }
   } else {
-    editing.value = null
-    form.value = {
-      entity_id: null, account_code: '', bank_name: '', branch_name: '',
-      account_number: '', account_last_four: '', account_type: '', instrument_type: '',
-      has_online_banking: false, input_method: '手工填写', currency: 'CNY',
-      include_in_daily_report: true, allow_manual_entry: true,
-      initial_balance: 0, balance_date: new Date().toISOString().slice(0, 10),
-      status: 'enabled', notes: '',
+    editingAccount.value = null
+    accountForm.value = {
+      ...makeAccountForm(),
+      balance_date: new Date().toISOString().slice(0, 10),
     }
   }
-  showForm.value = true
+  showAccountForm.value = true
 }
 
 async function saveAccount() {
   try {
+    const code = accountForm.value.account_code?.trim() || ''
     const payload = {
-      entity_id: form.value.entity_id, account_code: form.value.account_code,
-      account_alias: form.value.account_type || form.value.account_code,
-      bank_name: form.value.bank_name, branch_name: form.value.branch_name,
-      account_number: form.value.account_number,
-      account_last_four: form.value.account_last_four || (form.value.account_number ? form.value.account_number.slice(-4) : ''),
-      account_type: form.value.account_type, instrument_type: form.value.instrument_type,
-      has_online_banking: form.value.has_online_banking,
-      input_method: form.value.input_method === '网银导入' ? 'bank_import' : 'manual',
-      include_in_daily_report: form.value.include_in_daily_report,
-      allow_manual_entry: form.value.allow_manual_entry,
-      currency: form.value.currency, notes: form.value.notes,
+      entity_id: accountForm.value.entity_id,
+      account_code: code || undefined,
+      account_alias: accountForm.value.account_type || code || undefined,
+      bank_name: accountForm.value.bank_name, branch_name: accountForm.value.branch_name,
+      account_number: accountForm.value.account_number,
+      account_last_four: accountForm.value.account_last_four || (accountForm.value.account_number ? accountForm.value.account_number.slice(-4) : ''),
+      account_type: accountForm.value.account_type, instrument_type: accountForm.value.instrument_type,
+      has_online_banking: accountForm.value.has_online_banking,
+      input_method: accountForm.value.input_method === '网银导入' ? 'bank_import' : 'manual',
+      include_in_daily_report: accountForm.value.include_in_daily_report,
+      allow_manual_entry: accountForm.value.allow_manual_entry,
+      currency: accountForm.value.currency, notes: accountForm.value.notes,
     }
-    if (editing.value) {
-      payload.status = form.value.status
-      await api.updateAccount(editing.value.id, payload)
+    if (editingAccount.value) {
+      payload.status = accountForm.value.status
+      await api.updateAccount(editingAccount.value.id, payload)
     } else {
-      payload.initial_balance = form.value.initial_balance
-      payload.balance_date = form.value.balance_date
+      payload.initial_balance = accountForm.value.initial_balance
+      payload.balance_date = accountForm.value.balance_date
       await api.createAccount(payload)
     }
-    showForm.value = false
-    await loadData()
+    showAccountForm.value = false
+    await loadAccounts()
   } catch (e) { alert(e.message || '保存失败') }
 }
 
-async function toggleStatus(acc, status) {
+async function toggleAccountStatus(acc, status) {
   try {
     await api.updateAccount(acc.id, { status })
-    await loadData()
+    await loadAccounts()
   } catch (e) { alert(e.message) }
 }
 
-function fmtMoney(v) {
-  return fmtAmt(v)
+// ── 核算组织操作 ──
+function openDivForm(item) {
+  if (item) {
+    editingDiv.value = item
+    divForm.value = { name: item.name || '', sort_order: item.sort_order ?? 0, status: item.status || 'enabled' }
+  } else {
+    editingDiv.value = null
+    divForm.value = { name: '', sort_order: 0, status: 'enabled' }
+  }
+  showDivForm.value = true
 }
 
-function downloadTemplate() {
-  window.open('/api/accounts/template', '_blank')
+async function saveDiv() {
+  if (!divForm.value.name.trim()) { alert('请填写核算组织名称'); return }
+  try {
+    const payload = { name: divForm.value.name.trim(), sort_order: divForm.value.sort_order || 0 }
+    if (editingDiv.value) {
+      payload.status = divForm.value.status
+      await api.updateDivision(editingDiv.value.id, payload)
+    } else {
+      await api.createDivision(payload)
+    }
+    showDivForm.value = false
+    await loadAll()
+  } catch (e) { alert(e.message || '保存失败') }
 }
 
-function triggerImport() {
-  importInput.value.click()
+async function toggleDivStatus(item, status) {
+  try {
+    await api.updateDivisionStatus(item.id, status)
+    await loadAll()
+  } catch (e) { alert(e.message) }
 }
+
+async function deleteDiv(item) {
+  try {
+    const usage = await api.getDivisionUsage(item.id)
+    const unitCount = usage.unit_count || 0
+    if (unitCount > 0) {
+      const unitNames = (usage.units || []).map(u => `${u.entity_code} ${u.name || u.short_name}`).join('、')
+      const msg = `该核算组织下有 ${unitCount} 个单位：${unitNames}。删除后这些单位将不再归属任何核算组织。确认删除？`
+      if (!confirm(msg)) return
+      await api.deleteDivision(item.id, true)
+    } else {
+      if (!confirm(`确定删除核算组织「${item.name}」？`)) return
+      await api.deleteDivision(item.id)
+    }
+    await loadAll()
+  } catch (e) { alert(e.message || '删除失败') }
+}
+
+// ── 单位操作 ──
+function openEntForm(item) {
+  if (item) {
+    editingEnt.value = item
+    entForm.value = {
+      division_id: item.division_id || null,
+      entity_code: item.entity_code || '',
+      name: item.name || item.full_name || '',
+      short_name: item.short_name || '',
+      status: item.status || 'enabled',
+    }
+  } else {
+    editingEnt.value = null
+    entForm.value = { division_id: null, entity_code: '', name: '', short_name: '', status: 'enabled' }
+  }
+  showEntForm.value = true
+}
+
+async function saveEnt() {
+  if (!entForm.value.name.trim()) { alert('请填写单位全称'); return }
+  if (!entForm.value.short_name.trim()) { alert('请填写单位简称'); return }
+  try {
+    const payload = {
+      division_id: entForm.value.division_id,
+      entity_code: entForm.value.entity_code.trim() || null,
+      name: entForm.value.name.trim(),
+      short_name: entForm.value.short_name.trim(),
+    }
+    if (editingEnt.value) {
+      payload.status = entForm.value.status
+      await api.updateEntity(editingEnt.value.id, payload)
+    } else {
+      await api.createEntity(payload)
+    }
+    showEntForm.value = false
+    await loadAll()
+  } catch (e) { alert(e.message || '保存失败') }
+}
+
+async function toggleEntStatus(item, status) {
+  try {
+    await api.updateEntityStatus(item.id, status)
+    await loadAll()
+  } catch (e) { alert(e.message) }
+}
+
+async function deleteEnt(item) {
+  try {
+    const usage = await api.getEntityUsage(item.id)
+    const accountCount = usage.account_count || 0
+    if (accountCount > 0) {
+      const accNames = (usage.accounts || []).map(a => `${a.account_code} ${a.account_alias}（${a.account_type}）`).join('\n')
+      alert(`单位「${item.short_name || item.name}」下有 ${accountCount} 个账户：\n${accNames}\n\n请先到「账户列表」中删除这些账户，再删除单位。`)
+      return
+    }
+    if (!confirm(`确定删除单位「${item.short_name || item.name}」？此操作不可撤销。`)) return
+    await api.deleteEntity(item.id)
+    await loadAll()
+  } catch (e) { alert(e.message || '删除失败') }
+}
+
+// ── 银行操作 ──
+function openBankForm(item) {
+  if (item) {
+    editingBank.value = item
+    bankForm.value = {
+      entity_id: item.entity_id || null,
+      account_code: item.account_code || '',
+      bank_name: item.bank_name || '',
+      branch_name: item.branch_name || '',
+      account_number: item.account_number || '',
+      account_last_four: item.account_last_four || '',
+      account_type: item.account_type || '银行账户',
+      instrument_type: item.instrument_type || '银行存款',
+      has_online_banking: item.has_online_banking || false,
+      input_method: item.input_method === 'bank_import' ? '网银导入' : '手工填写',
+      currency: item.currency || 'CNY',
+      include_in_daily_report: item.include_in_daily_report !== false,
+      allow_manual_entry: item.allow_manual_entry !== false,
+      initial_balance: item.initial_balance || 0,
+      balance_date: item.balance_date || '',
+      status: item.status || 'enabled',
+      notes: item.notes || '',
+    }
+  } else {
+    editingBank.value = null
+    bankForm.value = {
+      entity_id: null, account_code: '', bank_name: '', branch_name: '',
+      account_number: '', account_last_four: '', account_type: '银行账户',
+      instrument_type: '银行存款', has_online_banking: false, input_method: '手工填写',
+      currency: 'CNY', include_in_daily_report: true, allow_manual_entry: true,
+      initial_balance: 0, balance_date: new Date().toISOString().slice(0, 10),
+      status: 'enabled', notes: '',
+    }
+  }
+  showBankForm.value = true
+}
+
+async function saveBank() {
+  if (!bankForm.value.bank_name.trim() && !bankForm.value.account_number.trim()) {
+    alert('请至少填写开户银行或银行账号')
+    return
+  }
+  try {
+    const payload = {
+      entity_id: bankForm.value.entity_id,
+      account_code: bankForm.value.account_code?.trim() || undefined,
+      bank_name: bankForm.value.bank_name.trim(),
+      branch_name: bankForm.value.branch_name.trim(),
+      account_number: bankForm.value.account_number.trim(),
+      account_last_four: bankForm.value.account_last_four || (bankForm.value.account_number ? bankForm.value.account_number.slice(-4) : ''),
+      account_type: bankForm.value.account_type,
+      instrument_type: bankForm.value.instrument_type,
+      has_online_banking: bankForm.value.has_online_banking,
+      input_method: bankForm.value.input_method === '网银导入' ? 'bank_import' : 'manual',
+      currency: bankForm.value.currency,
+      include_in_daily_report: bankForm.value.include_in_daily_report,
+      allow_manual_entry: bankForm.value.allow_manual_entry,
+      notes: bankForm.value.notes.trim(),
+    }
+    if (editingBank.value) {
+      payload.status = bankForm.value.status
+      await api.updateAccount(editingBank.value.id, payload)
+    } else {
+      payload.initial_balance = bankForm.value.initial_balance
+      payload.balance_date = bankForm.value.balance_date
+      await api.createAccount(payload)
+    }
+    showBankForm.value = false
+    await loadAccounts()
+  } catch (e) { alert(e.message || '保存失败') }
+}
+
+async function toggleBankAccountStatus(item, status) {
+  try {
+    await api.updateAccount(item.id, { status })
+    await loadAccounts()
+  } catch (e) { alert(e.message) }
+}
+
+async function deleteBank(item) {
+  if (!confirm(`确定删除银行账户「${item.account_code} ${item.bank_name || ''}」？此操作不可撤销。`)) return
+  try {
+    await api.batchActionAccounts([item.id], 'delete')
+    await loadAll()
+  } catch (e) { alert(e.message || '删除失败') }
+}
+
+// ── 工具 ──
+function fmtMoney(v) { return fmtAmt(v) }
+
+function downloadTemplate() { window.open('/api/accounts/template', '_blank') }
+
+function triggerImport() { importInput.value.click() }
 
 async function doImport(e) {
   const file = e.target.files[0]
   if (!file) return
   try {
-    const d = await master.importAccounts(file)
+    const d = await api.importAccounts(file)
     let msg = `导入完成！\n创建核算组织: ${d.created_divisions}\n创建单位: ${d.created_entities}\n创建账户: ${d.created_accounts}`
     if (d.error_count > 0) msg += `\n\n${d.error_count} 条错误：\n${d.errors.join('\n')}`
     alert(msg)
-    await loadData()
+    await loadAll()
   } catch (e) { alert('导入出错: ' + e.message) }
   e.target.value = ''
 }
 
-onMounted(loadData)
+onMounted(loadAll)
 </script>
 
 <style scoped>
 @import './common.css';
 
-/* 页面特有样式 — 仅保留 common.css 未覆盖的部分 */
+/* 标签页栏 */
+.tabs-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--line);
+  margin-bottom: var(--space-lg);
+}
+.tab-btn {
+  padding: var(--space-sm) var(--space-xl);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all .18s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+  font-weight: 600;
+}
 
 /* 表格滚动区 */
 .table-wrap {
   flex: 1;
   overflow: auto;
-  max-height: calc(100vh - 260px);
+  max-height: calc(100vh - 300px);
+}
+.table-wrap-wide {
+  overflow-x: auto;
 }
 
 /* 禁用行 */
 tr.disabled { opacity: 0.55; }
+tr.selected { background: #f0f5ef; }
 
-/* 列宽控制 */
-.col-id { width: 40px; }
-.col-code { width: 70px; }
-.col-alias { width: 100px; }
-.col-entity { width: 80px; }
-.col-bank { width: 80px; }
-.col-number { width: 130px; }
-.col-type { width: 70px; }
-.col-instrument { width: 70px; }
-.col-balance { width: 90px; text-align: right; }
+/* 勾选列 */
+.col-ck { width: 36px; text-align: center; }
+.col-ck input[type="checkbox"] { cursor: pointer; }
+
+/* 账户列表列宽 — 紧凑 */
+.col-xs { width: 60px; }
+.col-sm { width: 80px; }
+.col-md { width: 120px; }
+.col-num { width: 130px; }
+.col-money { width: 90px; text-align: right; }
 .col-date { width: 90px; }
-.col-method { width: 70px; }
-.col-status { width: 55px; }
 .col-notes { min-width: 100px; }
 .col-action { width: 120px; }
 
-/* 等宽字体用于账号 */
+/* 布尔值 是/否 样式 */
+.bool-yes {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+.bool-no {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f5f5f5;
+  color: #9e9e9e;
+  border: 1px solid #e0e0e0;
+}
+
+/* 等宽字体 */
 .mono { font-family: monospace; font-size: 12px; }
 
 /* 长文本省略 */
@@ -408,6 +1330,22 @@ tr.disabled { opacity: 0.55; }
 
 /* 操作列不换行 */
 .action-cell { white-space: nowrap; }
+
+/* 下拉菜单 */
+.dropdown { position: relative; display: inline-block; }
+.dropdown-menu {
+  display: none; position: absolute; right: 0; top: 100%;
+  background: white; border: 1px solid #ddd; border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 120px;
+}
+.dropdown-menu button {
+  display: block; width: 100%; padding: 8px 16px; border: none;
+  background: none; text-align: left; cursor: pointer; font-size: 13px;
+}
+.dropdown-menu button:hover { background: #f5f5f5; }
+.dropdown.open .dropdown-menu { display: block; }
+.dropdown-item-danger { color: #9b3d2f; }
+.dropdown-item-danger:hover { background: #fdf2ef !important; }
 
 /* 弹窗 */
 .modal-mask {

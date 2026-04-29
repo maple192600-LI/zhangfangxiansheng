@@ -10,7 +10,7 @@ def factory_reset(db: Session) -> Dict:
 
     清空: fund_events, import_batches, daily_report_runs, operation_logs
     保留: divisions, entities, accounts, account_aliases, parser_templates,
-          manual_field_pool, manual_template_schemes, ai_configs, agent_configs, users
+          manual_field_pool, manual_template_schemes, ai_configs, users
     """
     # 按外键依赖顺序删除
     db.execute(text("DELETE FROM fund_events"))

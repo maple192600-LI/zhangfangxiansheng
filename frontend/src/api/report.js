@@ -22,3 +22,18 @@ export const getIncomeList = (params) =>
 
 export const getExpenseList = (params) =>
   http.get('/reports/expense-list', { params })
+
+// 综合报表
+const REPORT_PATH_MAP = {
+  major_balance: '/reports/major-balance',
+  month_check: '/reports/month-check',
+  week_report: '/reports/week-report',
+  month_report: '/reports/month-report',
+  year_report: '/reports/year-report',
+}
+
+export const getReport = (reportType, params) => {
+  const path = REPORT_PATH_MAP[reportType]
+  if (!path) return Promise.reject(new Error(`Unknown report type: ${reportType}`))
+  return http.get(path, { params })
+}

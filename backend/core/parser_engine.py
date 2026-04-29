@@ -90,19 +90,23 @@ def read_file_from_bytes(data: bytes, filename: str, fmt: str) -> List[List[str]
         os.unlink(tmp)
 
 
-def detect_header_row(rows: List[List[str]], max_scan: int = 15) -> int:
+def detect_header_row(rows: List[List[str]], max_scan: int = 30) -> int:
     """自动检测表头所在行
 
     策略：
-    1. 找到所有包含 3+ 个非空单元格的候选行
-    2. 如果第一个候选行包含「日期/金额/摘要/对方/余额/交易」等银行流水关键词，
-       它就是表头
-    3. 否则跳过元数据行（如"账号:xxx 户名:xxx"），找下一个候选行
+    1. 找到所有包含 3+ 个非空单元格的候选行（扫描范围扩大到 30 行）
+    2. 对每个候选行评分：关键词命中数 × 非空列数
+    3. 优先选择关键词命中多且列数多的行（真正的表头通常 6+ 列且命中多个关键词）
+    4. 排除元数据行（含冒号分隔的 key:value 或 key  value 模式）
     """
     import re
-    # 银行流水常见表头关键词
-    header_keywords = {"交易", "日期", "金额", "摘要", "对方", "余额", "收入", "支出",
-                       "用途", "账号", "开户", "凭证", "币种", "备注", "类型"}
+    # 银行流水常见交易表头关键词（按权重分类）
+    strong_keywords = {"交易日", "交易日期", "借方金额", "贷方金额", "摘要", "余额",
+                       "对方户名", "对方名称", "收入金额", "支出金额", "用途",
+                       "起息日", "流水号"}
+    general_keywords = {"交易", "日期", "金额", "摘要", "对方", "余额", "收入", "支出",
+                        "用途", "账号", "开户", "凭证", "币种", "备注", "类型",
+                        "交易时间", "交易类型", "贷方", "借方", "发生额"}
 
     candidates = []
     for i, row in enumerate(rows[:max_scan]):
@@ -113,26 +117,39 @@ def detect_header_row(rows: List[List[str]], max_scan: int = 15) -> int:
     if not candidates:
         return 0
 
-    # 对每个候选行检查是否含银行表头关键词
+    best_idx = candidates[0][0]
+    best_score = 0
+
     for idx, row in candidates:
-        all_text = " ".join(str(c) for c in row if c)
-        # 检查是否包含冒号分隔的元数据（如"账号:xxx"）
-        has_meta = bool(re.search(r'[:：]', all_text))
-        # 检查是否含表头关键词
-        keyword_hits = sum(1 for kw in header_keywords if kw in all_text)
+        cells = [str(c).strip() for c in row if str(c).strip()]
+        non_empty = len(cells)
+        all_text = " ".join(cells)
 
-        if keyword_hits >= 2 and not has_meta:
-            return idx
+        # 排除元数据行：含冒号分隔的 key:value 对，或类似"接口版本 2.0 银行码 5456"的元数据模式
+        has_colon_meta = bool(re.search(r'[：:]', all_text))
+        # 检测 key-value 对模式：中文标签后面紧跟数字/日期/代码（非中文的值）
+        kv_pairs = re.findall(r'[\u4e00-\u9fff]{2,6}\s+[\d.:/\-]+', all_text)
+        # 如果含数字值的 KV 对 >= 2，且关键词命中少，这是元数据行
+        if kv_pairs and len(kv_pairs) >= 2 and total_hits < 5:
+            continue
 
-    # fallback: 如果只有一个候选，或都没有明显表头特征，返回第一个候选
-    # 但排除包含冒号的元数据行
-    for idx, row in candidates:
-        all_text = " ".join(str(c) for c in row if c)
-        has_meta = bool(re.search(r'[账号|户名|币种].*[:：]', all_text))
-        if not has_meta:
-            return idx
+        # 计算关键词命中
+        strong_hits = sum(1 for kw in strong_keywords if kw in all_text)
+        general_hits = sum(1 for kw in general_keywords if kw in all_text)
+        total_hits = strong_hits * 3 + general_hits
 
-    return candidates[0][0] if candidates else 0
+        # 评分：关键词权重 × 非空列数（真正表头通常 6+ 列）
+        # 元数据行通常 2-4 列有价值信息，表头通常 6+ 列
+        score = total_hits * non_empty
+
+        if has_colon_meta:
+            score = score // 3  # 含冒号的大概率是元数据，降权
+
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+
+    return best_idx
 
 
 def match_template(

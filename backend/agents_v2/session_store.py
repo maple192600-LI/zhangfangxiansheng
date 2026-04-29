@@ -65,10 +65,13 @@ def load_recent_messages(db: Session, session_id: int, limit: int = 50) -> list[
     rows = list(reversed(rows))
     result = []
     for r in rows:
+        # 跳过错误消息（以 [错误] 开头的 assistant 消息），避免污染 LLM 上下文
+        if r.role == "assistant" and r.content and r.content.startswith("[错误]"):
+            continue
         msg = {"role": r.role}
         if r.content:
             msg["content"] = r.content
-        if r.reasoning_content:
+        if r.reasoning_content is not None:
             msg["reasoning_content"] = r.reasoning_content
         if r.tool_call_json:
             msg["tool_calls"] = json.loads(r.tool_call_json)

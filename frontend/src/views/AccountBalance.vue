@@ -17,33 +17,33 @@
         <div class="btn-row">
           <button class="btn btn-secondary" @click="doExport">导出</button>
           <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="loadReport">查询</button>
+          <button class="btn btn-primary" @click="loadReport">生成报表</button>
         </div>
       </div>
-      <table v-if="rows.length">
+      <div v-if="templateLoaded && !templateColumns && !templateExcelHtml" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h4>未配置报表模板</h4>
+        <p>请先在「系统设置 → 数据中心 → 报表模板管理」中上传账户余额表模板</p>
+      </div>
+      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+      <table v-else-if="templateColumns">
         <thead>
           <tr>
-            <th>单位简称</th><th>账户名称</th><th>期初余额</th><th>本期收入</th><th>本期支出</th><th>期末余额</th>
+            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(r, idx) in rows" :key="idx">
             <tr v-if="r.is_subtotal" class="subtotal-row">
-              <td colspan="2"><strong>{{ r.entity_name }}</strong></td>
-              <td class="money"><strong>{{ fmtAmt(r.opening_balance) }}</strong></td>
-              <td class="money inc"><strong>{{ fmtAmt(r.period_income) }}</strong></td>
-              <td class="money exp"><strong>{{ fmtAmt(r.period_expense) }}</strong></td>
-              <td class="money balance"><strong>{{ fmtAmt(r.ending_balance) }}</strong></td>
+              <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }"><strong>{{ cellVal(r, col.field_key) }}</strong></td>
             </tr>
             <tr v-else>
-              <td>{{ r.entity_name }}</td>
-              <td>{{ r.account_name || '-' }}</td>
-              <td class="money">{{ fmtAmt(r.opening_balance) }}</td>
-              <td class="money inc">{{ fmtAmt(r.period_income) }}</td>
-              <td class="money exp">{{ fmtAmt(r.period_expense) }}</td>
-              <td class="money balance">{{ fmtAmt(r.ending_balance) }}</td>
+              <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
             </tr>
           </template>
+          <tr v-if="!rows.length">
+            <td :colspan="templateColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
+          </tr>
         </tbody>
       </table>
       <div v-else class="empty-state">
@@ -61,6 +61,7 @@ import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
+import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -68,6 +69,15 @@ const endDate = ref(today)
 const entityId = ref(null)
 const entities = ref([])
 const rows = ref([])
+const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
+
+const MONEY_KEYS = new Set(['opening_balance', 'period_income', 'period_expense', 'ending_balance'])
+function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }
+function cellVal(r, key) {
+  if (MONEY_KEYS.has(key)) return fmtAmt(r[key])
+  if (r[key] === undefined || r[key] === null) return ''
+  return r[key]
+}
 
 async function loadReport() {
   try {
@@ -89,6 +99,7 @@ async function doExport() {
 
 onMounted(async () => {
   try { entities.value = (await master.getAccountsTree()) || [] } catch (e) {}
+  loadTemplate()
 })
 </script>
 

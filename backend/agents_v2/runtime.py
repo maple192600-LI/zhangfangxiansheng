@@ -96,20 +96,19 @@ async def run_turn(
 
             elif chunk["type"] == "error":
                 yield sse.sse_error(chunk.get("error", "AI 调用失败"))
-                # 保存错误消息
-                save_message(db, session_id, "assistant", content=full_text or f"[错误] {chunk.get('error', '')}")
+                # 不保存错误消息到历史 — 避免污染后续请求
                 return
 
         # 如果没产生文本且没 tool call，结束
         if not full_text and not last_tool_call:
             yield sse.sse_done("end_turn")
-            save_message(db, session_id, "assistant", content="", reasoning_content=reasoning_content or None)
+            save_message(db, session_id, "assistant", content="", reasoning_content=reasoning_content if reasoning_content else None)
             return
 
         # 如果有文本但没 tool call，本轮结束
         if full_text and not last_tool_call:
             duration = int((time.time() - started_at) * 1000)
-            save_message(db, session_id, "assistant", content=full_text, duration_ms=duration, reasoning_content=reasoning_content or None)
+            save_message(db, session_id, "assistant", content=full_text, duration_ms=duration, reasoning_content=reasoning_content if reasoning_content else None)
             yield sse.sse_done("end_turn")
             return
 
@@ -165,7 +164,6 @@ async def run_turn(
             })
 
     # 达到 MAX_TURNS
-    save_message(db, session_id, "assistant", content="[已达到最大工具调用次数限制]")
     yield sse.sse_done("max_turns_reached")
 
 
@@ -202,10 +200,20 @@ def _build_system_prompt(agent: AgentV2) -> str:
 
 
 def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
-    """格式化消息为 OpenAI 兼容格式（含标准 tool_calls 结构和 reasoning_content）"""
+    """格式化消息为 OpenAI 兼容格式（含标准 tool_calls 结构和 reasoning_content）
+
+    DeepSeek 思维模式要求：所有 assistant 消息必须携带 reasoning_content 字段。
+    如果历史中有任何 assistant 消息带 reasoning_content，则所有 assistant 消息都必须包含此字段。
+    """
     result: list[dict] = [{"role": "system", "content": system_prompt}]
     # 追踪 tool_call_id，确保 tool 消息和 assistant 消息配对
     pending_tool_call_id: str | None = None
+
+    # 检测是否有思维模式的 assistant 消息（有 reasoning_content 的）
+    has_thinking = any(
+        m.get("role") == "assistant" and "reasoning_content" in m
+        for m in history
+    )
 
     for msg in history:
         role = msg.get("role", "user")
@@ -243,18 +251,25 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
                 "content": msg.get("content", "") or None,
                 "tool_calls": openai_calls,
             }
-            if msg.get("reasoning_content"):
-                assistant_msg["reasoning_content"] = msg["reasoning_content"]
+            rc = msg.get("reasoning_content")
+            if rc is not None:
+                assistant_msg["reasoning_content"] = rc
+            elif has_thinking:
+                assistant_msg["reasoning_content"] = ""
             result.append(assistant_msg)
         else:
             content = msg.get("content", "")
             reasoning = msg.get("reasoning_content")
             if content:
                 assistant_msg = {"role": role, "content": content}
-                if role == "assistant" and reasoning:
-                    assistant_msg["reasoning_content"] = reasoning
+                if role == "assistant":
+                    if reasoning is not None:
+                        assistant_msg["reasoning_content"] = reasoning
+                    elif has_thinking:
+                        assistant_msg["reasoning_content"] = ""
                 result.append(assistant_msg)
-            elif reasoning and role == "assistant":
-                # 只有 reasoning 没有 content 的情况
+            elif role == "assistant" and reasoning is not None:
                 result.append({"role": "assistant", "content": None, "reasoning_content": reasoning})
+            elif role == "assistant" and has_thinking:
+                result.append({"role": "assistant", "content": None, "reasoning_content": ""})
     return result

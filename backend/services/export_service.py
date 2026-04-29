@@ -1,7 +1,10 @@
-"""导出服务 — 使用 openpyxl 生成 xlsx"""
+"""导出服务 — 使用 openpyxl 生成 xlsx（优先使用模板配置）"""
+import logging
 import os
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -10,7 +13,7 @@ from openpyxl.utils import get_column_letter
 from config import EXPORT_DIR
 
 
-# 报表类型 → 中文名 + 表头 + 数据查询函数
+# 报表类型 → 中文名 + 表头（fallback 用）
 EXPORT_CONFIG = {
     "base_data": {
         "name": "基础数据表",
@@ -36,10 +39,42 @@ EXPORT_CONFIG = {
         "name": "支出明细表",
         "headers": ["日期", "单位简称", "账户名称", "摘要", "对方", "支出金额", "余额"],
     },
+    "major_balance": {
+        "name": "主要账户余额表",
+        "headers": ["单位简称", "账户名称", "期初余额", "本期收入", "本期支出", "期末余额"],
+    },
+    "month_check": {
+        "name": "月末盘点表",
+        "headers": ["单位简称", "账户名称", "期初余额", "本期收入", "本期支出", "期末余额"],
+    },
+    "week_report": {
+        "name": "资金周报",
+        "headers": ["单位简称", "期初余额", "收入合计", "支出合计", "净变动", "期末余额"],
+    },
+    "month_report": {
+        "name": "资金月报",
+        "headers": ["单位简称", "期初余额", "收入合计", "支出合计", "净变动", "期末余额"],
+    },
+    "year_report": {
+        "name": "资金年报",
+        "headers": ["单位简称", "期初余额", "收入合计", "支出合计", "净变动", "期末余额"],
+    },
 }
 
 
-def generate_export(db, export_type: str, start_date: Optional[str], end_date: Optional[str], entity_id: Optional[int] = None) -> str:
+def _get_template_columns(db, export_type: str) -> Optional[List[Dict]]:
+    """尝试从数据库获取默认模板的列配置"""
+    try:
+        from services.report_template_service import get_default_template
+        tpl = get_default_template(db, export_type)
+        if tpl and tpl.get("columns"):
+            return tpl["columns"]
+    except Exception:
+        pass
+    return None
+
+
+def generate_export(db, export_type: str, start_date: Optional[str], end_date: Optional[str], entity_id: Optional[int] = None, year: Optional[int] = None, month: Optional[int] = None) -> str:
     """生成 Excel 导出文件，返回文件路径"""
     from services.base_data_service import query_base_data
     from services.report_service import (
@@ -50,6 +85,9 @@ def generate_export(db, export_type: str, start_date: Optional[str], end_date: O
     config = EXPORT_CONFIG.get(export_type)
     if not config:
         raise ValueError(f"不支持的导出类型: {export_type}")
+
+    # 尝试获取模板列配置
+    tpl_columns = _get_template_columns(db, export_type)
 
     wb = Workbook()
     ws = wb.active
@@ -64,18 +102,32 @@ def generate_export(db, export_type: str, start_date: Optional[str], end_date: O
         right=Side(style="thin", color="F0EADF"),
     )
 
-    for col_idx, header in enumerate(config["headers"], 1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_align
-        cell.border = thin_border
+    if tpl_columns:
+        # 使用模板列配置
+        visible_cols = [c for c in tpl_columns if c.get("visible", True)]
+        for col_idx, col in enumerate(visible_cols, 1):
+            cell = ws.cell(row=1, column=col_idx, value=col["header_name"])
+            cell.font = header_font
+            cell.fill = header_fill
+            col_align = col.get("align", "center")
+            cell.alignment = Alignment(horizontal=col_align, vertical="center")
+            cell.border = thin_border
+            col_width = col.get("width", 100)
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(50, col_width / 7)
+    else:
+        # 使用硬编码表头
+        for col_idx, header in enumerate(config["headers"], 1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = thin_border
 
     # 冻结首行
     ws.freeze_panes = "A2"
 
     # 获取数据
-    rows = _fetch_data(db, export_type, start_date, end_date, entity_id)
+    rows = _fetch_data(db, export_type, start_date, end_date, entity_id, year, month)
 
     # 写数据行
     money_format = '#,##0.00'
@@ -83,18 +135,18 @@ def generate_export(db, export_type: str, start_date: Optional[str], end_date: O
         for col_idx, value in enumerate(row_data, 1):
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
             cell.border = thin_border
-            # 金额列右对齐 + 千分位
             if isinstance(value, (int, float)) and col_idx in _get_money_columns(export_type):
                 cell.number_format = money_format
                 cell.alignment = Alignment(horizontal="right")
 
-    # 自动列宽
-    for col_idx in range(1, len(config["headers"]) + 1):
-        max_len = max(
-            len(str(ws.cell(row=r, column=col_idx).value or ""))
-            for r in range(1, len(rows) + 2)
-        )
-        ws.column_dimensions[get_column_letter(col_idx)].width = min(30, max(max_len + 2, 10))
+    # 无模板时自动列宽
+    if not tpl_columns:
+        for col_idx in range(1, len(config["headers"]) + 1):
+            max_len = max(
+                len(str(ws.cell(row=r, column=col_idx).value or ""))
+                for r in range(1, len(rows) + 2)
+            )
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(30, max(max_len + 2, 10))
 
     # 保存
     os.makedirs(EXPORT_DIR, exist_ok=True)
@@ -115,12 +167,23 @@ def _get_money_columns(export_type: str):
         "account_balance": [3, 4, 5, 6],
         "income_list": [6, 7],
         "expense_list": [6, 7],
+        "major_balance": [3, 4, 5, 6],
+        "month_check": [3, 4, 5, 6],
+        "week_report": [2, 3, 4, 5, 6],
+        "month_report": [2, 3, 4, 5, 6],
+        "year_report": [2, 3, 4, 5, 6],
     }
     return mapping.get(export_type, [])
 
 
-def _fetch_data(db, export_type, start_date, end_date, entity_id) -> list:
+def _fetch_data(db, export_type, start_date, end_date, entity_id, year=None, month=None) -> list:
     """根据类型获取数据行"""
+    from services.report_service import (
+        daily_report, cash_journal, account_balance,
+        income_list, expense_list,
+        major_balance, month_check, week_report, month_report, year_report,
+    )
+
     params = {"start_date": start_date, "end_date": end_date}
     if entity_id:
         params["entity_id"] = entity_id
@@ -175,6 +238,74 @@ def _fetch_data(db, export_type, start_date, end_date, entity_id) -> list:
                         r.get("income"), r.get("expense"), r.get("day_balance"),
                     ])
             return rows
-    except Exception:
+        elif export_type == "major_balance":
+            rows = major_balance(db, **params)
+            return [
+                [r.get("entity_name"), r.get("account_name"), r.get("opening_balance"),
+                 r.get("period_income"), r.get("period_expense"), r.get("ending_balance")]
+                for r in rows if not r.get("is_subtotal")
+            ]
+        elif export_type in ("month_check",):
+            y = year
+            m = month
+            if not y or not m:
+                if start_date:
+                    from datetime import datetime as _dt
+                    sd = _dt.strptime(start_date, "%Y-%m-%d").date() if isinstance(start_date, str) else start_date
+                    y, m = sd.year, sd.month
+                else:
+                    from datetime import date as _d
+                    today = _d.today()
+                    y, m = today.year, today.month
+            rows = month_check(db, y, m, entity_id)
+            return [
+                [r.get("entity_name"), r.get("account_name"), r.get("opening_balance"),
+                 r.get("period_income"), r.get("period_expense"), r.get("ending_balance")]
+                for r in rows if not r.get("is_subtotal")
+            ]
+        elif export_type == "week_report":
+            rows = week_report(db, **params)
+            return [
+                [r.get("entity_name"), r.get("opening_balance"), r.get("total_income"),
+                 r.get("total_expense"), r.get("net_change"), r.get("ending_balance")]
+                for r in rows
+            ]
+        elif export_type in ("month_report",):
+            y = year
+            m = month
+            if not y or not m:
+                if start_date:
+                    from datetime import datetime as _dt
+                    sd = _dt.strptime(start_date, "%Y-%m-%d").date() if isinstance(start_date, str) else start_date
+                    y, m = sd.year, sd.month
+                else:
+                    from datetime import date as _d
+                    today = _d.today()
+                    y, m = today.year, today.month
+            rows = month_report(db, y, m, entity_id)
+            return [
+                [r.get("entity_name"), r.get("opening_balance"), r.get("total_income"),
+                 r.get("total_expense"), r.get("net_change"), r.get("ending_balance")]
+                for r in rows
+            ]
+        elif export_type in ("year_report",):
+            y = year
+            if not y:
+                if start_date:
+                    from datetime import datetime as _dt
+                    sd = _dt.strptime(start_date, "%Y-%m-%d").date() if isinstance(start_date, str) else start_date
+                    y = sd.year
+                else:
+                    from datetime import date as _d
+                    today = _d.today()
+                    y = today.year
+            rows = year_report(db, y, entity_id)
+            return [
+                [r.get("entity_name"), r.get("opening_balance"), r.get("total_income"),
+                 r.get("total_expense"), r.get("net_change"), r.get("ending_balance")]
+                for r in rows
+            ]
+    except Exception as e:
+        logger.error("获取导出数据失败 [%s]: %s", export_type, str(e), exc_info=True)
         return []
     return []

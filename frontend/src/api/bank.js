@@ -26,6 +26,15 @@ export const getParserTemplates = (params) =>
 export const createParserTemplate = (data) =>
   http.post('/parser-templates', data)
 
+export const updateParserTemplate = (id, data) =>
+  http.put(`/parser-templates/${id}`, data)
+
+export const deleteParserTemplate = (id) =>
+  http.delete(`/parser-templates/${id}`)
+
+export const batchDeleteParserTemplates = (ids) =>
+  http.post('/parser-templates/batch-delete', { ids })
+
 // ── AI 智能解析 ──
 export const aiParseHeaders = (data) =>
   http.post('/bank-import/ai-parse', data)

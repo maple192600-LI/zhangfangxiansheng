@@ -1,64 +1,130 @@
-# 账房先生｜完整开发文档与模板总包
+# 账房先生 ZhangFang V1
 
-这是一个可直接放进项目目录的完整文档包，目标是让 Claude Code / Codex 能按既定设计完成第一阶段开发。
+面向中国财务人员的本地部署财务工作台。当前版本聚焦 V1 最小可用闭环：主数据中心、银行流水导入、手工流水录入、基础数据表、资金日报、导出、备份、AI 配置与 Agent 预留骨架。
 
-## 包内内容
+## 技术栈
 
-### 1. docs/00_governance
-上位约束层。控制当前阶段范围、技术边界、用户边界、Claude Code 执行边界。
+| 层级 | 技术 |
+| --- | --- |
+| 后端 | Python 3.11+ / FastAPI / SQLAlchemy / SQLite / Alembic |
+| 数据处理 | openpyxl / Polars |
+| 前端 | Vue 3 / Vite / Ant Design Vue / ECharts |
+| 打包 | 前端静态编译 + 后端挂载 + PyInstaller |
 
-### 2. docs/10_product_design
-产品与设计沉淀层。用于统一脑子，防止讨论漂移。
+## 本地开发启动
 
-### 3. docs/20_execution
-模块执行层。Claude Code 真正开工时的直接输入。
+首次准备环境：
 
-### 4. docs/30_contracts
-契约层。数据库、字段、API、页面状态、异常处理全部在这里对齐。
+```powershell
+.\setup.bat
+```
 
-### 5. docs/40_expected_outputs
-期望输出层。定义输入进系统后页面、数据库、导出、异常池应该长成什么样。
+手工安装后端依赖：
 
-### 6. docs/50_tests
-测试与验收层。模块测试、端到端验收、真实样本回归。
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\pip.exe install -r requirements.txt
+.\venv\Scripts\python.exe main.py
+```
 
-### 7. docs/60_claude_code_support
-Claude Code 开工与协作辅助层。包括开工手册、目录规范、样本计划、交付定义、协作协议。
+默认后端地址：
 
-### 8. templates
-当前阶段可直接参考和使用的模板与前端原型。
+```text
+http://127.0.0.1:8000
+```
 
-### 9. samples
-样本与期望结果目录骨架。后续把你的脱敏真实文件直接补进去。
+## 前端开发
 
-### 10. references
-原始需求、风格规范、早期设计材料和截图参考。
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-## 推荐阅读顺序
+前端生产构建：
 
-1. `docs/00_governance/00_project_constitution.md`
-2. `docs/00_governance/01_v1_scope_and_order.md`
-3. `docs/00_governance/02_user_constraints.md`
-4. `docs/00_governance/03_tech_constraints.md`
-5. `docs/10_product_design/`
-6. `docs/20_execution/`
-7. `docs/30_contracts/`
-8. `docs/40_expected_outputs/`
-9. `docs/50_tests/`
-10. `docs/60_claude_code_support/`
+```powershell
+cd frontend
+npm run build
+```
 
-## 你现在还需要补的硬材料
+构建完成后，后端会挂载 `frontend/dist`，可通过后端地址访问单页应用。
 
-这份包已经把文档和模板整理完整了，但要真正高质量开工，还需要你后续补进来两类真实材料：
+## 一键启动
 
-- `samples/bank/` 里的脱敏银行流水样本
-- `samples/manual/` 里的脱敏手工总表样本
+完成 `setup.bat` 后：
 
-没有真实样本，Claude Code 只能先完成结构和流程，真实解析稳不稳还需要回归验证。
+```powershell
+.\start.bat
+```
 
-## 直接使用建议
+`start.bat` 会清理端口 8000 上的旧进程、清理 Python 缓存，并启动后端服务。
 
-- 把整个包解压到项目根目录
-- 保持 `docs/`、`templates/`、`samples/`、`references/` 目录结构不变
-- 让 Claude Code 按 README 的阅读顺序执行
-- 每做完一个模块，就拿 `docs/40_expected_outputs/` 和 `docs/50_tests/` 对照验收
+## 环境变量
+
+复制 `.env.example` 为 `.env` 后按需调整：
+
+```text
+ZF_SECRET_KEY=set_a_long_random_string_here
+ZF_DB_PATH=backend/data/zhangfang.db
+ZF_LOG_LEVEL=INFO
+```
+
+当前代码会读取 `ZF_SECRET_KEY` 和 `ZF_DB_PATH`。未设置 `ZF_SECRET_KEY` 时会基于数据库路径生成本地密钥，仅适合单机开发环境。
+
+## 测试
+
+后端测试：
+
+```powershell
+backend\venv\Scripts\pytest.exe tests\backend
+```
+
+服务层覆盖率门槛：
+
+```powershell
+backend\venv\Scripts\pytest.exe tests\backend --cov=backend/services --cov-report=term-missing --cov-fail-under=70
+```
+
+端到端业务闭环脚本：
+
+```powershell
+backend\venv\Scripts\pytest.exe tests\e2e\test_full_flow.py
+```
+
+## 打包成 exe
+
+先构建前端：
+
+```powershell
+cd frontend
+npm run build
+cd ..
+```
+
+安装 PyInstaller 并打包后端入口：
+
+```powershell
+backend\venv\Scripts\pip.exe install pyinstaller
+backend\venv\Scripts\pyinstaller.exe --onefile --name zhangfang --paths backend backend\main.py
+```
+
+打包产物位于 `dist/zhangfang.exe`。正式交付前需补充静态资源、数据库初始文件、Alembic 迁移文件和启动脚本的完整打包校验。
+
+## 重要目录
+
+| 目录 | 用途 |
+| --- | --- |
+| `backend/` | FastAPI 后端、服务层、数据库模型、Agent 骨架 |
+| `frontend/` | Vue 前端 |
+| `alembic/` | SQLite schema 迁移 |
+| `tests/` | 后端、端到端、样本测试 |
+| `docs/` | 治理、契约、执行与交付文档 |
+| `backend/data/` | 本地 SQLite 数据与上传/导出/备份数据目录 |
+
+## 当前边界
+
+- V1 只交付本地单机财务工作台，不包含多人协作和集中部署。
+- AI 只做辅助识别与配置建议，不决定账户归属和汇总正确性。
+- `backend/data/zhangfang.db` 是本地业务数据核心文件，发送或备份前需要确认是否包含真实财务数据与本地明文 API Key。

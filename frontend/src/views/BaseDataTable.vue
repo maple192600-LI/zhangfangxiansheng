@@ -24,36 +24,64 @@
           <button class="btn btn-secondary" @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</button>
           <button class="btn btn-secondary" @click="doExport('base_data')">导出</button>
           <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="page = 1; loadData()">查询</button>
+          <button class="btn btn-primary" @click="page = 1; loadData()">生成报表</button>
         </div>
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载数据...</p></div>
-      <table v-else>
+
+      <!-- 优先：Excel 原表完整渲染 -->
+      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+
+      <!-- 有模板列时的渲染 -->
+      <table v-else-if="templateColumns && templateColumns.length">
         <thead>
           <tr>
-            <th>日期</th><th>单位简称</th><th>账户名称</th><th>摘要</th><th>对方</th>
-            <th>收入</th><th>支出</th><th>余额</th><th>状态</th>
+            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in rows" :key="r.id">
-            <td>{{ r.business_date }}</td>
-            <td>{{ r.entity_name || '-' }}</td>
-            <td>{{ r.account_name || '-' }}</td>
-            <td>{{ r.summary_text }}</td>
-            <td>{{ r.counterparty_name || '-' }}</td>
-            <td class="money inc">{{ fmtAmt(r.income_amount) }}</td>
-            <td class="money exp">{{ fmtAmt(r.expense_amount) }}</td>
-            <td class="money balance">{{ fmtAmt(r.rolling_balance) }}</td>
-            <td>
-              <span v-if="r.abnormal_code" class="tag tag-warn">{{ r.abnormal_code }}</span>
-              <span v-else class="tag tag-green">正常</span>
-            </td>
+            <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
           </tr>
-          <tr v-if="!rows.length"><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">暂无数据，请先录入或导入流水</td></tr>
+          <tr v-if="!rows.length"><td :colspan="templateColumns.length" class="empty-cell">暂无数据，请先录入或导入流水</td></tr>
         </tbody>
       </table>
+
+      <!-- 兜底：无模板时有数据也显示基础表 -->
+      <template v-else-if="rows.length">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>方向</th>
+              <th>摘要</th>
+              <th>对方</th>
+              <th class="money">收入金额</th>
+              <th class="money">支出金额</th>
+              <th class="money">余额</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in rows" :key="r.id">
+              <td>{{ r.business_date }}</td>
+              <td>{{ r.direction === 'income' ? '收入' : '支出' }}</td>
+              <td>{{ r.summary_text }}</td>
+              <td>{{ r.counterparty_name }}</td>
+              <td class="money">{{ fmtAmt(r.income_amount) }}</td>
+              <td class="money">{{ fmtAmt(r.expense_amount) }}</td>
+              <td class="money">{{ fmtAmt(r.rolling_balance) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+
+      <!-- 真正无数据时的提示 -->
+      <div v-else-if="templateLoaded" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h4>暂无数据</h4>
+        <p>请先通过网银导入或手工录入流水数据</p>
+      </div>
     </div>
 
     <div class="bottom-bar" v-if="total > 0">
@@ -70,6 +98,7 @@ import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
+import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
 const entities = ref([])
 const rows = ref([])
@@ -79,6 +108,16 @@ const totalPages = ref(1)
 const rebuilding = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
+const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('base_data')
+
+const MONEY_KEYS_BD = new Set(['income_amount', 'expense_amount', 'rolling_balance'])
+function colClass(key) { return MONEY_KEYS_BD.has(key) ? 'money' : '' }
+function cellVal(r, key) {
+  if (key === 'abnormal_code') return r.abnormal_code || '正常'
+  if (MONEY_KEYS_BD.has(key)) return fmtAmt(r[key])
+  if (r[key] === undefined || r[key] === null) return ''
+  return r[key]
+}
 
 const filters = ref({ date_from: '', date_to: '', entity_id: null, direction: null, keyword: '' })
 
@@ -130,6 +169,7 @@ async function doExport(exportType) {
 
 onMounted(async () => {
   try { entities.value = (await master.getAccountsTree()) || [] } catch (e) {}
+  loadTemplate()
   loadData()
 })
 </script>

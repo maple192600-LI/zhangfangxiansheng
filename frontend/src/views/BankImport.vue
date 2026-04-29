@@ -76,6 +76,9 @@
         <div class="btn-row" style="margin-top:14px">
           <button class="btn btn-secondary" @click="reset">重新上传</button>
           <button class="btn btn-secondary" @click="aiParse">重新解析</button>
+          <button class="btn btn-accent" @click="doSaveAsRule" :disabled="savingRule">
+            {{ savingRule ? '保存中...' : '保存为规则' }}
+          </button>
           <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
         </div>
       </div>
@@ -170,6 +173,7 @@ const aiResult = ref({})
 const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
+const savingRule = ref(false)
 
 const accountGroups = computed(() => accountTree.value || [])
 
@@ -250,6 +254,51 @@ async function doPreview() {
     step.value = 3
   } catch (e) {
     hint.value = e.message || '预览失败'
+  }
+}
+
+// 从文件名推断银行名 + "流水规则"
+function inferRuleName() {
+  const BANK_MAP = {
+    '招商': '招商银行', '招行': '招商银行',
+    '农业': '农业银行', '农行': '农业银行',
+    '工商': '工商银行', '工行': '工商银行',
+    '建设': '建设银行', '建行': '建设银行',
+    '中国银行': '中国银行', '中行': '中国银行',
+    '交通': '交通银行', '交行': '交通银行',
+    '广发': '广发银行', '民生': '民生银行',
+    '浦发': '浦发银行', '中信': '中信银行',
+    '光大': '光大银行', '华夏': '华夏银行',
+    '邮储': '邮储银行', '兴业': '兴业银行',
+    '平安': '平安银行', '农商': '农商银行',
+    '信用社': '信用社', '网商': '网商银行',
+    '微众': '微众银行',
+  }
+  const name = uploadResult.value.file_name || ''
+  for (const [kw, bankName] of Object.entries(BANK_MAP)) {
+    if (name.includes(kw)) return bankName + '流水规则'
+  }
+  // fallback: 用 AI 建议的模板名
+  return aiResult.value.template_name || '银行流水规则'
+}
+
+async function doSaveAsRule() {
+  savingRule.value = true
+  hint.value = ''
+  try {
+    await bank.saveAsTemplate({
+      template_name: inferRuleName(),
+      file_format: uploadResult.value.detected_format || 'xlsx',
+      header_row: uploadResult.value.header_row || 0,
+      skip_rows: 0,
+      sample_headers: uploadResult.value.headers || [],
+      mapping_json: aiResult.value.mapping,
+    })
+    hint.value = '已保存为规则，可在「规则中心 → 银行流水规则」中查看'
+  } catch (e) {
+    hint.value = '保存规则失败: ' + (e.message || e)
+  } finally {
+    savingRule.value = false
   }
 }
 

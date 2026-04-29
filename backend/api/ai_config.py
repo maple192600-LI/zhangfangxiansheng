@@ -5,7 +5,8 @@ POST /api/ai-configs/{id}/test
 GET /api/ai-providers — 获取所有提供商和模型列表
 GET /api/ai-providers/ollama/models — 自动检测 Ollama 本地模型
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ class AIConfigCreateBody(BaseModel):
     base_url: Optional[str] = Field(None, max_length=255)
     model_name: str = Field("", max_length=100)
     is_default: bool = False
+    privacy_mode: str = "standard"
 
 
 class AIConfigUpdateBody(BaseModel):
@@ -34,6 +36,7 @@ class AIConfigUpdateBody(BaseModel):
     base_url: Optional[str] = None
     model_name: Optional[str] = None
     is_default: Optional[bool] = None
+    privacy_mode: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -63,6 +66,20 @@ def update_ai_config(
     return success(result)
 
 
+@router.delete("/ai-configs/{config_id}")
+def delete_ai_config(config_id: int, db: Session = Depends(get_db)):
+    try:
+        result = svc.delete_ai_config(db, config_id)
+    except svc.AIConfigInUseError as e:
+        return JSONResponse(
+            status_code=409,
+            content=error(2002, str(e), data={"references": e.references}),
+        )
+    except ValueError as e:
+        return error(2001, str(e))
+    return success(result)
+
+
 @router.post("/ai-configs/{config_id}/test")
 def test_ai_connection(config_id: int, db: Session = Depends(get_db)):
     try:
@@ -85,3 +102,8 @@ def detect_ollama():
     """自动检测本地 Ollama 已安装的模型"""
     models = detect_ollama_models()
     return success(models)
+
+
+@router.get("/ai-call-logs")
+def get_ai_call_logs(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
+    return success(svc.list_ai_call_logs(db, limit=limit))

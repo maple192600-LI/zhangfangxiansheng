@@ -1,0 +1,35 @@
+skill_code: parse_bank_flow
+display_name: 银行流水智能解析
+description: 通用银行流水解析——自动识别任意银行/格式的 Excel/CSV 流水文件，提取交易字段，匹配系统账户数据，输出可直接写入基础数据表（fund_events）的结构化数据
+version: "1.0.0"
+category: bank_parser
+tags: [银行, 流水, 解析, 基础数据, fund_events, 通用]
+
+input:
+  file_path:
+    type: string
+    required: true
+    description: 上传的银行流水文件路径（xlsx/xls/csv）
+  entity_code:
+    type: string
+    required: false
+    description: 指定法人编码（若文件中无法自动识别）
+  account_code:
+    type: string
+    required: false
+    description: 指定账户编号（若文件中无法自动识别）
+
+output:
+  type: object
+  properties:
+    total_rows:
+      type: integer
+    transactions:
+      type: array
+    matched_account:
+      type: object
+
+runtime:
+  timeout_ms: 30000
+  dependencies:
+    - openpyxl

@@ -30,12 +30,12 @@ const routes = [
       { path: 'income-list', name: 'income-list', component: () => import('@/views/IncomeList.vue') },
       { path: 'expense-list', name: 'expense-list', component: () => import('@/views/ExpenseList.vue') },
 
-      // 资金板块 > 资金综合报表（V2 占位）
-      { path: 'major-balance', name: 'major-balance', component: Placeholder },
-      { path: 'month-check', name: 'month-check', component: Placeholder },
-      { path: 'week-report', name: 'week-report', component: Placeholder },
-      { path: 'month-report', name: 'month-report', component: Placeholder },
-      { path: 'year-report', name: 'year-report', component: Placeholder },
+      // 资金板块 > 资金综合报表
+      { path: 'major-balance', name: 'major-balance', component: () => import('@/views/MajorBalance.vue') },
+      { path: 'month-check', name: 'month-check', component: () => import('@/views/MonthCheck.vue') },
+      { path: 'week-report', name: 'week-report', component: () => import('@/views/WeekReport.vue') },
+      { path: 'month-report', name: 'month-report', component: () => import('@/views/MonthReport.vue') },
+      { path: 'year-report', name: 'year-report', component: () => import('@/views/YearReport.vue') },
 
       // OCR识别（V2 占位）
       { path: 'invoice-ocr', name: 'invoice-ocr', component: Placeholder },
@@ -54,7 +54,9 @@ const routes = [
       // 预算管理（V2 占位）
       { path: 'budget-plan', name: 'budget-plan', component: Placeholder },
 
-      // AI智能体（V2 占位）
+      // AI智能体
+      { path: 'agent/review/:type/:id', name: 'agent-review', component: () => import('@/views/AgentReview.vue') },
+      { path: 'agents/:id', name: 'agent-detail', component: () => import('@/views/AgentDetail.vue') },
       { path: 'agent/social', name: 'agent-social', component: Placeholder },
       { path: 'agent/daily', name: 'agent-daily', component: Placeholder },
       { path: 'agent/cost', name: 'agent-cost', component: Placeholder },
@@ -65,7 +67,7 @@ const routes = [
 
       // 系统设置 > 数据中心
       { path: 'account-manage', name: 'account-manage', component: () => import('@/views/AccountManage.vue') },
-      { path: 'data/report-tpl', name: 'data-report-tpl', component: Placeholder },
+      { path: 'data/report-tpl', name: 'data-report-tpl', component: () => import('@/views/ReportTemplate.vue') },
       { path: 'data/department', name: 'data-department', component: Placeholder },
       { path: 'data/contract', name: 'data-contract', component: Placeholder },
       { path: 'data/invoice', name: 'data-invoice', component: Placeholder },
@@ -79,16 +81,11 @@ const routes = [
       { path: 'rule/other', name: 'rule-other', component: Placeholder },
 
       // 系统设置 > 异常中心（V2 占位）
-      { path: 'exception/receipt', name: 'exception-receipt', component: Placeholder },
-      { path: 'exception/other', name: 'exception-other', component: Placeholder },
+      { path: 'exception/receipt', name: 'exception-receipt', component: () => import('@/views/ExceptionCenter.vue') },
+      { path: 'exception/other', name: 'exception-other', component: () => import('@/views/ExceptionCenter.vue') },
 
       // 系统设置 > AI配置
       { path: 'ai-config', name: 'ai-config', component: () => import('@/views/AIConfig.vue') },
-      { path: 'agent-config', name: 'agent-config', component: () => import('@/views/AgentConfig.vue') },
-      { path: 'ai/skill', name: 'ai-skill', component: Placeholder },
-      { path: 'ai/memory', name: 'ai-memory', component: Placeholder },
-      { path: 'ai/task', name: 'ai-task', component: Placeholder },
-      { path: 'ai/ocr', name: 'ai-ocr', component: Placeholder },
 
       // 系统设置 > 用户和权限（V2 占位）
       { path: 'perm/admin', name: 'perm-admin', component: Placeholder },

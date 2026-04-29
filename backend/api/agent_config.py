@@ -1,39 +1,40 @@
-"""Agent 配置 API 路由
+"""Agent 工作空间目录读取（V2 兼容）
 
-GET /api/agent-configs
-PUT /api/agent-configs/{id}
+GET /api/agent-workspaces — 读取 agents/ 目录下实际的 agent 工作空间
 """
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
-from typing import Optional
-from sqlalchemy.orm import Session
+import os
 
-from core.response import error, success
-from database import get_db
-from services import ai_config_service as svc
+from fastapi import APIRouter
+
+from config import BASE_DIR
+from core.response import success
 
 router = APIRouter()
 
-
-class AgentConfigUpdateBody(BaseModel):
-    agent_name: Optional[str] = Field(None, max_length=100)
-    ai_config_id: Optional[int] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
+AGENTS_DIR = os.path.join(BASE_DIR, "agents")
 
 
-@router.get("/agent-configs")
-def get_agent_configs(db: Session = Depends(get_db)):
-    items = svc.list_agent_configs(db)
-    return success(items)
+@router.get("/agent-workspaces")
+def get_agent_workspaces():
+    """读取 agents/ 目录下每个 agent 子目录的文件列表和文件数量"""
+    if not os.path.isdir(AGENTS_DIR):
+        return success([])
 
-
-@router.put("/agent-configs/{agent_id}")
-def update_agent_config(
-    agent_id: int, body: AgentConfigUpdateBody, db: Session = Depends(get_db),
-):
-    try:
-        result = svc.update_agent_config(db, agent_id, body.model_dump(exclude_unset=True))
-    except ValueError as e:
-        return error(2001, str(e))
+    result = []
+    for name in sorted(os.listdir(AGENTS_DIR)):
+        agent_path = os.path.join(AGENTS_DIR, name)
+        if not os.path.isdir(agent_path):
+            continue
+        files = []
+        for root, dirs, filenames in os.walk(agent_path):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            for fn in filenames:
+                full = os.path.join(root, fn)
+                rel = os.path.relpath(full, agent_path).replace("\\", "/")
+                files.append(rel)
+        result.append({
+            "dir_name": name,
+            "file_count": len(files),
+            "files": sorted(files),
+        })
     return success(result)

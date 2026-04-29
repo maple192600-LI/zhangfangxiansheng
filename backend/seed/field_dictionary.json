@@ -1,0 +1,52 @@
+{
+  "business_date": {
+    "cn_name": "日期",
+    "type": "DATE",
+    "aliases": ["日期", "交易日期", "记账日期", "业务日期", "入账日期", "发生日期"]
+  },
+  "entity_code": {
+    "cn_name": "单位编码",
+    "type": "VARCHAR",
+    "aliases": ["单位编码", "主体编码", "组织编码", "公司编码", "法人编码"]
+  },
+  "entity_name": {
+    "cn_name": "单位名称",
+    "type": "VARCHAR",
+    "aliases": ["单位", "单位名称", "主体", "公司", "法人", "核算单位"]
+  },
+  "account_code": {
+    "cn_name": "账户编码",
+    "type": "VARCHAR",
+    "aliases": ["账户编码", "账号", "账户号", "银行账号", "ZH 编码", "AccountId"]
+  },
+  "account_name": {
+    "cn_name": "账户名称",
+    "type": "VARCHAR",
+    "aliases": ["账户", "账户名称", "账户名", "银行账户", "户名", "开户名称"]
+  },
+  "summary": {
+    "cn_name": "摘要",
+    "type": "TEXT",
+    "aliases": ["摘要", "用途", "备注", "说明", "事项", "交易摘要"]
+  },
+  "counterparty": {
+    "cn_name": "对方",
+    "type": "TEXT",
+    "aliases": ["对方", "对方户名", "往来单位", "客户", "付款方", "收款方"]
+  },
+  "amount_in": {
+    "cn_name": "收入",
+    "type": "NUMERIC",
+    "aliases": ["收入", "贷方", "进账", "贷记", "入账金额", "收款", "到账"]
+  },
+  "amount_out": {
+    "cn_name": "支出",
+    "type": "NUMERIC",
+    "aliases": ["支出", "借方", "出账", "借记", "付款", "付出"]
+  },
+  "rolling_balance": {
+    "cn_name": "余额",
+    "type": "NUMERIC",
+    "aliases": ["余额", "账户余额", "滚动余额", "可用余额", "当前余额"]
+  }
+}
