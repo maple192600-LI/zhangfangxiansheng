@@ -1,6 +1,6 @@
 """记忆工具"""
-from agents_v2.tool_registry import register_tool, ToolContext
-from agents_v2 import memory_store
+from agents.tool_registry import register_tool, ToolContext
+from agents import memory_store
 
 
 @register_tool(read_only=True)

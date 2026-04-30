@@ -451,9 +451,9 @@ class ReportTemplate(Base):
 
 
 # ──────────────────────────────────────────
-# 16. agents_v2 — AI 智能体（v2）
+# 16. agents — AI 智能体
 # ──────────────────────────────────────────
-class AgentV2(Base):
+class Agent(Base):
     __tablename__ = "agents_v2"
     id = Column(Integer, primary_key=True, autoincrement=True)
     agent_code = Column(String(50), nullable=False, unique=True)
@@ -472,16 +472,19 @@ class AgentV2(Base):
 
     ai_config = relationship("AIConfig")
     sessions = relationship("AgentSession", back_populates="agent", order_by="AgentSession.last_active_at.desc()", passive_deletes=True)
-    skills = relationship("SkillV2", back_populates="owner_agent", passive_deletes=True)
+    skills = relationship("Skill", back_populates="owner_agent", passive_deletes=True)
     memories = relationship("AgentMemory", back_populates="agent", passive_deletes=True)
 
     __table_args__ = (Index("idx_agents_v2_status", "status"),)
 
+# 兼容旧代码
+AgentV2 = Agent
+
 
 # ──────────────────────────────────────────
-# 17. skills_v2 — 技能
+# 17. skills — 技能
 # ──────────────────────────────────────────
-class SkillV2(Base):
+class Skill(Base):
     __tablename__ = "skills_v2"
     id = Column(Integer, primary_key=True, autoincrement=True)
     skill_code = Column(String(80), nullable=False, unique=True)
@@ -497,9 +500,12 @@ class SkillV2(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
-    owner_agent = relationship("AgentV2", back_populates="skills")
+    owner_agent = relationship("Agent", back_populates="skills")
 
     __table_args__ = (Index("idx_skills_v2_status", "status"),)
+
+# 兼容旧代码
+SkillV2 = Skill
 
 
 # ──────────────────────────────────────────
@@ -515,7 +521,7 @@ class AgentSession(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     last_active_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
-    agent = relationship("AgentV2", back_populates="sessions")
+    agent = relationship("Agent", back_populates="sessions")
     messages = relationship("AgentMessage", back_populates="session", order_by="AgentMessage.id")
 
     __table_args__ = (Index("idx_agent_sessions_agent", "agent_id"),)
@@ -575,7 +581,7 @@ class AgentMemory(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     last_used_at = Column(DateTime, nullable=False, default=datetime.now)
 
-    agent = relationship("AgentV2", back_populates="memories")
+    agent = relationship("Agent", back_populates="memories")
 
     __table_args__ = (
         Index("idx_agent_memories_agent", "agent_id"),

@@ -145,7 +145,7 @@ async function load() {
 async function handleRun(sk) {
   runningCode.value = sk.skill_code
   try {
-    const res = await http.post(`/agent_v2/agents/${props.agentId}/skill-run`, {
+    const res = await http.post(`/agent/agents/${props.agentId}/skill-run`, {
       skill_code: sk.skill_code,
     })
     const data = res
@@ -167,7 +167,7 @@ async function handleRun(sk) {
 async function handleTest(sk) {
   testingCode.value = sk.skill_code
   try {
-    const res = await http.post(`/agent_v2/agents/${props.agentId}/skill-test`, {
+    const res = await http.post(`/agent/agents/${props.agentId}/skill-test`, {
       skill_code: sk.skill_code,
     })
     const data = res
@@ -209,7 +209,7 @@ async function toggleDetail(skillCode) {
   if (expandedDetail.value[skillCode] && !detailData.value[skillCode]) {
     detailLoading.value = { ...detailLoading.value, [skillCode]: true }
     try {
-      const data = await http.get(`/agent_v2/agents/${props.agentId}/skills/${skillCode}`)
+      const data = await http.get(`/agent/agents/${props.agentId}/skills/${skillCode}`)
       detailData.value = { ...detailData.value, [skillCode]: data }
     } catch {
       detailData.value = { ...detailData.value, [skillCode]: { error: '加载失败' } }

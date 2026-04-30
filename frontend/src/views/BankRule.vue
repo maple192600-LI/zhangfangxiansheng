@@ -52,31 +52,49 @@
 
     <!-- 详情弹窗 -->
     <div class="modal-mask" v-if="showDetail" @click.self="showDetail=false">
-      <div class="modal" style="max-width:640px">
+      <div class="modal detail-modal">
         <h3>{{ detailData.template_name }} — 规则详情</h3>
         <div class="detail-grid">
           <div class="field"><span class="label">文件格式</span><span>{{ detailData.file_format }}</span></div>
           <div class="field"><span class="label">表头行号</span><span>{{ detailData.header_row }}</span></div>
           <div class="field"><span class="label">跳过行数</span><span>{{ detailData.skip_rows }}</span></div>
-          <div class="field"><span class="label">状态</span><span class="tag" :class="detailData.status === 'active' ? 'tag-green' : 'tag-gray'">{{ detailData.status }}</span></div>
+          <div class="field"><span class="label">状态</span><span class="tag" :class="detailData.status === 'active' ? 'tag-green' : 'tag-gray'">{{ detailData.status === 'active' ? '启用' : '停用' }}</span></div>
         </div>
-        <div style="margin-top:14px">
-          <h4 style="margin:0 0 8px;font-size:14px">样本表头</h4>
-          <div class="tag-list">
+
+        <div class="detail-section">
+          <h4>样本表头 ({{ (detailData.sample_headers || []).length }} 列)</h4>
+          <div class="tag-list-wrap">
             <span class="tag" v-for="h in (detailData.sample_headers || [])" :key="h">{{ h }}</span>
           </div>
         </div>
-        <div style="margin-top:14px">
-          <h4 style="margin:0 0 8px;font-size:14px">字段映射</h4>
-          <table style="font-size:var(--font-size-xs)">
-            <thead><tr><th>银行列名</th><th>→ 标准字段</th></tr></thead>
-            <tbody>
-              <tr v-for="(v, k) in (detailData.mapping_json || {})" :key="k">
-                <td>{{ k }}</td><td style="color:var(--green)">{{ v }}</td>
-              </tr>
-            </tbody>
-          </table>
+
+        <div class="detail-section">
+          <h4>列映射 (_columns)</h4>
+          <div class="mapping-table-wrap" v-if="mappingColumns && Object.keys(mappingColumns).length">
+            <table class="mapping-table">
+              <thead><tr><th>原始列名</th><th style="width:40px;text-align:center">→</th><th>标准字段</th></tr></thead>
+              <tbody>
+                <tr v-for="(v, k) in mappingColumns" :key="k">
+                  <td class="col-name">{{ k }}</td>
+                  <td style="text-align:center;color:var(--muted)">→</td>
+                  <td><span class="field-tag">{{ v }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="empty-hint">无列映射</p>
         </div>
+
+        <div class="detail-section" v-if="postProcessText">
+          <h4>后处理规则 (post_process)</h4>
+          <pre class="code-block">{{ postProcessText }}</pre>
+        </div>
+
+        <div class="detail-section">
+          <h4>完整规则 JSON</h4>
+          <pre class="code-block">{{ fullJsonText }}</pre>
+        </div>
+
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
           <button class="btn btn-secondary" @click="showDetail=false">关闭</button>
         </div>
@@ -136,6 +154,28 @@ const showDetail = ref(false)
 const showForm = ref(false)
 const detailData = ref({})
 
+const mappingColumns = computed(() => {
+  const mj = detailData.value.mapping_json
+  if (!mj) return {}
+  if (mj._columns) return mj._columns
+  // 如果是扁平结构（旧格式），直接返回
+  const flat = { ...mj }
+  delete flat.post_process
+  return flat
+})
+
+const postProcessText = computed(() => {
+  const mj = detailData.value.mapping_json
+  if (!mj || !mj.post_process) return ''
+  return JSON.stringify(mj.post_process, null, 2)
+})
+
+const fullJsonText = computed(() => {
+  const mj = detailData.value.mapping_json
+  if (!mj) return '{}'
+  return JSON.stringify(mj, null, 2)
+})
+
 const allSelected = computed(() => templates.value.length > 0 && selectedIds.value.size === templates.value.length)
 
 const form = ref({
@@ -167,29 +207,7 @@ function toggleAll() {
   }
 }
 
-const BANK_KEYWORDS = {
-  '招商': '招商银行', '招行': '招商银行',
-  '农业': '农业银行', '农行': '农业银行',
-  '工商': '工商银行', '工行': '工商银行',
-  '建设': '建设银行', '建行': '建设银行',
-  '中国银行': '中国银行', '中行': '中国银行',
-  '交通': '交通银行', '交行': '交通银行',
-  '兴业': '兴业银行', '广发': '广发银行',
-  '民生': '民生银行', '浦发': '浦发银行',
-  '中信': '中信银行', '光大': '光大银行',
-  '华夏': '华夏银行', '邮储': '邮储银行',
-  '农商': '农商银行', '信用社': '信用社',
-  '网商': '网商银行', '微众': '微众银行',
-  '平安': '平安银行',
-}
-
-function guessBank(name) {
-  if (!name) return null
-  for (const [keyword, bank] of Object.entries(BANK_KEYWORDS)) {
-    if (name.includes(keyword)) return bank
-  }
-  return null
-}
+import { guessBank } from '@/utils/bankMap'
 
 function viewDetail(t) {
   detailData.value = t
@@ -274,6 +292,93 @@ textarea.filter { font-family: inherit; resize: vertical; line-height: 1.6; }
 .field .label { display: block; font-size: var(--font-size-xs); color: var(--muted); margin-bottom: 4px; }
 
 tr.selected { background: #fdf6ec; }
+
+.detail-modal {
+  max-width: 900px !important;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.detail-section {
+  margin-top: 14px;
+}
+.detail-section h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 600;
+}
+.tag-list-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e7e0d5;
+  border-radius: var(--radius-sm);
+}
+.mapping-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #e7e0d5;
+  border-radius: var(--radius-sm);
+}
+.mapping-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+.mapping-table th {
+  position: sticky;
+  top: 0;
+  background: #f5f0e8;
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid #e7e0d5;
+}
+.mapping-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f0ebe3;
+}
+.mapping-table .col-name {
+  max-width: 280px;
+  word-break: break-all;
+}
+.field-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--tag-green-bg, #e8f5e9);
+  color: var(--tag-green-text, #2e7d32);
+  font-size: 12px;
+  font-family: monospace;
+}
+.code-block {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre;
+  margin: 0;
+}
+.empty-hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e7e0d5;
+  border-radius: var(--radius-sm);
+}
 
 .btn-danger {
   background: #c0392b; color: #fff; border: 1px solid #a93226;

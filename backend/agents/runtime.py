@@ -3,7 +3,7 @@
 单轮对话 → 多次 tool 调用 → 返回最终回复
 yield 事件：TextChunk / ToolStart / ToolEnd / TurnDone
 
-V2 改造：
+
 - 多 tool_call 批量执行
 - 错误恢复（保存到历史而非静默丢弃）
 - 上下文压缩（ContextEngine）
@@ -17,26 +17,26 @@ from typing import AsyncGenerator, Optional
 
 from sqlalchemy.orm import Session
 
-from db.tables import AgentV2
-from agents_v2.provider import stream_chat
+from db.tables import Agent
+from agents.provider import stream_chat
 from core.security import decrypt_key
-from agents_v2.tool_registry import ToolContext, execute_tool, get_tools_for_llm
-from agents_v2.permission import get_permission, is_tool_allowed
-from agents_v2.session_store import load_recent_messages, save_message
-from agents_v2.memory_store import search_memory
-from agents_v2.context import context_engine
-from agents_v2.session_lock import get_session_lock
-from agents_v2.skill_registry import skill_registry
-from agents_v2.skill_executor import format_skill_instruction, get_skill_run_path
-from agents_v2.context import estimate_tokens
-from agents_v2 import sse_helper as sse
-import agents_v2.tools  # 触发工具注册
+from agents.tool_registry import ToolContext, execute_tool, get_tools_for_llm
+from agents.permission import get_permission, is_tool_allowed
+from agents.session_store import load_recent_messages, save_message
+from agents.memory_store import search_memory
+from agents.context import context_engine
+from agents.session_lock import get_session_lock
+from agents.skill_registry import skill_registry
+from agents.skill_executor import format_skill_instruction, get_skill_run_path
+from agents.context import estimate_tokens
+from agents import sse_helper as sse
+import agents.tools  # 触发工具注册
 
 MAX_TURNS = 40
 
 
 async def run_turn(
-    agent: AgentV2,
+    agent: Agent,
     session_id: int,
     user_text: str,
     db: Session,
@@ -54,7 +54,7 @@ async def run_turn(
 
 
 async def _run_turn_inner(
-    agent: AgentV2,
+    agent: Agent,
     session_id: int,
     user_text: str,
     db: Session,
@@ -273,7 +273,7 @@ def _build_skill_hints(skills: list) -> str:
 
 
 def _build_system_prompt(
-    agent: AgentV2,
+    agent: Agent,
     memory_hints: str = "",
     skill_hints: str = "",
 ) -> str:

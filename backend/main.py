@@ -42,7 +42,7 @@ from api.reset import router as reset_router
 from api.bank_master import router as bank_master_router
 from api.report_template import router as report_template_router
 from api.events import router as events_router
-from api.agent_v2 import router as agent_v2_router
+from api.agent import router as agent_router
 
 
 def _init_db():
@@ -99,15 +99,19 @@ def _ensure_default_user():
         get_or_create_default_user(db)
 
 
+_BROWSER_OPENED = False
+
+
 def _open_browser(url: str):
     """服务启动后自动打开默认浏览器（仅首次启动，热重载不重复打开）"""
+    global _BROWSER_OPENED
     import os
     import threading
     import webbrowser
 
-    # 热重载重启时不重复打开浏览器
-    if os.environ.get("_BROWSER_OPENED") == "1":
+    if os.environ.get("_BROWSER_OPENED") == "1" or _BROWSER_OPENED:
         return
+    _BROWSER_OPENED = True
     os.environ["_BROWSER_OPENED"] = "1"
 
     def _do_open():
@@ -124,8 +128,8 @@ def _register_global_skills():
     import os
     from datetime import datetime
     from database import SessionLocal
-    from db.tables import SkillV2
-    from agents_v2.skill_loader import load_manifest
+    from db.tables import Skill
+    from agents.skill_loader import load_manifest
 
     system_skills_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "data", "agents", "system", "skills"
@@ -145,7 +149,7 @@ def _register_global_skills():
                 continue
 
             skill_code = manifest.get("skill_code", skill_dir_name)
-            existing = db.query(SkillV2).filter(SkillV2.skill_code == skill_code).first()
+            existing = db.query(Skill).filter(Skill.skill_code == skill_code).first()
             if existing:
                 # 更新
                 existing.display_name = manifest.get("display_name", skill_code)
@@ -155,7 +159,7 @@ def _register_global_skills():
                 existing.status = "verified"
                 existing.updated_at = datetime.now()
             else:
-                row = SkillV2(
+                row = Skill(
                     skill_code=skill_code,
                     display_name=manifest.get("display_name", skill_code),
                     description=manifest.get("description", ""),
@@ -188,10 +192,14 @@ async def lifespan(app: FastAPI):
 # ── 创建 FastAPI 实例 ──
 app = FastAPI(title="账房先生", version="1.0.0", docs_url=None, redoc_url=None, lifespan=lifespan)
 
-# ── CORS（开发用）──
+# ── CORS（本地部署 + 开发用）──
+_CORS_ORIGINS = os.environ.get(
+    "ZF_CORS_ORIGINS",
+    "http://localhost:5180,http://127.0.0.1:5180,http://localhost:8000",
+).split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -218,7 +226,7 @@ app.include_router(reset_router, prefix="/api")
 app.include_router(bank_master_router, prefix="/api")
 app.include_router(report_template_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
-app.include_router(agent_v2_router, prefix="/api")
+app.include_router(agent_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──
@@ -251,19 +259,13 @@ if os.path.isdir(frontend_dist):
 
 
 if __name__ == "__main__":
-    # 排除 data/（agent skill 脚本）、exports/、backups/，避免 Agent 工作时误触发重启。
-    # 用绝对路径，因为 watchfiles 传入的文件路径是绝对路径，
-    # uvicorn FileFilter 做 exclude_dir in path.parents 比较时需要绝对路径才能匹配。
     _base = os.path.dirname(os.path.abspath(__file__))
     uvicorn.run(
         "main:app",
         host=HOST,
         port=PORT,
         reload=True,
+        reload_dirs=[_base],
         reload_includes=["*.py"],
-        reload_excludes=[
-            os.path.join(_base, "data"),
-            os.path.join(_base, "exports"),
-            os.path.join(_base, "backups"),
-        ],
+        reload_excludes=["data/**", "exports/**", "backups/**"],
     )

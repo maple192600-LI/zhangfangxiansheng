@@ -1,4 +1,4 @@
-"""Agent V2 API — CRUD + 聊天 SSE + 会话管理 + 文件上传"""
+"""Agent API — CRUD + 聊天 SSE + 会话管理 + 文件上传"""
 import logging
 import os
 import random
@@ -11,15 +11,15 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from core.response import success, error
-from db.tables import AgentV2, AIConfig, SkillV2
-from agents_v2.workspace import init_workspace, safe_path, list_files, get_agent_root
-from agents_v2.runtime import run_turn
-from agents_v2 import session_store
-from agents_v2 import memory_store
+from db.tables import Agent, AIConfig, Skill
+from agents.workspace import init_workspace, safe_path, list_files, get_agent_root
+from agents.runtime import run_turn
+from agents import session_store
+from agents import memory_store
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/agent_v2", tags=["agent_v2"])
+router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 def _gen_agent_code() -> str:
@@ -28,7 +28,7 @@ def _gen_agent_code() -> str:
     return "ag_" + "".join(random.choices(chars, k=6))
 
 
-def _agent_to_dict(a: AgentV2) -> dict:
+def _agent_to_dict(a: Agent) -> dict:
     return {
         "id": a.id,
         "agent_code": a.agent_code,
@@ -57,9 +57,9 @@ def _agent_to_dict(a: AgentV2) -> dict:
 def list_agents(db: Session = Depends(get_db)):
     """列出所有 active 的 agent"""
     rows = (
-        db.query(AgentV2)
-        .filter(AgentV2.status == "active")
-        .order_by(AgentV2.sort_order.desc(), AgentV2.created_at.desc())
+        db.query(Agent)
+        .filter(Agent.status == "active")
+        .order_by(Agent.sort_order.desc(), Agent.created_at.desc())
         .all()
     )
     return success([_agent_to_dict(a) for a in rows])
@@ -83,13 +83,13 @@ async def create_agent(request: Request, db: Session = Depends(get_db)):
         return error(4001, "所选 AI 配置不存在或已停用")
 
     agent_code = _gen_agent_code()
-    while db.query(AgentV2).filter(AgentV2.agent_code == agent_code).first():
+    while db.query(Agent).filter(Agent.agent_code == agent_code).first():
         agent_code = _gen_agent_code()
 
     role_prompt = (body.get("role_prompt") or "").strip()
     workspace_path = init_workspace(agent_code)
 
-    agent = AgentV2(
+    agent = Agent(
         agent_code=agent_code,
         display_name=display_name,
         role_prompt=role_prompt,
@@ -109,7 +109,7 @@ async def create_agent(request: Request, db: Session = Depends(get_db)):
 @router.get("/agents/{agent_id}")
 def get_agent(agent_id: int, db: Session = Depends(get_db)):
     """获取 agent 详情"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     return success(_agent_to_dict(agent))
@@ -118,7 +118,7 @@ def get_agent(agent_id: int, db: Session = Depends(get_db)):
 @router.put("/agents/{agent_id}")
 async def update_agent(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """更新 agent 设置"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 
@@ -154,7 +154,7 @@ async def update_agent(agent_id: int, request: Request, db: Session = Depends(ge
 @router.delete("/agents/{agent_id}")
 def delete_agent(agent_id: int, db: Session = Depends(get_db)):
     """软删除 agent"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     agent.status = "deleted"
@@ -174,7 +174,7 @@ def list_sessions(agent_id: int, db: Session = Depends(get_db)):
 @router.post("/agents/{agent_id}/sessions")
 async def create_session(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """创建新会话"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     body = {}
@@ -202,7 +202,7 @@ async def send_message(session_id: int, request: Request, db: Session = Depends(
         return error(2001, "会话不存在")
 
     # 获取 agent
-    agent = db.query(AgentV2).filter(AgentV2.id == session["agent_id"]).first()
+    agent = db.query(Agent).filter(Agent.id == session["agent_id"]).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 
@@ -269,7 +269,7 @@ def list_ai_configs(db: Session = Depends(get_db)):
 @router.get("/agents/{agent_id}/files")
 def list_agent_files(agent_id: int, sub_dir: str = "workspace", db: Session = Depends(get_db)):
     """列出 agent 工作区文件"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     files = list_files(agent.agent_code, sub_dir)
@@ -279,7 +279,7 @@ def list_agent_files(agent_id: int, sub_dir: str = "workspace", db: Session = De
 @router.post("/agents/{agent_id}/files/upload")
 async def upload_agent_file(agent_id: int, file: UploadFile = File(...), sub_dir: str = "inbox", db: Session = Depends(get_db)):
     """上传文件到 agent 工作区"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 
@@ -317,7 +317,7 @@ async def upload_agent_file(agent_id: int, file: UploadFile = File(...), sub_dir
 @router.get("/agents/{agent_id}/memories")
 def list_agent_memories(agent_id: int, db: Session = Depends(get_db)):
     """列出 agent 的所有记忆"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     memories = memory_store.list_memories(db, agent_id)
@@ -327,7 +327,7 @@ def list_agent_memories(agent_id: int, db: Session = Depends(get_db)):
 @router.post("/agents/{agent_id}/memories")
 async def save_agent_memory(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """保存一条记忆"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     body = await request.json()
@@ -372,13 +372,13 @@ def delete_agent_session(agent_id: int, session_id: int, db: Session = Depends(g
 @router.get("/agents/{agent_id}/skills")
 def list_agent_skills(agent_id: int, db: Session = Depends(get_db)):
     """列出 agent 的技能"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 
-    rows = db.query(SkillV2).filter(
-        (SkillV2.owner_agent_id == agent_id) | (SkillV2.owner_agent_id.is_(None)),
-        SkillV2.status.in_(["verified", "draft"]),
+    rows = db.query(Skill).filter(
+        (Skill.owner_agent_id == agent_id) | (Skill.owner_agent_id.is_(None)),
+        Skill.status.in_(["verified", "draft"]),
     ).all()
 
     skills = []
@@ -398,13 +398,13 @@ def list_agent_skills(agent_id: int, db: Session = Depends(get_db)):
 @router.get("/agents/{agent_id}/skills/{skill_code}")
 def get_skill_detail(agent_id: int, skill_code: str, db: Session = Depends(get_db)):
     """获取技能详情（含源码）"""
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 
-    skill = db.query(SkillV2).filter(
-        SkillV2.skill_code == skill_code,
-        (SkillV2.owner_agent_id == agent_id) | (SkillV2.owner_agent_id.is_(None)),
+    skill = db.query(Skill).filter(
+        Skill.skill_code == skill_code,
+        (Skill.owner_agent_id == agent_id) | (Skill.owner_agent_id.is_(None)),
     ).first()
     if not skill:
         return error(2001, "技能不存在")
@@ -422,7 +422,7 @@ def get_skill_detail(agent_id: int, skill_code: str, db: Session = Depends(get_d
     }
 
     # 读取源码
-    from agents_v2.skill_loader import get_skill_path
+    from agents.skill_loader import get_skill_path
     import os
     skill_path = get_skill_path(agent.agent_code, skill_code)
     if os.path.isdir(skill_path):
@@ -441,10 +441,10 @@ def get_skill_detail(agent_id: int, skill_code: str, db: Session = Depends(get_d
 @router.post("/agents/{agent_id}/skill-run")
 async def run_agent_skill(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """手动运行一个技能"""
-    from agents_v2.tool_registry import ToolContext
-    from agents_v2.tools.skill_ops import skill_run
+    from agents.tool_registry import ToolContext
+    from agents.tools.skill_ops import skill_run
 
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 
@@ -469,10 +469,10 @@ async def run_agent_skill(agent_id: int, request: Request, db: Session = Depends
 @router.post("/agents/{agent_id}/skill-test")
 async def test_agent_skill(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """手动测试一个技能"""
-    from agents_v2.tool_registry import ToolContext
-    from agents_v2.tools.skill_ops import skill_test
+    from agents.tool_registry import ToolContext
+    from agents.tools.skill_ops import skill_test
 
-    agent = db.query(AgentV2).filter(AgentV2.id == agent_id).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
 

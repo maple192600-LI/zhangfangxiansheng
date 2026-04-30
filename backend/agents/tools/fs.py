@@ -1,6 +1,6 @@
 """文件系统工具"""
-from agents_v2.tool_registry import register_tool, ToolContext
-from agents_v2 import workspace
+from agents.tool_registry import register_tool, ToolContext
+from agents import workspace
 
 
 @register_tool(read_only=True)

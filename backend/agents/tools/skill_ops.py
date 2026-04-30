@@ -3,19 +3,19 @@ import json
 import os
 from datetime import datetime
 
-from agents_v2.tool_registry import register_tool, ToolContext
-from agents_v2.workspace import safe_path
+from agents.tool_registry import register_tool, ToolContext
+from agents.workspace import safe_path
 
 
 @register_tool(read_only=True)
 def skill_list(ctx: ToolContext = None) -> dict:
     """列出当前 agent 可用的所有技能。"""
-    from db.tables import SkillV2
+    from db.tables import Skill
 
     db = ctx.db
-    rows = db.query(SkillV2).filter(
-        (SkillV2.owner_agent_id == ctx.agent_id) | (SkillV2.owner_agent_id.is_(None)),
-        SkillV2.status.in_(["verified", "draft"]),
+    rows = db.query(Skill).filter(
+        (Skill.owner_agent_id == ctx.agent_id) | (Skill.owner_agent_id.is_(None)),
+        Skill.status.in_(["verified", "draft"]),
     ).all()
 
     skills = []
@@ -33,7 +33,7 @@ def skill_list(ctx: ToolContext = None) -> dict:
 @register_tool(read_only=True)
 def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
     """运行一个技能。skill_code 为技能编码，其他参数传给技能的 run(params)。"""
-    from agents_v2.skill_loader import get_skill_path, run_skill
+    from agents.skill_loader import get_skill_path, run_skill
 
     # 查找 skill 路径
     agent_code = ctx.agent_code
@@ -46,7 +46,7 @@ def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
     params = dict(kwargs)
 
     # 注入 agent 工作区路径
-    from agents_v2.workspace import get_agent_root
+    from agents.workspace import get_agent_root
     params["_agent_root"] = get_agent_root(agent_code)
 
     # 如果有 file_path，转为绝对路径
@@ -64,7 +64,7 @@ def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
 @register_tool(read_only=False)
 def skill_test(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
     """测试一个技能。运行技能并比对 expected.json。"""
-    from agents_v2.skill_loader import get_skill_path, test_skill
+    from agents.skill_loader import get_skill_path, test_skill
 
     skill_path = get_skill_path(ctx.agent_code, skill_code)
     if not os.path.isdir(skill_path):
@@ -84,7 +84,7 @@ def skill_create(
     manifest_yaml: str = None,
 ) -> dict:
     """创建新技能。写入 run.py 和 manifest.yaml 到 skill 目录。"""
-    from agents_v2.workspace import get_agent_root
+    from agents.workspace import get_agent_root
 
     skill_dir = os.path.join(get_agent_root(ctx.agent_code), "skills", skill_code)
     if os.path.isdir(skill_dir):
@@ -104,7 +104,7 @@ def skill_create(
             f.write(manifest_yaml)
 
     # 入库
-    from db.tables import SkillV2
+    from db.tables import Skill
     import yaml
 
     manifest = {}
@@ -114,7 +114,7 @@ def skill_create(
         except Exception:
             pass
 
-    skill = SkillV2(
+    skill = Skill(
         skill_code=skill_code,
         display_name=display_name,
         description=description,

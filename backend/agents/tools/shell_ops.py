@@ -3,7 +3,7 @@ import io
 import sys
 import traceback
 
-from agents_v2.tool_registry import register_tool, ToolContext
+from agents.tool_registry import register_tool, ToolContext
 
 # 白名单内建函数 — 仅允许安全的操作
 _SAFE_BUILTINS = {
@@ -37,7 +37,7 @@ _DENIED_MODULES = frozenset({
 def python_exec(code: str, ctx: ToolContext = None) -> dict:
     """执行一段 Python 代码并返回输出。code 为 Python 代码字符串。注意：在受限沙箱环境中运行，无法访问文件系统或外部网络。"""
     # 注入工作区路径
-    from agents_v2.workspace import get_agent_root
+    from agents.workspace import get_agent_root
     workspace_root = get_agent_root(ctx.agent_code)
 
     local_vars = {

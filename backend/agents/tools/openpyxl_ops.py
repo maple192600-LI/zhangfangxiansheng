@@ -2,8 +2,8 @@
 import os
 import tempfile
 
-from agents_v2.tool_registry import register_tool, ToolContext
-from agents_v2.workspace import safe_path, get_agent_root
+from agents.tool_registry import register_tool, ToolContext
+from agents.workspace import safe_path, get_agent_root
 
 
 @register_tool(read_only=True)

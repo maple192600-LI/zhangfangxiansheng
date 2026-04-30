@@ -70,7 +70,7 @@
 
 <script setup>
 import { ref, nextTick, onMounted, watch } from 'vue'
-import { sendMessageStream } from '@/api/agentV2'
+import { sendMessageStream } from '@/api/agent'
 import { useAgentsStore } from '@/stores/agents'
 
 const props = defineProps({ agent: Object, sessionId: Number })

@@ -1,6 +1,6 @@
 """记忆持久化管理
 
-V2 改造：
+
 - 保留原有 save/search/list 接口
 - 新增 get_relevant: 根据关键词自动检索
 - 新增 auto_search_and_format: 检索并格式化为可注入文本

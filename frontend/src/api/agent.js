@@ -1,5 +1,5 @@
 /** Agent V2 API — SSE 聊天封装（用 XHR 保证兼容性） */
-const BASE_URL = '/api/agent_v2'
+const BASE_URL = '/api/agent'
 
 /**
  * 发送消息并通过 SSE 接收流式回复

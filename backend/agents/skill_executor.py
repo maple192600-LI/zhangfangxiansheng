@@ -13,8 +13,8 @@ import os
 import time
 from typing import Any, Optional
 
-from agents_v2.skill_registry import SkillMeta, load_skill_l2
-from agents_v2.tool_registry import ToolContext
+from agents.skill_registry import SkillMeta, load_skill_l2
+from agents.tool_registry import ToolContext
 
 
 def execute_skill_inline(

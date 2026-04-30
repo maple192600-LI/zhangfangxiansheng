@@ -210,7 +210,7 @@ async function loadData() {
 
 async function loadAgents() {
   try {
-    agents.value = await http.get('/agent_v2/agents')
+    agents.value = await http.get('/agent/agents')
     if (agents.value.length && !agentId.value) agentId.value = agents.value[0].id
   } catch { agents.value = [] }
 }

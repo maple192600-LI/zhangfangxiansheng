@@ -425,13 +425,13 @@ async function doExport() {
 async function smartReport() {
   smartReportLoading.value = true
   try {
-    const agents = await http.get('/agent_v2/agents')
+    const agents = await http.get('/agent/agents')
     const agent = (agents || [])[0]
     if (!agent) {
       alert('请先创建一个智能体')
       return
     }
-    const res = await http.post(`/agent_v2/agents/${agent.id}/skill-run`, {
+    const res = await http.post(`/agent/agents/${agent.id}/skill-run`, {
       skill_code: 'gen_report',
       report_type: 'cash_journal',
       start_date: startDate.value || undefined,

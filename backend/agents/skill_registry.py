@@ -245,7 +245,7 @@ def load_manifest(skill_path: str) -> Optional[dict]:
 
 def run_skill(skill_path: str, params: dict, timeout: int = 30) -> dict:
     """执行 skill 的 run.py（替代 skill_loader.run_skill）"""
-    from agents_v2.skill_executor import execute_skill_inline, get_skill_run_path
+    from agents.skill_executor import execute_skill_inline, get_skill_run_path
     run_file = get_skill_run_path(skill_path)
     if not run_file:
         return {"ok": False, "error": f"run.py 不存在: {skill_path}"}

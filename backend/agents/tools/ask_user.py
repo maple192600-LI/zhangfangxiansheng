@@ -1,5 +1,5 @@
 """向用户提问工具"""
-from agents_v2.tool_registry import register_tool, ToolContext
+from agents.tool_registry import register_tool, ToolContext
 
 
 @register_tool(read_only=True)
