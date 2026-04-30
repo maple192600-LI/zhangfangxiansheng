@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ECC Skill Policy (MANDATORY)
+
+Before writing or modifying code in this project, you MUST:
+1. Identify the task type (backend/frontend/testing/debugging/verification)
+2. Read the corresponding ECC skill SKILL.md from `~/.claude/skills/`
+3. Follow the skill's guidelines during implementation
+
+Mapping: Python backend → `python-patterns`, API design → `backend-patterns`, Testing → `python-testing`, Verification → `verification-loop`, Browser testing → `web-access`
+
+**Do not write code without reading the matching skill first.**
+
 ## Project Overview
 
 **账房先生 (ZhangFang)** — 面向中国财务人员的本地部署财务工作台。当前阶段 V1，仅交付"出纳资金日报最小可用闭环"。
