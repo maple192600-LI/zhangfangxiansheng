@@ -2,10 +2,18 @@
 
 单轮对话 → 多次 tool 调用 → 返回最终回复
 yield 事件：TextChunk / ToolStart / ToolEnd / TurnDone
+
+V2 改造：
+- 多 tool_call 批量执行
+- 错误恢复（保存到历史而非静默丢弃）
+- 上下文压缩（ContextEngine）
+- 记忆自动注入
+- Session 并发锁
+- 技能匹配与注入
 """
 import json
 import time
-from typing import Any, AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.orm import Session
 
@@ -13,12 +21,18 @@ from db.tables import AgentV2
 from agents_v2.provider import stream_chat
 from core.security import decrypt_key
 from agents_v2.tool_registry import ToolContext, execute_tool, get_tools_for_llm
-from agents_v2.permission import get_permission, is_tool_allowed, needs_confirm
+from agents_v2.permission import get_permission, is_tool_allowed
 from agents_v2.session_store import load_recent_messages, save_message
+from agents_v2.memory_store import search_memory
+from agents_v2.context_engine import context_engine
+from agents_v2.session_lock import get_session_lock
+from agents_v2.skill_registry import skill_registry
+from agents_v2.skill_executor import format_skill_instruction, get_skill_run_path
+from agents_v2.compaction import estimate_tokens
 from agents_v2 import sse_helper as sse
 import agents_v2.tools  # 触发工具注册
 
-MAX_TURNS = 40  # 提高上限以支持截断续写
+MAX_TURNS = 40
 
 
 async def run_turn(
@@ -27,54 +41,75 @@ async def run_turn(
     user_text: str,
     db: Session,
 ) -> AsyncGenerator[str, None]:
-    """运行一轮对话，yield SSE 格式的事件字符串
+    """运行一轮对话，yield SSE 格式的事件字符串"""
+    # 并发控制
+    lock = get_session_lock(session_id)
+    if lock.locked():
+        yield sse.sse_error("该会话正在处理中，请等待完成后再发送消息")
+        return
 
-    流程：
-    1. 加载历史消息 + 用户消息
-    2. 构建 system prompt + tools
-    3. 调用 LLM 流式
-    4. 如果 LLM 请求 tool call → 执行 → 回到 3
-    5. 直到 LLM 不再调工具 或 达到 MAX_TURNS
-    """
+    async with lock:
+        async for event in _run_turn_inner(agent, session_id, user_text, db):
+            yield event
+
+
+async def _run_turn_inner(
+    agent: AgentV2,
+    session_id: int,
+    user_text: str,
+    db: Session,
+) -> AsyncGenerator[str, None]:
+    """核心对话循环（已获取 session 锁）"""
     # 保存用户消息
     save_message(db, session_id, "user", content=user_text)
 
     # 加载历史
     history = load_recent_messages(db, session_id)
-    # 追加当前用户消息
     history.append({"role": "user", "content": user_text})
 
-    # 构建 system prompt
-    system_prompt = _build_system_prompt(agent)
+    # 记忆自动注入：根据用户输入检索相关记忆
+    memory_hints = _get_memory_hints(db, agent.id, user_text)
 
-    # 获取 AI 配置
+    # 技能匹配：扫描并加载触发技能
+    skill_registry.startup_scan(agent_code=agent.agent_code)
+    matched_skills = skill_registry.trigger(user_text)
+    skill_hints = _build_skill_hints(matched_skills)
+
+    # 构建 system prompt（含记忆+技能）
+    system_prompt = _build_system_prompt(agent, memory_hints, skill_hints)
+
+    # AI 配置检查
     ai_config = agent.ai_config
     if not ai_config:
         yield sse.sse_error("该 agent 未配置 AI 模型，请先在设置中选择 AI 配置")
         return
 
-    # 权限
+    # 权限 + 工具列表
     perm = get_permission(agent.permission_json)
-
-    # 构建 LLM 工具列表
     tools = get_tools_for_llm(perm)
 
-    # 构建 LLM 消息列表（含 system）
+    # 构建 LLM 消息列表
     messages = _format_messages(system_prompt, history)
+
+    # 上下文压缩检查
+    if context_engine.needs_compaction(messages):
+        result = context_engine.compact(session_id, messages)
+        if result.removed_count > 0:
+            messages = result.messages
 
     turn = 0
     started_at = time.time()
-    accumulated_text = ""  # 累积完整文本（含截断续写）
+    accumulated_text = ""
 
     while turn < MAX_TURNS:
         turn += 1
         full_text = ""
-        last_tool_call: Optional[dict] = None
+        tool_calls: list[dict] = []  # 收集所有 tool_call
         reasoning_content = ""
 
-        # 流式调用 LLM
         api_key_plain = decrypt_key(ai_config.api_key_local)
-        stop_reason = "end_turn"  # 跟踪本轮真实的 stop_reason
+        stop_reason = "end_turn"
+
         async for chunk in stream_chat(
             provider=ai_config.provider,
             api_key=api_key_plain,
@@ -83,14 +118,14 @@ async def run_turn(
             messages=messages,
             tools=tools if tools else None,
             timeout=getattr(agent, "llm_timeout", 300),
-            max_tokens=getattr(agent, "llm_max_tokens", 4096),
+            max_tokens=getattr(agent, "llm_max_tokens", 16384),
         ):
             if chunk["type"] == "text":
                 full_text += chunk.get("text", "")
                 yield sse.sse_text(chunk.get("text", ""))
 
             elif chunk["type"] == "tool_call":
-                last_tool_call = chunk.get("tool_call")
+                tool_calls.append(chunk.get("tool_call"))
 
             elif chunk["type"] == "done":
                 stop_reason = chunk.get("stop_reason", "end_turn")
@@ -98,93 +133,151 @@ async def run_turn(
                 break
 
             elif chunk["type"] == "error":
-                yield sse.sse_error(chunk.get("error", "AI 调用失败"))
-                # 不保存错误消息到历史 — 避免污染后续请求
+                error_msg = chunk.get("error", "AI 调用失败")
+                # 保存错误到会话历史
+                save_message(
+                    db, session_id, "assistant",
+                    content=f"[错误] {error_msg}",
+                    reasoning_content=reasoning_content or None,
+                )
+                yield sse.sse_error(error_msg)
                 return
 
-        # 如果没产生文本且没 tool call，结束
-        if not full_text and not last_tool_call:
+        # 无输出且无 tool call
+        if not full_text and not tool_calls:
             yield sse.sse_done("end_turn")
-            save_message(db, session_id, "assistant", content="", reasoning_content=reasoning_content if reasoning_content else None)
+            save_message(
+                db, session_id, "assistant", content="",
+                reasoning_content=reasoning_content or None,
+            )
             return
 
-        # finish_reason == "length" 表示输出被 max_tokens 截断，需要续写
-        if stop_reason == "length" and full_text and not last_tool_call:
+        # length 截断续写
+        if stop_reason == "length" and full_text and not tool_calls:
             accumulated_text += full_text
-            # 把已生成的文本追加到上下文，让模型继续
             yield sse.sse_text("\n")
             assistant_piece = {"role": "assistant", "content": full_text}
             if reasoning_content:
                 assistant_piece["reasoning_content"] = reasoning_content
             messages.append(assistant_piece)
             messages.append({"role": "user", "content": "请继续"})
-            continue  # 继续下一轮 while 循环
+            continue
 
-        # 如果有文本但没 tool call，本轮结束
-        if full_text and not last_tool_call:
+        # 有文本但无 tool call → 本轮结束
+        if full_text and not tool_calls:
             accumulated_text += full_text
             duration = int((time.time() - started_at) * 1000)
-            save_message(db, session_id, "assistant", content=accumulated_text, duration_ms=duration, reasoning_content=reasoning_content if reasoning_content else None)
+            save_message(
+                db, session_id, "assistant",
+                content=accumulated_text,
+                duration_ms=duration,
+                reasoning_content=reasoning_content or None,
+            )
             yield sse.sse_done("end_turn")
             return
 
-        # 处理 tool call
-        if last_tool_call:
-            tool_name = last_tool_call.get("name", "")
-            tool_args = last_tool_call.get("arguments", {})
+        # 批量执行所有 tool_calls
+        if tool_calls:
+            for tc in tool_calls:
+                tool_name = tc.get("name", "")
+                tool_args = tc.get("arguments", {})
 
-            # 权限检查
-            if not is_tool_allowed(perm, tool_name):
-                result = {"ok": False, "error": f"工具 '{tool_name}' 未被允许，请联系管理员配置权限"}
-            else:
-                # 执行工具
-                yield sse.sse_tool_start(tool_name, tool_args)
+                if not is_tool_allowed(perm, tool_name):
+                    result = {"ok": False, "error": f"工具 '{tool_name}' 未被允许"}
+                else:
+                    yield sse.sse_tool_start(tool_name, tool_args)
+                    ctx = ToolContext(
+                        agent_id=agent.id,
+                        agent_code=agent.agent_code,
+                        session_id=session_id,
+                        db=db,
+                    )
+                    result = await execute_tool(tool_name, tool_args, ctx)
+                    yield sse.sse_tool_end(tool_name, result)
 
-                ctx = ToolContext(
-                    agent_id=agent.id,
-                    agent_code=agent.agent_code,
-                    session_id=session_id,
-                    db=db,
+                # 保存到历史
+                tc_json = json.dumps(tc, ensure_ascii=False)
+                result_json = json.dumps(result, ensure_ascii=False)
+                tc_id = tc.get("id", f"call_{tool_name}")
+
+                save_message(
+                    db, session_id, "assistant",
+                    content=full_text,
+                    tool_call_json=tc_json,
+                    reasoning_content=reasoning_content or None,
                 )
-                result = await execute_tool(tool_name, tool_args, ctx)
-                yield sse.sse_tool_end(tool_name, result)
+                save_message(
+                    db, session_id, "tool",
+                    tool_result_json=result_json,
+                )
 
-            # 记录 assistant + tool 消息到历史
-            tool_call_json = json.dumps(last_tool_call, ensure_ascii=False)
-            tool_result_json = json.dumps(result, ensure_ascii=False)
-            tool_call_id = last_tool_call.get("id", f"call_{tool_name}")
+                # 追加到 LLM 上下文
+                tc_args = tc.get("arguments", {})
+                if isinstance(tc_args, dict):
+                    tc_args = json.dumps(tc_args, ensure_ascii=False)
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": full_text or None,
+                    "tool_calls": [{
+                        "id": tc_id,
+                        "type": "function",
+                        "function": {"name": tool_name, "arguments": tc_args},
+                    }],
+                }
+                if reasoning_content:
+                    assistant_msg["reasoning_content"] = reasoning_content
+                messages.append(assistant_msg)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
 
-            save_message(db, session_id, "assistant", content=full_text, tool_call_json=tool_call_json, reasoning_content=reasoning_content or None)
-            save_message(db, session_id, "tool", tool_result_json=tool_result_json)
-
-            # 追加到 LLM 上下文（OpenAI 标准格式）
-            tc_args = last_tool_call.get("arguments", {})
-            if isinstance(tc_args, dict):
-                tc_args = json.dumps(tc_args, ensure_ascii=False)
-            assistant_msg = {
-                "role": "assistant",
-                "content": full_text or None,
-                "tool_calls": [{
-                    "id": tool_call_id,
-                    "type": "function",
-                    "function": {"name": tool_name, "arguments": tc_args},
-                }],
-            }
-            if reasoning_content:
-                assistant_msg["reasoning_content"] = reasoning_content
-            messages.append(assistant_msg)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call_id,
-                "content": json.dumps(result, ensure_ascii=False),
-            })
+            # 批量执行完后检查上下文压缩
+            if context_engine.needs_compaction(messages):
+                compact_result = context_engine.compact(session_id, messages)
+                if compact_result.removed_count > 0:
+                    messages = compact_result.messages
+            continue
 
     # 达到 MAX_TURNS
     yield sse.sse_done("max_turns_reached")
 
 
-def _build_system_prompt(agent: AgentV2) -> str:
-    """构建 system prompt"""
+def _get_memory_hints(db: Session, agent_id: int, user_text: str) -> str:
+    """检索相关记忆并格式化为文本"""
+    try:
+        memories = search_memory(db, agent_id, user_text, limit=5)
+        if not memories:
+            return ""
+        lines = []
+        for m in memories:
+            key = m.get("key", "")
+            content = m.get("content", "")[:150]
+            lines.append(f"- [{key}]: {content}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _build_skill_hints(skills: list) -> str:
+    """构建技能提示文本"""
+    if not skills:
+        return skill_registry.l1_summary_text()
+
+    parts = ["以下技能已激活："]
+    for skill in skills:
+        instruction = format_skill_instruction(skill)
+        parts.append(instruction)
+    return "\n".join(parts)
+
+
+def _build_system_prompt(
+    agent: AgentV2,
+    memory_hints: str = "",
+    skill_hints: str = "",
+) -> str:
+    """构建 system prompt（含记忆注入和技能提示）"""
     parts = [
         f"你是「{agent.display_name}」，一个 AI 智能体。",
     ]
@@ -196,6 +289,15 @@ def _build_system_prompt(agent: AgentV2) -> str:
     parts.append("- 如果需要操作文件或执行命令，使用提供的工具")
     parts.append("- 如果不确定，使用 ask_user 工具向用户确认")
     parts.append("- 回答要简洁专业")
+    parts.append("- 你可以使用 memory_search 工具搜索历史记忆")
+
+    if memory_hints:
+        parts.append("\n## 相关记忆")
+        parts.append(memory_hints)
+
+    if skill_hints:
+        parts.append("\n## 可用技能")
+        parts.append(skill_hints)
 
     parts.append("\n## 技能创建指南")
     parts.append("当用户要求你学习新技能时，按以下步骤操作：")
@@ -216,16 +318,10 @@ def _build_system_prompt(agent: AgentV2) -> str:
 
 
 def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
-    """格式化消息为 OpenAI 兼容格式（含标准 tool_calls 结构和 reasoning_content）
-
-    DeepSeek 思维模式要求：所有 assistant 消息必须携带 reasoning_content 字段。
-    如果历史中有任何 assistant 消息带 reasoning_content，则所有 assistant 消息都必须包含此字段。
-    """
+    """格式化消息为 OpenAI 兼容格式（含标准 tool_calls 结构和 reasoning_content）"""
     result: list[dict] = [{"role": "system", "content": system_prompt}]
-    # 追踪 tool_call_id，确保 tool 消息和 assistant 消息配对
     pending_tool_call_id: str | None = None
 
-    # 检测是否有思维模式的 assistant 消息（有 reasoning_content 的）
     has_thinking = any(
         m.get("role") == "assistant" and "reasoning_content" in m
         for m in history
@@ -234,10 +330,8 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
     for msg in history:
         role = msg.get("role", "user")
         if role == "tool":
-            # 跳过孤立的 tool 消息（没有前面带 tool_calls 的 assistant 消息配对）
             if pending_tool_call_id is None:
                 continue
-            # OpenAI 要求 tool 消息携带 tool_call_id
             tc_id = msg.get("tool_call_id") or pending_tool_call_id
             content = msg.get("content", msg.get("tool_result", ""))
             result.append({
@@ -248,10 +342,8 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
             pending_tool_call_id = None
         elif msg.get("tool_calls"):
             raw_calls = msg["tool_calls"]
-            # 如果是单个 tool_call dict（非列表），包装为列表
             if isinstance(raw_calls, dict):
                 raw_calls = [raw_calls]
-            # 转为 OpenAI 标准 tool_calls 格式
             openai_calls = []
             for i, tc in enumerate(raw_calls):
                 tc_id = tc.get("id", f"call_{i}")
