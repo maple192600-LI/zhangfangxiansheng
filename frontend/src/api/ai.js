@@ -15,5 +15,5 @@ export const getAICallLogs = (params) => http.get('/ai-call-logs', { params })
 export const getProviders = () => http.get('/ai-providers')
 export const detectOllamaModels = () => http.get('/ai-providers/ollama/models')
 
-// ── Agent 工作空间（V2 兼容） ──
+// ── Agent 工作空间 ──
 export const getAgentWorkspaces = () => http.get('/agent-workspaces')

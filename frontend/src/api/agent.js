@@ -1,4 +1,4 @@
-/** Agent V2 API — SSE 聊天封装（用 XHR 保证兼容性） */
+/** Agent API — SSE 聊天封装（用 XHR 保证兼容性） */
 const BASE_URL = '/api/agent'
 
 /**

@@ -37,7 +37,7 @@ const routes = [
       { path: 'month-report', name: 'month-report', component: () => import('@/views/MonthReport.vue') },
       { path: 'year-report', name: 'year-report', component: () => import('@/views/YearReport.vue') },
 
-      // OCR识别（V2 占位）
+      // OCR识别
       { path: 'invoice-ocr', name: 'invoice-ocr', component: Placeholder },
       { path: 'contract-ocr', name: 'contract-ocr', component: Placeholder },
       { path: 'receipt-ocr', name: 'receipt-ocr', component: Placeholder },
@@ -45,13 +45,13 @@ const routes = [
       { path: 'invoice-ledger', name: 'invoice-ledger', component: Placeholder },
       { path: 'contract-ledger', name: 'contract-ledger', component: Placeholder },
 
-      // 贷款管理（V2 占位）
+      // 贷款管理
       { path: 'loan-ledger', name: 'loan-ledger', component: Placeholder },
       { path: 'loan-interest', name: 'loan-interest', component: Placeholder },
       { path: 'loan-other-ledger', name: 'loan-other-ledger', component: Placeholder },
       { path: 'loan-other', name: 'loan-other', component: Placeholder },
 
-      // 预算管理（V2 占位）
+      // 预算管理
       { path: 'budget-plan', name: 'budget-plan', component: Placeholder },
 
       // AI智能体
@@ -80,14 +80,14 @@ const routes = [
       { path: 'rule/voucher', name: 'rule-voucher', component: Placeholder },
       { path: 'rule/other', name: 'rule-other', component: Placeholder },
 
-      // 系统设置 > 异常中心（V2 占位）
+      // 系统设置 > 异常中心
       { path: 'exception/receipt', name: 'exception-receipt', component: () => import('@/views/ExceptionCenter.vue') },
       { path: 'exception/other', name: 'exception-other', component: () => import('@/views/ExceptionCenter.vue') },
 
       // 系统设置 > AI配置
       { path: 'ai-config', name: 'ai-config', component: () => import('@/views/AIConfig.vue') },
 
-      // 系统设置 > 用户和权限（V2 占位）
+      // 系统设置 > 用户和权限
       { path: 'perm/admin', name: 'perm-admin', component: Placeholder },
       { path: 'perm/cashier', name: 'perm-cashier', component: Placeholder },
       { path: 'perm/manager', name: 'perm-manager', component: Placeholder },
