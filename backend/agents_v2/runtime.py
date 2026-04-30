@@ -24,11 +24,11 @@ from agents_v2.tool_registry import ToolContext, execute_tool, get_tools_for_llm
 from agents_v2.permission import get_permission, is_tool_allowed
 from agents_v2.session_store import load_recent_messages, save_message
 from agents_v2.memory_store import search_memory
-from agents_v2.context_engine import context_engine
+from agents_v2.context import context_engine
 from agents_v2.session_lock import get_session_lock
 from agents_v2.skill_registry import skill_registry
 from agents_v2.skill_executor import format_skill_instruction, get_skill_run_path
-from agents_v2.compaction import estimate_tokens
+from agents_v2.context import estimate_tokens
 from agents_v2 import sse_helper as sse
 import agents_v2.tools  # 触发工具注册
 

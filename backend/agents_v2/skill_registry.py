@@ -220,5 +220,59 @@ class SkillRegistry:
         return "\n".join(lines)
 
 
+# --- 兼容旧 skill_loader 接口的顶层函数 ---
+
+def get_skill_path(agent_code: str, skill_code: str) -> str:
+    """获取 skill 目录路径（替代 skill_loader.get_skill_path）"""
+    agent_skill = os.path.join(DATA_DIR, "agents", agent_code, "skills", skill_code)
+    if os.path.isdir(agent_skill):
+        return agent_skill
+    system_skill = os.path.join(DATA_DIR, "agents", "system", "skills", skill_code)
+    if os.path.isdir(system_skill):
+        return system_skill
+    return agent_skill
+
+
+def load_manifest(skill_path: str) -> Optional[dict]:
+    """加载 manifest.yaml（替代 skill_loader.load_manifest）"""
+    manifest_file = os.path.join(skill_path, "manifest.yaml")
+    if not os.path.isfile(manifest_file):
+        return None
+    import yaml
+    with open(manifest_file, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def run_skill(skill_path: str, params: dict, timeout: int = 30) -> dict:
+    """执行 skill 的 run.py（替代 skill_loader.run_skill）"""
+    from agents_v2.skill_executor import execute_skill_inline, get_skill_run_path
+    run_file = get_skill_run_path(skill_path)
+    if not run_file:
+        return {"ok": False, "error": f"run.py 不存在: {skill_path}"}
+
+    meta = load_skill_l1(skill_path)
+    if not meta:
+        meta = SkillMeta(code=os.path.basename(skill_path), skill_dir=skill_path)
+
+    return execute_skill_inline(meta, params, params.get("_ctx", None))
+
+
+def test_skill(skill_path: str, params: dict) -> dict:
+    """运行 skill 测试（替代 skill_loader.test_skill）"""
+    import json
+    result = run_skill(skill_path, params)
+
+    tests_dir = os.path.join(skill_path, "tests")
+    expected_file = os.path.join(tests_dir, "expected.json")
+
+    if os.path.isfile(expected_file):
+        with open(expected_file, "r", encoding="utf-8") as f:
+            expected = json.load(f)
+        result["expected"] = expected
+        result["match"] = (result.get("result") == expected)
+
+    return result
+
+
 # 全局单例
 skill_registry = SkillRegistry()
