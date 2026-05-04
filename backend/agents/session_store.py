@@ -127,6 +127,14 @@ def save_message(
     return _message_to_dict(msg)
 
 
+def update_session_summary(db: Session, session_id: int, summary: str) -> None:
+    """更新会话的上下文摘要"""
+    session = db.query(AgentSession).filter(AgentSession.id == session_id).first()
+    if session:
+        session.context_summary = summary
+        db.commit()
+
+
 def _session_to_dict(s: AgentSession) -> dict:
     return {
         "id": s.id,

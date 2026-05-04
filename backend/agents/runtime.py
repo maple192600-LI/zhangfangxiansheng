@@ -32,6 +32,7 @@ from agents.memory_manager import MemoryManager
 from agents.db_memory_provider import DBMemoryProvider
 from agents.curator import Curator
 from agents import sse_helper as sse
+from agents.context import _build_summary_prompt, _build_messages_text
 import agents.tools  # 触发工具注册
 
 MAX_TURNS = 40
@@ -145,7 +146,8 @@ async def _run_turn_inner(
     # 检查点 1：循环前压缩
     if context_engine.needs_compaction(messages):
         await memory_mgr.on_pre_compress_all(messages)
-        result = context_engine.compact(session_id, messages)
+        llm_summary = await _generate_llm_summary(ai_config, messages, api_key_plain)
+        result = context_engine.compact(session_id, messages, llm_summary=llm_summary)
         if result.removed_count > 0:
             messages = _validate_message_sequence(list(result.messages))
 
@@ -248,15 +250,13 @@ async def _run_turn_inner(
                 assistant_msg["reasoning_content"] = reasoning_content
             messages.append(assistant_msg)
 
-            # 保存 assistant 消息到 DB（每个 tool_call 单独记录）
-            for i, tc in enumerate(tool_calls):
-                tc_json = json.dumps(tc, ensure_ascii=False)
-                save_message(
-                    db, session_id, "assistant",
-                    content=full_text if i == 0 else "",
-                    tool_call_json=tc_json,
-                    reasoning_content=reasoning_content if i == 0 else None,
-                )
+            # 保存 assistant 消息到 DB（所有 tool_calls 合并为一条记录）
+            save_message(
+                db, session_id, "assistant",
+                content=full_text or "",
+                tool_call_json=json.dumps(openai_tool_calls, ensure_ascii=False),
+                reasoning_content=reasoning_content or None,
+            )
 
             # 2) 逐个执行工具，追加 tool result 消息
             for tc in tool_calls:
@@ -318,7 +318,8 @@ async def _run_turn_inner(
             # 检查点 2：工具执行后压缩
             if context_engine.needs_compaction(messages):
                 await memory_mgr.on_pre_compress_all(messages)
-                compact_result = context_engine.compact(session_id, messages)
+                llm_summary2 = await _generate_llm_summary(ai_config, messages, api_key_plain)
+                compact_result = context_engine.compact(session_id, messages, llm_summary=llm_summary2)
                 if compact_result.removed_count > 0:
                     messages = _validate_message_sequence(list(compact_result.messages))
             continue
@@ -333,10 +334,53 @@ async def _run_turn_inner(
             reasoning_content=reasoning_content or None,
         )
         await memory_mgr.sync_all(str(session_id), messages)
+        # 持久化摘要到 session
+        summary = context_engine.get_summary(session_id)
+        if summary:
+            session_store.update_session_summary(db, session_id, summary)
         yield sse.sse_done("end_turn")
         return
 
     yield sse.sse_done("max_turns_reached")
+
+
+async def _generate_llm_summary(ai_config, messages: list[dict], api_key_plain: str) -> str | None:
+    """调用 LLM 生成对话摘要（压缩前调用）
+
+    失败时静默返回 None，降级到关键词提取。
+    """
+    try:
+        messages_text = _build_messages_text(messages, max_chars=6000)
+        if len(messages_text) < 100:
+            return None
+
+        summary_prompt = _build_summary_prompt(messages_text)
+        summary_messages = [
+            {"role": "system", "content": "你是一个对话摘要助手。请将对话历史压缩为简洁的结构化摘要。"},
+            {"role": "user", "content": summary_prompt},
+        ]
+
+        full_text = ""
+        async for chunk in stream_chat(
+            provider=ai_config.provider,
+            api_key=api_key_plain,
+            base_url=ai_config.base_url,
+            model_name=ai_config.model_name,
+            messages=summary_messages,
+            tools=None,
+            max_tokens=1000,
+            timeout=30,
+        ):
+            if chunk["type"] == "text":
+                full_text += chunk.get("text", "")
+            elif chunk["type"] == "error":
+                logger.warning("LLM summary generation failed: %s", chunk.get("error"))
+                return None
+
+        return full_text.strip() if full_text else None
+    except Exception as e:
+        logger.warning("LLM summary generation exception: %s", e)
+        return None
 
 
 def _pop_next_tool_call_id(messages: list[dict]) -> str:

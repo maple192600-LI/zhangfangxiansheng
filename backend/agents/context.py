@@ -1,12 +1,19 @@
-"""上下文引擎 — 压缩 + 组装 + 会话摘要管理
+"""上下文引擎 — 语义压缩 + 会话摘要管理
 
-三段保护：head(前3) + middle(摘要) + tail(后6)
+压缩策略：
+  1. 短期：head(前3) + LLM摘要 + tail(后6) 三段保护
+  2. 长期：摘要持久化到 AgentSession.context_summary
+  3. 降级：当 LLM 摘要不可用时，回退到关键词提取
+
 中文 token 估算：中文 2x + 英文 0.5x
 双检查点：循环前 + 工具执行后
 """
 import json
+import logging
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ── Token 估算 ───────────────────────────────────────────
@@ -19,7 +26,6 @@ def estimate_tokens(messages: list[dict]) -> int:
         if not isinstance(content, str):
             content = json.dumps(content, ensure_ascii=False)
         if not content:
-            # 估算非内容字段的开销
             raw = json.dumps(msg, ensure_ascii=False)
             total += len(raw) // 3
             continue
@@ -46,19 +52,55 @@ class CompactResult:
     kept_count: int
 
 
-def _extract_insights(messages: list[dict]) -> str:
-    """从即将被压缩的消息中提取关键信息"""
-    markers = ["总结", "结论", "确定", "注意", "关键", "规则", "发现"]
+def _extract_key_facts(messages: list[dict]) -> str:
+    """从即将被压缩的消息中提取关键信息（降级方案）
+
+    当 LLM 摘要不可用时使用。
+    """
+    markers = ["总结", "结论", "确定", "注意", "关键", "规则", "发现", "结果"]
     insights = []
     for msg in messages:
         if msg.get("role") != "assistant":
             continue
         content = msg.get("content", "")
-        if not content or len(content) < 20:
+        if not content or len(content) < 30:
             continue
         if any(m in content for m in markers):
-            insights.append(content[:200])
+            insights.append(content[:300])
     return "\n".join(insights)
+
+
+def _build_messages_text(messages: list[dict], max_chars: int = 6000) -> str:
+    """将消息列表格式化为文本，用于 LLM 摘要输入"""
+    parts = []
+    total = 0
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if not content or not isinstance(content, str):
+            continue
+        line = f"[{role}]: {content[:500]}"
+        if total + len(line) > max_chars:
+            break
+        parts.append(line)
+        total += len(line)
+    return "\n".join(parts)
+
+
+def _build_summary_prompt(messages_text: str) -> str:
+    """构建 LLM 摘要请求的 prompt"""
+    return f"""请将以下对话历史压缩为一段结构化摘要。保留以下信息：
+1. 用户的核心需求和意图
+2. 已完成的关键操作和结果
+3. 重要的数据（账户、金额、文件名等）
+4. 待办或未完成的任务
+5. 做出的决策或确认
+
+用中文回答，控制在 500 字以内。
+
+---
+对话历史：
+{messages_text}"""
 
 
 def compact_messages(
@@ -67,8 +109,12 @@ def compact_messages(
     protect_first: int = PROTECT_FIRST,
     protect_last: int = PROTECT_LAST,
     max_context: int = DEFAULT_MAX_CONTEXT,
+    llm_summary: Optional[str] = None,
 ) -> CompactResult:
-    """三段压缩：head + summary + tail"""
+    """三段压缩：head + summary + tail
+
+    llm_summary: 由外部 LLM 生成的摘要。为 None 时使用关键词提取降级。
+    """
     if not messages:
         return CompactResult(
             messages=tuple(messages),
@@ -86,7 +132,6 @@ def compact_messages(
         else:
             conversation.append(msg)
 
-    # 消息不足以压缩
     min_needed = protect_first + protect_last
     if len(conversation) <= min_needed:
         return CompactResult(
@@ -108,22 +153,25 @@ def compact_messages(
             kept_count=len(messages),
         )
 
-    # 压缩前提取关键信息
-    insights = _extract_insights(middle)
-
     # 构建摘要
     parts = []
     if existing_summary:
         parts.append(f"之前的对话摘要：\n{existing_summary}")
-    if insights:
-        parts.append(f"关键信息：\n{insights}")
-    parts.append(f"[已压缩 {len(middle)} 条早期消息，请根据上下文继续]")
+
+    if llm_summary:
+        parts.append(f"最近对话摘要：\n{llm_summary}")
+    else:
+        key_facts = _extract_key_facts(middle)
+        if key_facts:
+            parts.append(f"关键信息：\n{key_facts}")
+
+    parts.append(f"[已压缩 {len(middle)} 条消息]")
     summary_text = "\n".join(parts)
 
     result = system_msgs + head + [{"role": "user", "content": summary_text}] + tail
     return CompactResult(
         messages=tuple(result),
-        summary=existing_summary,
+        summary=llm_summary or existing_summary,
         removed_count=len(middle),
         kept_count=len(result),
     )
@@ -176,12 +224,21 @@ class ContextEngine:
         result.extend(messages[1:])
         return result
 
-    def compact(self, session_id: int, messages: list[dict]) -> CompactResult:
+    def compact(
+        self,
+        session_id: int,
+        messages: list[dict],
+        llm_summary: Optional[str] = None,
+    ) -> CompactResult:
         existing = self._summaries.get(session_id, "")
-        return compact_messages(
+        result = compact_messages(
             messages, existing,
             self.protect_first, self.protect_last, self.max_context,
+            llm_summary=llm_summary,
         )
+        if result.summary and result.summary != existing:
+            self._summaries[session_id] = result.summary
+        return result
 
     def update_summary(self, session_id: int, summary: str) -> None:
         self._summaries[session_id] = summary
