@@ -351,11 +351,10 @@ const navData = {
           { name: '各不同会计', explain: '用户和权限下的不同会计视图。', route: 'perm-accountant' }
         ]
       },
-      '备份恢复': {
-        tabs: [{ name: '备份恢复', explain: '系统备份和恢复。', route: 'backup-restore' }]
-      },
-      '数据清理': {
-        tabs: [{ name: '数据清理', explain: '扫描和清除残留数据。', route: 'data-cleanup' }]
+      '系统维护': {
+        tabs: [
+          { name: '系统维护', explain: '系统备份恢复与数据清理。', route: 'system-maintenance' }
+        ]
       },
       '操作日志': {
         tabs: [{ name: '操作日志', explain: '系统操作日志。', route: 'operation-log' }]
