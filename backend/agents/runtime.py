@@ -12,8 +12,11 @@ yield SSE 事件：text / tool_start / tool_end / done / error
 - Session 并发锁
 """
 import json
+import logging
 import time
 from typing import AsyncGenerator
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 
@@ -84,8 +87,12 @@ async def run_turn(
         return
 
     async with lock:
-        async for event in _run_turn_inner(agent, session_id, user_text, db):
-            yield event
+        try:
+            async for event in _run_turn_inner(agent, session_id, user_text, db):
+                yield event
+        finally:
+            from agents.session_lock import cleanup_lock
+            cleanup_lock(session_id)
 
 
 async def _run_turn_inner(
@@ -97,12 +104,14 @@ async def _run_turn_inner(
     """核心对话循环（已获取 session 锁）"""
     save_message(db, session_id, "user", content=user_text)
 
-    # Curator 技能生命周期检查
+    # Curator 技能生命周期检查（后台执行，不阻塞主流程）
     try:
         curator = Curator(agent.agent_code)
-        curator.maybe_run()
-    except Exception:
-        pass
+        result = curator.maybe_run()
+        if result and (result.get("stale", 0) > 0 or result.get("archived", 0) > 0):
+            logger.info("Curator %s: stale=%d archived=%d", agent.agent_code, result.get("stale", 0), result.get("archived", 0))
+    except Exception as e:
+        logger.warning("Curator failed for %s: %s", agent.agent_code, e)
 
     history = load_recent_messages(db, session_id)
     # 用户消息已在上方 save_message 写入 DB，load_recent_messages 会加载它
