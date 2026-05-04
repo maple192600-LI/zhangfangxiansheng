@@ -32,3 +32,12 @@ def sse_done(stop_reason: str = "end_turn") -> str:
 def sse_error(message: str) -> str:
     """错误事件"""
     return sse_event("error", {"message": message})
+
+
+def sse_confirm_request(name: str, args: dict, message: str) -> str:
+    """工具确认请求事件 — 等待用户确认后继续执行"""
+    return sse_event("confirm_request", {
+        "name": name,
+        "args": args,
+        "message": message,
+    })

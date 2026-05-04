@@ -31,6 +31,16 @@ DEFAULT_PERMISSION = {
     "allowed_shell": [],
 }
 
+_CONFIRM_MESSAGES = {
+    "fs_write": "确认允许写入文件？",
+    "fs_edit": "确认允许编辑文件？",
+    "python_exec": "确认允许执行 Python 代码？",
+    "skill_create": "确认允许创建新技能？",
+    "skill_test": "确认允许测试技能？",
+    "db_insert_fund_event": "确认允许插入资金流水记录？",
+    "db_save_parser_template": "确认允许保存解析模板？",
+}
+
 
 def get_permission(permission_json_str: str) -> dict:
     """解析 agent 的权限配置"""
@@ -55,6 +65,18 @@ def is_tool_allowed(permission: dict, tool_name: str) -> bool:
 def needs_confirm(permission: dict, tool_name: str) -> bool:
     """检查工具是否需要用户确认"""
     return tool_name in permission.get("needs_user_confirm", [])
+
+
+def get_confirm_message(tool_name: str, args: dict | None = None) -> str:
+    """生成人类可读的确认提示"""
+    msg = _CONFIRM_MESSAGES.get(tool_name, f"确认允许执行工具 '{tool_name}'？")
+    if args:
+        if tool_name in ("fs_write", "fs_edit") and args.get("path"):
+            msg = f"确认允许{'写入' if tool_name == 'fs_write' else '编辑'}文件 `{args['path']}`？"
+        elif tool_name == "python_exec" and args.get("code"):
+            code_preview = args["code"][:100]
+            msg = f"确认允许执行以下代码？\n```\n{code_preview}\n```"
+    return msg
 
 
 def is_toolset_enabled(permission: dict, toolset_name: str) -> bool:

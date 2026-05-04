@@ -21,7 +21,7 @@ from db.tables import Agent
 from agents.provider import stream_chat
 from core.security import decrypt_key
 from agents.tool_registry import ToolContext, execute_tool, get_tools_for_llm
-from agents.permission import get_permission, is_tool_allowed
+from agents.permission import get_permission, is_tool_allowed, needs_confirm, get_confirm_message
 from agents.session_store import load_recent_messages, save_message
 from agents.context import context_engine
 from agents.session_lock import get_session_lock
@@ -35,6 +35,32 @@ from agents import sse_helper as sse
 import agents.tools  # 触发工具注册
 
 MAX_TURNS = 40
+
+# ── 工具确认等待注册表 ────────────────────────────────────
+import asyncio
+
+_confirm_events: dict[str, asyncio.Event] = {}
+_confirm_results: dict[str, dict] = {}
+
+
+def register_confirm_wait(tc_id: str) -> asyncio.Event:
+    """注册一个确认等待事件"""
+    event = asyncio.Event()
+    _confirm_events[tc_id] = event
+    return event
+
+
+def resolve_confirm(tc_id: str, approved: bool, reason: str = "") -> None:
+    """解除确认等待"""
+    _confirm_results[tc_id] = {"approved": approved, "reason": reason}
+    evt = _confirm_events.get(tc_id)
+    if evt:
+        evt.set()
+
+
+def _cleanup_confirm(tc_id: str) -> None:
+    _confirm_events.pop(tc_id, None)
+    _confirm_results.pop(tc_id, None)
 
 
 async def _create_memory_manager(agent: Agent, db: Session) -> MemoryManager:
@@ -240,6 +266,30 @@ async def _run_turn_inner(
 
                 if not is_tool_allowed(perm, tool_name):
                     result = {"ok": False, "error": f"工具 '{tool_name}' 未被允许"}
+                elif needs_confirm(perm, tool_name):
+                    confirm_msg = get_confirm_message(tool_name, tool_args)
+                    yield sse.sse_confirm_request(tool_name, tool_args, confirm_msg)
+                    confirm_evt = register_confirm_wait(tc_id)
+                    try:
+                        await asyncio.wait_for(confirm_evt.wait(), timeout=60)
+                    except asyncio.TimeoutError:
+                        result = {"ok": False, "error": "用户确认超时，操作已取消"}
+                    else:
+                        cr = _confirm_results.get(tc_id, {})
+                        if cr.get("approved"):
+                            yield sse.sse_tool_start(tool_name, tool_args)
+                            ctx = ToolContext(
+                                agent_id=agent.id,
+                                agent_code=agent.agent_code,
+                                session_id=session_id,
+                                db=db,
+                            )
+                            result = await execute_tool(tool_name, tool_args, ctx)
+                            yield sse.sse_tool_end(tool_name, result)
+                        else:
+                            result = {"ok": False, "error": f"用户拒绝: {cr.get('reason', '用户取消了操作')}"}
+                    finally:
+                        _cleanup_confirm(tc_id)
                 else:
                     yield sse.sse_tool_start(tool_name, tool_args)
                     ctx = ToolContext(

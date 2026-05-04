@@ -426,6 +426,22 @@ async def update_agent_memory(agent_id: int, memory_id: int, request: Request, d
     return success(result)
 
 
+# ── 工具确认 ──
+
+@router.post("/sessions/{session_id}/tool-confirm")
+async def confirm_tool_call(session_id: int, request: Request, db: Session = Depends(get_db)):
+    """用户确认/拒绝工具执行"""
+    from agents.runtime import resolve_confirm
+    body = await request.json()
+    tc_id = body.get("tool_call_id", "")
+    approved = body.get("approved", False)
+    reason = body.get("reason", "")
+    if not tc_id:
+        return error(1001, "缺少 tool_call_id")
+    resolve_confirm(tc_id, approved, reason)
+    return success({"ok": True})
+
+
 @router.delete("/agents/{agent_id}/sessions/{session_id}")
 def delete_agent_session(agent_id: int, session_id: int, db: Session = Depends(get_db)):
     """软删除会话"""
