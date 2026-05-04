@@ -95,6 +95,20 @@
       </div>
     </div>
 
+    <!-- 工具确认对话框 -->
+    <div v-if="confirmData" class="confirm-overlay">
+      <div class="confirm-box">
+        <div class="confirm-icon">🔐</div>
+        <div class="confirm-title">工具执行确认</div>
+        <div class="confirm-msg">{{ confirmData.message }}</div>
+        <div class="confirm-tool">工具: {{ confirmData.name }}</div>
+        <div class="confirm-btns">
+          <button class="confirm-reject" @click="rejectConfirm">拒绝</button>
+          <button class="confirm-approve" @click="approveConfirm">允许执行</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 输入区 -->
     <div class="chat-input-bar">
       <div class="input-left">
@@ -125,7 +139,7 @@
 
 <script setup>
 import { ref, nextTick, onMounted, watch } from 'vue'
-import { sendMessageStream } from '@/api/agent'
+import { sendMessageStream, toolConfirm } from '@/api/agent'
 import { useAgentsStore } from '@/stores/agents'
 
 const props = defineProps({ agent: Object, sessionId: Number })
@@ -145,6 +159,7 @@ const copyLabel = ref('复制')
 const attachFiles = ref([])
 const workspaceRefs = ref([])
 const dragOver = ref(false)
+const confirmData = ref(null)
 let streamAbort = null
 let dragTimer = null
 
@@ -250,6 +265,15 @@ async function send() {
       }
       scrollEnd()
     },
+    onConfirmRequest(d) {
+      confirmData.value = {
+        tool_call_id: d.tool_call_id || d.name,
+        name: d.name,
+        message: d.message || `确认允许执行工具「${d.name}」？`,
+        args: d.args || {},
+      }
+      scrollEnd()
+    },
     onDone() {
       if (streamingText.value) {
         messages.value.push({ id: Date.now() + 2, role: 'assistant', content: streamingText.value })
@@ -295,6 +319,29 @@ function submitEdit() {
   editText.value = ''
   inputText.value = text
   send()
+}
+
+async function approveConfirm() {
+  if (!confirmData.value) return
+  const { tool_call_id } = confirmData.value
+  confirmData.value = null
+  try {
+    await toolConfirm(props.sessionId, tool_call_id, true)
+  } catch {}
+}
+
+async function rejectConfirm() {
+  if (!confirmData.value) return
+  const { tool_call_id } = confirmData.value
+  confirmData.value = null
+  try {
+    await toolConfirm(props.sessionId, tool_call_id, false, '用户拒绝')
+  } catch {}
+  streaming.value = false
+  streamingText.value = ''
+  streamAbort = null
+  messages.value.push({ id: Date.now(), role: 'assistant', content: '操作已取消。' })
+  scrollEnd()
 }
 
 async function regenerate(msg) {
@@ -736,4 +783,32 @@ function fmtContent(t) {
   color: #aaa; font-size: 12px; padding: 0 2px;
 }
 .attach-del:hover { color: #c0392b; }
+
+/* 确认对话框 */
+.confirm-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 30; border-radius: 14px;
+}
+.confirm-box {
+  background: #fff; border-radius: 16px; padding: 28px 32px;
+  max-width: 420px; width: 90%; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.confirm-icon { font-size: 36px; margin-bottom: 12px; }
+.confirm-title { font-size: 17px; font-weight: 700; color: #333; margin-bottom: 10px; }
+.confirm-msg { font-size: 14px; color: #555; line-height: 1.6; margin-bottom: 8px; }
+.confirm-tool { font-size: 13px; color: #8c8680; margin-bottom: 18px; }
+.confirm-btns { display: flex; gap: 10px; justify-content: center; }
+.confirm-reject {
+  padding: 8px 24px; border-radius: 10px; border: 1px solid #e7e0d5;
+  background: #fff; color: #8c8680; font-size: 14px; cursor: pointer; font-family: inherit;
+}
+.confirm-reject:hover { background: #fdf2ef; border-color: #e0b8ad; color: #9b3d2f; }
+.confirm-approve {
+  padding: 8px 24px; border-radius: 10px; border: none;
+  background: #7f9b7a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.confirm-approve:hover { background: #3d6b3a; }
 </style>

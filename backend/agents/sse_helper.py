@@ -34,10 +34,13 @@ def sse_error(message: str) -> str:
     return sse_event("error", {"message": message})
 
 
-def sse_confirm_request(name: str, args: dict, message: str) -> str:
+def sse_confirm_request(name: str, args: dict, message: str, tool_call_id: str = "") -> str:
     """工具确认请求事件 — 等待用户确认后继续执行"""
-    return sse_event("confirm_request", {
+    payload = {
         "name": name,
         "args": args,
         "message": message,
-    })
+    }
+    if tool_call_id:
+        payload["tool_call_id"] = tool_call_id
+    return sse_event("confirm_request", payload)

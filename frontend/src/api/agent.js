@@ -5,7 +5,7 @@ const BASE_URL = '/api/agent'
  * 发送消息并通过 SSE 接收流式回复
  * 使用 XMLHttpRequest 代替 fetch，避免 ReadableStream 兼容问题
  */
-export function sendMessageStream(sessionId, content, { onText, onToolStart, onToolEnd, onDone, onError }) {
+export function sendMessageStream(sessionId, content, { onText, onToolStart, onToolEnd, onConfirmRequest, onDone, onError }) {
   const token = localStorage.getItem('zf_token')
   const xhr = new XMLHttpRequest()
 
@@ -43,6 +43,7 @@ export function sendMessageStream(sessionId, content, { onText, onToolStart, onT
           case 'text': onText?.(data.text || ''); break
           case 'tool_start': onToolStart?.(data); break
           case 'tool_end': onToolEnd?.(data); break
+          case 'confirm_request': onConfirmRequest?.(data); break
           case 'done': onDone?.(data); break
           case 'error': onError?.(data.message || '未知错误'); break
         }
@@ -75,6 +76,7 @@ export function sendMessageStream(sessionId, content, { onText, onToolStart, onT
         try {
           const data = JSON.parse(eventData)
           switch (eventType) {
+            case 'confirm_request': onConfirmRequest?.(data); break
             case 'done': onDone?.(data); break
             case 'error': onError?.(data.message || '未知错误'); break
           }
@@ -93,4 +95,16 @@ export function sendMessageStream(sessionId, content, { onText, onToolStart, onT
 
   // 返回 abort 函数
   return { abort: () => xhr.abort() }
+}
+
+/**
+ * 工具确认/拒绝
+ */
+export function toolConfirm(sessionId, toolCallId, approved, reason = '') {
+  const token = localStorage.getItem('zf_token')
+  return fetch(`${BASE_URL}/sessions/${sessionId}/tool-confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ tool_call_id: toolCallId, approved, reason }),
+  }).then(r => r.json())
 }

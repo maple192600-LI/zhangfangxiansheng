@@ -277,7 +277,7 @@ async def _run_turn_inner(
                     result = {"ok": False, "error": f"工具 '{tool_name}' 未被允许"}
                 elif needs_confirm(perm, tool_name):
                     confirm_msg = get_confirm_message(tool_name, tool_args)
-                    yield sse.sse_confirm_request(tool_name, tool_args, confirm_msg)
+                    yield sse.sse_confirm_request(tool_name, tool_args, confirm_msg, tc_id)
                     confirm_evt = register_confirm_wait(tc_id)
                     try:
                         await asyncio.wait_for(confirm_evt.wait(), timeout=60)
