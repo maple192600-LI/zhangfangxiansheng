@@ -100,6 +100,49 @@ class DBMemoryProvider(MemoryProvider):
         from agents.memory_store import search_memory as _search
         return _search(self._db, self._agent_id, query, limit=limit)
 
+    async def list_all(self) -> list[dict]:
+        """列出所有记忆"""
+        if not self._db or not self._agent_id:
+            return []
+        from agents.memory_store import list_memories
+        return list_memories(self._db, self._agent_id)
+
+    async def save(self, key: str, content: str, scope: str = "user", source: Optional[str] = None) -> dict:
+        """保存一条记忆"""
+        return await safe_write(self._db, self._agent_id, key, content, scope=scope, source=source)
+
+    async def delete(self, memory_id: int) -> bool:
+        """删除一条记忆"""
+        if not self._db or not self._agent_id:
+            return False
+        from db.tables import AgentMemory
+        mem = self._db.query(AgentMemory).filter(
+            AgentMemory.id == memory_id, AgentMemory.agent_id == self._agent_id
+        ).first()
+        if not mem:
+            return False
+        self._db.delete(mem)
+        self._db.commit()
+        return True
+
+    async def update(self, memory_id: int, key: str, content: str) -> dict | None:
+        """更新一条记忆"""
+        if not self._db or not self._agent_id:
+            return None
+        from db.tables import AgentMemory
+        mem = self._db.query(AgentMemory).filter(
+            AgentMemory.id == memory_id, AgentMemory.agent_id == self._agent_id
+        ).first()
+        if not mem:
+            return None
+        if key:
+            mem.key = key
+        if content:
+            mem.content = content
+        self._db.commit()
+        self._db.refresh(mem)
+        return {"id": mem.id, "key": mem.key, "content": mem.content}
+
     async def on_session_switch(self, old_sid: str, new_sid: str) -> None:
         self._frozen_snapshot = None
 
@@ -118,11 +161,18 @@ class DBMemoryProvider(MemoryProvider):
         self._frozen_snapshot = None
 
 
-async def safe_write(db: Session, agent_id: int, key: str, content: str) -> dict:
+async def safe_write(
+    db: Session,
+    agent_id: int,
+    key: str,
+    content: str,
+    scope: str = "auto",
+    source: Optional[str] = None,
+) -> dict:
     """安全写入记忆（含注入检测）"""
     threat = scan_memory_value(content)
     if threat:
         logger.warning("Memory write blocked: threat=%s, key=%s", threat, key)
         return {"ok": False, "error": f"内容包含可疑模式: {threat}"}
     from agents.memory_store import save_memory
-    return save_memory(db, agent_id, key, content, scope="auto", source="sync_turn")
+    return save_memory(db, agent_id, key, content, scope=scope, source=source or "sync_turn")

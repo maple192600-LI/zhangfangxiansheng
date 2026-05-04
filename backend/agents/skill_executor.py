@@ -6,6 +6,8 @@
 
 SKILL.md 技能不直接执行代码，而是将 SKILL.md body 注入到 LLM 上下文中，
 由 LLM 根据工作流程描述和 allowed-tools 自主完成。
+
+注入策略：L2 摘要模式 — 只注入 frontmatter + body 前 500 字，减少 token 消耗。
 """
 import importlib.util
 import json
@@ -51,12 +53,12 @@ def execute_skill_inline(
 
 
 def format_skill_instruction(skill: SkillMeta) -> str:
-    """将 SKILL.md 技能格式化为 LLM 可执行的指令
+    """将 SKILL.md 技能格式化为 LLM 可执行的指令（L2 摘要模式）
 
-    返回完整的技能描述，供 runtime 注入到 LLM 上下文中。
-    LLM 根据 allowed-tools 自主使用工具完成技能工作流。
+    只注入 frontmatter 元数据 + body 前 500 字摘要。
+    完整 body 通过 skill_run 工具按需加载。
     """
-    body = load_skill_l2(skill)
+    body_summary = skill.load_l2_summary(max_chars=500)
 
     parts = [
         f"# 技能：{skill.name}",
@@ -75,8 +77,8 @@ def format_skill_instruction(skill: SkillMeta) -> str:
     if skill.allowed_tools:
         parts.append(f"\n## 可用工具\n{', '.join(skill.allowed_tools)}")
 
-    if body:
-        parts.append(f"\n{body}")
+    if body_summary:
+        parts.append(f"\n{body_summary}")
 
     return "\n".join(parts)
 

@@ -2,7 +2,7 @@
 
 设计参考 OpenClaw 三级加载：
   L1: frontmatter 元数据（始终在上下文中，~100 tokens）
-  L2: SKILL.md body（触发时加载）
+  L2: SKILL.md body（触发时加载，截断到 500 字）
   L3: 完整目录 assets（按需加载）
 
 兼容 Claude Code SKILL.md 规范 + 热更新（mtime）
@@ -53,6 +53,13 @@ class SkillMeta:
         self._body = body
         self._body_loaded = True
         return body
+
+    def load_l2_summary(self, max_chars: int = 500) -> str:
+        """L2 摘要：只取 body 的前 max_chars 字符"""
+        body = self.load_l2()
+        if len(body) <= max_chars:
+            return body
+        return body[:max_chars] + "\n[...技能详情省略，通过 skill_run 工具加载完整内容]"
 
     def load_l3(self) -> dict:
         """L3: 加载完整目录 assets"""
@@ -166,8 +173,11 @@ class SkillRegistry:
         self._loaded = False
 
     def startup_scan(self, agent_code: Optional[str] = None) -> None:
-        """启动时扫描所有技能目录，构建 L1 索引"""
-        self._skills.clear()
+        """启动时扫描技能目录，构建 L1 索引
+
+        采用增量更新：只新增/替换变化的技能，不移除已有的。
+        """
+        new_skills: dict[str, SkillMeta] = {}
 
         system_dir = os.path.join(AGENTS_ROOT, "system", "skills")
         if os.path.isdir(system_dir):
@@ -176,7 +186,7 @@ class SkillRegistry:
                 if os.path.isdir(path):
                     meta = load_skill_l1(path)
                     if meta:
-                        self._skills[meta.code] = meta
+                        new_skills[meta.code] = meta
 
         if agent_code:
             agent_dir = os.path.join(AGENTS_ROOT, agent_code, "skills")
@@ -186,8 +196,10 @@ class SkillRegistry:
                     if os.path.isdir(path):
                         meta = load_skill_l1(path)
                         if meta:
-                            self._skills[meta.code] = meta
+                            new_skills[meta.code] = meta
 
+        # 增量更新：只替换已有或新增的，不删除
+        self._skills.update(new_skills)
         self._loaded = True
 
     def hot_reload(self) -> list[str]:
@@ -210,7 +222,10 @@ class SkillRegistry:
     def trigger(self, user_input: str) -> list[SkillMeta]:
         """根据用户输入匹配触发技能
 
-        优先匹配 triggers 字段（精确 n-gram），回退到双向子串匹配。
+        三级匹配策略：
+        1. 精确子串匹配 triggers 字段（最高优先级）
+        2. n-gram 重叠匹配 triggers（次优先）
+        3. 名称/描述回退匹配（最低优先级）
         """
         if not self._loaded:
             return []
@@ -219,20 +234,33 @@ class SkillRegistry:
         text_lower = user_input.lower()
 
         for skill in self._skills.values():
-            # 1. triggers 字段匹配（优先）
+            # 1. 精确子串匹配 triggers（最高优先级）
             if skill.triggers:
+                exact_hit = False
+                for trigger in skill.triggers:
+                    if trigger.lower() in text_lower:
+                        exact_hit = True
+                        break
+                if exact_hit:
+                    matched.append(skill)
+                    continue
+
+                # 2. n-gram 重叠匹配（阈值 0.7，比之前的 0.5 更严格）
                 user_ngrams = _extract_ngrams(text_lower, n=2)
+                ngram_hit = False
                 for trigger in skill.triggers:
                     trigger_ngrams = _extract_ngrams(trigger.lower(), n=2)
+                    if not trigger_ngrams:
+                        continue
                     overlap = user_ngrams & trigger_ngrams
-                    if len(overlap) >= max(1, len(trigger_ngrams) * 0.5):
-                        matched.append(skill)
+                    if len(overlap) >= max(1, len(trigger_ngrams) * 0.7):
+                        ngram_hit = True
                         break
-                else:
+                if ngram_hit:
+                    matched.append(skill)
                     continue
-                continue
 
-            # 2. 回退：名称 + 描述匹配
+            # 3. 回退：名称 + 描述匹配
             skill_text = f"{skill.name} {skill.description} {skill.when_to_use}".lower()
 
             if skill.name.lower() in text_lower:

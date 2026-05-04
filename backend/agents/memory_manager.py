@@ -136,13 +136,13 @@ class MemoryManager:
         return {"ok": False, "error": f"未知记忆工具: {tool_name}"}
 
     async def _dispatch_builtin(self, tool_name: str, args: dict) -> dict:
-        from agents.db_memory_provider import safe_write
         if tool_name == "memory_save":
-            db = self._builtin._db
-            agent_id = self._builtin._agent_id
-            if not db or not agent_id:
-                return {"ok": False, "error": "Provider 未初始化"}
-            return await safe_write(db, agent_id, args.get("key", ""), args.get("content", args.get("value", "")))
+            return await self._builtin.save(
+                args.get("key", ""),
+                args.get("content", args.get("value", "")),
+                scope="auto",
+                source="tool_call",
+            )
         elif tool_name == "memory_search":
             results = await self._builtin.search(args.get("query", ""), limit=args.get("limit", 10))
             return {"ok": True, "results": results}
@@ -152,6 +152,22 @@ class MemoryManager:
 
     async def _dispatch_external(self, tool_name: str, args: dict) -> dict:
         return {"ok": False, "error": f"外部 Provider 不支持: {tool_name}"}
+
+    async def list_all(self) -> list[dict]:
+        """列出 builtin provider 的所有记忆"""
+        return await self._builtin.list_all()
+
+    async def save(self, key: str, content: str, scope: str = "user", source: Optional[str] = None) -> dict:
+        """保存记忆到 builtin provider"""
+        return await self._builtin.save(key, content, scope=scope, source=source)
+
+    async def delete(self, memory_id: int) -> bool:
+        """从 builtin provider 删除记忆"""
+        return await self._builtin.delete(memory_id)
+
+    async def update(self, memory_id: int, key: str, content: str) -> dict | None:
+        """更新 builtin provider 的记忆"""
+        return await self._builtin.update(memory_id, key, content)
 
     async def on_pre_compress_all(self, messages: list[dict]) -> None:
         tasks = [p.on_pre_compress(messages) for p in self.providers]

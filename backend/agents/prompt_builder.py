@@ -1,12 +1,14 @@
 """System Prompt 装配管线
 
-分层组装：身份 → 岗位职责 → 行为准则 → 记忆 → 技能索引 → 上下文文件
+分层组装：身份/岗位职责 → 执行规则 → 记忆 → 技能索引 → 上下文文件
 含注入检测 + 截断策略。
+
+关键设计：无论 agent 是否有 role_prompt，都始终附加完整的执行规则。
+这确保 LLM 在所有场景下都有足够的行为约束。
 """
 import re
 from pathlib import Path
 from typing import Optional
-
 
 
 # ── 注入检测 ─────────────────────────────────────────────
@@ -57,61 +59,10 @@ def _load_context_files(cwd: Optional[str]) -> str:
     return _load_context_file(cwd_path, "AGENTS.md") or _load_context_file(cwd_path, "CLAUDE.md") or ""
 
 
-# ── PromptBuilder ────────────────────────────────────────
+# ── 执行规则模板 ─────────────────────────────────────────
 
-class PromptBuilder:
-    """System Prompt 装配管线
-
-    组装顺序：
-    1. Agent 身份
-    2. 岗位职责
-    3. 行为准则
-    4. 记忆上下文
-    5. 技能索引（XML）
-    6. 项目上下文文件
-    """
-
-    def build(
-        self,
-        agent,
-        memory_hints: str = "",
-        skill_hints: str = "",
-        skill_xml: str = "",
-        cwd: Optional[str] = None,
-    ) -> str:
-        parts = []
-
-        if getattr(agent, "role_prompt", None):
-            # 岗位职责就是 system prompt 的核心，完整保留
-            parts.append(agent.role_prompt)
-            parts.append(self._build_execution_rules())
-        else:
-            # 没有岗位职责时，用身份 + 通用规则兜底
-            parts.append(self._build_identity(agent))
-            parts.append(self._build_guidelines())
-
-        if memory_hints:
-            parts.append(f"\n## 相关记忆\n{memory_hints}")
-
-        if skill_xml:
-            parts.append(skill_xml)
-        elif skill_hints:
-            parts.append(f"\n## 可用技能\n{skill_hints}")
-
-        if cwd:
-            context = _load_context_files(cwd)
-            if context:
-                parts.append(context)
-
-        return "\n".join(parts)
-
-    def _build_identity(self, agent) -> str:
-        name = getattr(agent, "display_name", "") or getattr(agent, "name", "AI 助手")
-        return f"你是「{name}」，一个 AI 智能体。"
-
-    def _build_guidelines(self) -> str:
-        """完整行为准则（用于没有 role_prompt 的 agent）"""
-        return """## 核心执行原则（最高优先级）
+_EXECUTION_RULES = """\
+## 核心执行原则（最高优先级，不可违反）
 
 ### 1. 任务必须完成，不允许半途而废
 - 用户交给你的任务，你必须**一步步执行到底**，直到最终交付结果。
@@ -134,7 +85,7 @@ class PromptBuilder:
 - 如果文件内容需要调整解析器/模板/规则，直接动手修改
 
 ### 4. 代码和数据处理
-- 需要修改文件时，用 fs_edit 精准替换，或用 fs_write 写入新文件
+- 需要修改文件时，用 fs_write 写入，或用 fs_edit 精准替换
 - 需要查询数据库时，用 db_query_business 获取数据
 - 需要创建/修改模板时，用 db_save_parser_template 保存
 - 每次修改后验证结果是否正确
@@ -145,37 +96,63 @@ class PromptBuilder:
 - 不要用 ask_user 来问"你确定吗？"这类问题——直接做
 - 回答简洁专业，先做再说
 
+### 6. 财务数据规范
+- 金额数值必须保留原始精度，不得擅自四舍五入
+- 日期格式统一使用 YYYY-MM-DD
+- 所有操作必须可追溯，关键步骤通过 memory_save 记录
+
 ## 记忆管理
 - 你可以使用 memory_search 工具搜索历史记忆
 - 当用户告诉你重要的业务规则、偏好、账户信息、常联系对象等时，主动使用 memory_save 工具保存
 - 需要保存的记忆类型：用户偏好、业务规则、账户对应关系、常用操作流程、错误教训
 - 不要保存临时对话内容或已存在于系统中的常识"""
 
-    def _build_execution_rules(self) -> str:
-        """精简执行规则（附加在 role_prompt 之后，不重复 role_prompt 已有的内容）"""
-        return """
 
-## 执行规则
-- 任务必须一步步执行到底，不允许半途而废。遇到错误时重试或换方式解决。
-- 除非任务已完成或需要用户输入关键信息，否则每一步都要调用工具——不能只说不做。
-- 收到文件/图片后，立即解析并根据内容采取行动，不要停下来等用户催促。
-- 用中文回答，简洁专业。"""
+# ── PromptBuilder ────────────────────────────────────────
 
+class PromptBuilder:
+    """System Prompt 装配管线
 
-def build_skill_xml(matched_skills: list) -> str:
-    """构建 <available_skills> XML 块"""
-    if not matched_skills:
-        return ""
-    parts = ["<available_skills>"]
-    for skill in matched_skills:
-        name = getattr(skill, "name", "") or getattr(skill, "code", "")
-        desc = getattr(skill, "description", "")
-        desc = desc.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        parts.append(f'  <skill name="{name}">')
-        parts.append(f"    <description>{desc}</description>")
-        parts.append(f"  </skill>")
-    parts.append("</available_skills>")
-    return "\n".join(parts)
+    组装顺序：
+    1. Agent 身份（有 role_prompt 用 role_prompt，否则用默认身份）
+    2. 完整执行规则（始终附加，不管有没有 role_prompt）
+    3. 记忆上下文
+    4. 技能索引
+    5. 项目上下文文件
+    """
+
+    def build(
+        self,
+        agent,
+        memory_hints: str = "",
+        skill_hints: str = "",
+        cwd: Optional[str] = None,
+    ) -> str:
+        parts = []
+
+        if getattr(agent, "role_prompt", None):
+            parts.append(agent.role_prompt)
+        else:
+            parts.append(self._build_identity(agent))
+
+        parts.append(_EXECUTION_RULES)
+
+        if memory_hints:
+            parts.append(f"\n## 相关记忆\n{memory_hints}")
+
+        if skill_hints:
+            parts.append(f"\n## 可用技能\n{skill_hints}")
+
+        if cwd:
+            context = _load_context_files(cwd)
+            if context:
+                parts.append(context)
+
+        return "\n".join(parts)
+
+    def _build_identity(self, agent) -> str:
+        name = getattr(agent, "display_name", "") or getattr(agent, "name", "AI 助手")
+        return f"你是「{name}」，一个 AI 智能体。"
 
 
 prompt_builder = PromptBuilder()

@@ -15,7 +15,6 @@ from db.tables import Agent, AIConfig, Skill
 from agents.workspace import init_workspace, safe_path, list_files, get_agent_root, read_file, atomic_write
 from agents.runtime import run_turn
 from agents import session_store
-from agents import memory_store
 
 logger = logging.getLogger(__name__)
 
@@ -360,15 +359,25 @@ def delete_agent_file(agent_id: int, path: str, db: Session = Depends(get_db)):
 
 # ── 技能管理 ──
 
-# ── 记忆管理 ──
+# ── 记忆管理（通过 MemoryManager 统一路由） ──
+
+async def _get_memory_mgr(agent: Agent, db: Session):
+    """为 API 调用创建 MemoryManager"""
+    from agents.memory_manager import MemoryManager
+    from agents.db_memory_provider import DBMemoryProvider
+    provider = DBMemoryProvider()
+    await provider.initialize(agent.agent_code, agent_id=agent.id, db=db)
+    return MemoryManager(provider)
+
 
 @router.get("/agents/{agent_id}/memories")
-def list_agent_memories(agent_id: int, db: Session = Depends(get_db)):
+async def list_agent_memories(agent_id: int, db: Session = Depends(get_db)):
     """列出 agent 的所有记忆"""
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
-    memories = memory_store.list_memories(db, agent_id)
+    mgr = await _get_memory_mgr(agent, db)
+    memories = await mgr.list_all()
     return success(memories)
 
 
@@ -383,42 +392,38 @@ async def save_agent_memory(agent_id: int, request: Request, db: Session = Depen
     content = (body.get("content") or "").strip()
     if not key or not content:
         return error(1001, "标题和内容不能为空")
-    result = memory_store.save_memory(db, agent_id, key, content, source="user")
+    mgr = await _get_memory_mgr(agent, db)
+    result = await mgr.save(key, content, scope="user", source="user")
     return success(result)
 
 
 @router.delete("/agents/{agent_id}/memories/{memory_id}")
-def delete_agent_memory(agent_id: int, memory_id: int, db: Session = Depends(get_db)):
+async def delete_agent_memory(agent_id: int, memory_id: int, db: Session = Depends(get_db)):
     """删除一条记忆"""
-    from db.tables import AgentMemory
-    mem = db.query(AgentMemory).filter(
-        AgentMemory.id == memory_id, AgentMemory.agent_id == agent_id
-    ).first()
-    if not mem:
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    mgr = await _get_memory_mgr(agent, db)
+    deleted = await mgr.delete(memory_id)
+    if not deleted:
         return error(2001, "记忆不存在")
-    db.delete(mem)
-    db.commit()
     return success(None, "已删除")
 
 
 @router.put("/agents/{agent_id}/memories/{memory_id}")
 async def update_agent_memory(agent_id: int, memory_id: int, request: Request, db: Session = Depends(get_db)):
     """更新记忆"""
-    from db.tables import AgentMemory
-    mem = db.query(AgentMemory).filter(
-        AgentMemory.id == memory_id, AgentMemory.agent_id == agent_id
-    ).first()
-    if not mem:
-        return error(2001, "记忆不存在")
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
     body = await request.json()
     key = (body.get("key") or "").strip()
     content = (body.get("content") or "").strip()
-    if key:
-        mem.key = key
-    if content:
-        mem.content = content
-    db.commit()
-    return success({"id": mem.id, "key": mem.key, "content": mem.content})
+    mgr = await _get_memory_mgr(agent, db)
+    result = await mgr.update(memory_id, key, content)
+    if not result:
+        return error(2001, "记忆不存在")
+    return success(result)
 
 
 @router.delete("/agents/{agent_id}/sessions/{session_id}")

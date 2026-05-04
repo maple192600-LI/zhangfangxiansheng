@@ -57,6 +57,14 @@ class MemoryProvider(ABC):
     async def shutdown(self) -> None:
         """清理资源"""
 
+    @abstractmethod
+    async def delete(self, memory_id: int) -> bool:
+        """删除一条记忆"""
+
+    @abstractmethod
+    async def update(self, memory_id: int, key: str, content: str) -> dict | None:
+        """更新一条记忆"""
+
     # 可选钩子
     async def on_session_switch(self, old_sid: str, new_sid: str) -> None:
         pass

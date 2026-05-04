@@ -93,20 +93,17 @@ async def _run_turn_inner(
     skill_registry.hot_reload()
     matched_skills = skill_registry.trigger(user_text)
 
-    # 构建 skill_hints 和 skill_xml
+    # 构建 skill_hints
     if matched_skills:
         skill_hints = _build_skill_hints(matched_skills)
-        skill_xml = ""
     else:
         skill_hints = skill_registry.l1_summary_text()
-        skill_xml = ""
 
     # System prompt（通过 PromptBuilder 组装）
     system_prompt = prompt_builder.build(
         agent,
         memory_hints=memory_block,
         skill_hints=skill_hints,
-        skill_xml=skill_xml,
     )
 
     ai_config = agent.ai_config
