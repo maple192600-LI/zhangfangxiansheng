@@ -94,8 +94,9 @@ const routes = [
       { path: 'perm/boss', name: 'perm-boss', component: Placeholder },
       { path: 'perm/accountant', name: 'perm-accountant', component: Placeholder },
 
-      // 系统设置 > 备份恢复 / 操作日志
+      // 系统设置 > 备份恢复 / 数据清理 / 操作日志
       { path: 'backup-restore', name: 'backup-restore', component: () => import('@/views/BackupRestore.vue') },
+      { path: 'data-cleanup', name: 'data-cleanup', component: () => import('@/views/DataCleanup.vue') },
       { path: 'operation-log', name: 'operation-log', component: () => import('@/views/OperationLog.vue') },
     ]
   }

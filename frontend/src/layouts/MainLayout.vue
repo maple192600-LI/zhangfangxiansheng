@@ -354,6 +354,9 @@ const navData = {
       '备份恢复': {
         tabs: [{ name: '备份恢复', explain: '系统备份和恢复。', route: 'backup-restore' }]
       },
+      '数据清理': {
+        tabs: [{ name: '数据清理', explain: '扫描和清除残留数据。', route: 'data-cleanup' }]
+      },
       '操作日志': {
         tabs: [{ name: '操作日志', explain: '系统操作日志。', route: 'operation-log' }]
       }
