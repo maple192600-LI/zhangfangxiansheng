@@ -15,6 +15,7 @@ DEFAULT_PERMISSION = {
         "ask_user",
         "openpyxl_read",
         "db_query_business",
+        "fund_skill_run",
     ],
     "needs_user_confirm": [
         "fs_write", "fs_edit",

@@ -129,3 +129,20 @@ def skill_create(
     ctx.db.commit()
 
     return {"ok": True, "skill_code": skill_code, "path": skill_dir}
+
+
+@register_tool(read_only=False, toolset="database")
+def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = None) -> dict:
+    """运行 Fund Agent 的财务技能。支持: parser.bank, parser.manual, rule.template_fill, rule.maintain, template.inference"""
+    from agents.fund.harness import FundAgent
+
+    allowed = {"parser.bank", "parser.manual", "rule.template_fill", "rule.maintain", "template.inference"}
+    if skill_name not in allowed:
+        return {"ok": False, "error": f"未知的 Fund 技能: {skill_name}，可用: {', '.join(sorted(allowed))}"}
+
+    try:
+        agent = FundAgent(ctx.db)
+        result = agent.run_skill(skill_name, payload or {})
+        return {"ok": True, "result": result.payload}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
