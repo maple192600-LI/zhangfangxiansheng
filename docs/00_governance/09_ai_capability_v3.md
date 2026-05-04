@@ -1,46 +1,252 @@
-# 09 · AI 能力配置（v3 · Fund Agent）
+# 09 · AI 能力配置（v4 · Agent 能力体系）
 
-> 本文件定义 V1 阶段 Fund Agent 的完整能力边界。任何增加、删除、修改 skill 的操作都必须走 [00_project_constitution.md](00_project_constitution.md) §ChangeFlow。
-> 配合 [08_anti_drift.md](08_anti_drift.md)、[../30_contracts/25_primitives_whitelist.md](../30_contracts/25_primitives_whitelist.md) 使用。
-
----
-
-## §1 · 用户画像反推（为什么 AI 必须接管）
-
-### §1.1 · 目标用户
-
-- **职业**：中国企业财务人员（出纳、会计、资金主管）
-- **工具习惯**：Excel、网银导出、财务软件（用友 / 金蝶 / 浪潮）
-- **技术水平**：**不会编程**、**不会写正则**、**不会配 JSON**、**不会写 SQL**
-- **年龄分布**：主力在 35–55 岁
-
-### §1.2 · 这个用户画像的后果
-
-| 如果我们让用户做 … | 会发生什么 |
-|---|---|
-| 写银行流水解析模板 | 立刻放弃 |
-| 配占位符到字段的映射 | 立刻放弃 |
-| 调正则表达式 | 立刻放弃 |
-| 手动对齐列头到字段字典 | 勉强能做，错误率高 |
-| 点按钮上传 Excel、下载 Excel | **可以** |
-
-### §1.3 · 结论
-
-**所有涉及"写代码、写规则、写映射"的活，必须由 AI 完成。用户只做点按钮 / 上传 / 下载。**
-这是 §C9 用户零编程原则的理论基础，也是 Fund Agent 必须存在、必须在 Phase 0 就建好的原因。
+> 本文件定义账房先生 V1 的完整 Agent 能力体系。包含通用 Agent 架构、Fund Agent 专用约束、执行模式、记忆系统、技能生命周期。
+>
+> 配合 [00_project_constitution.md](00_project_constitution.md)、[08_anti_drift.md](08_anti_drift.md)、[../30_contracts/25_primitives_whitelist.md](../30_contracts/25_primitives_whitelist.md) 使用。
 
 ---
 
-## §2 · Fund Agent 架构
+## §1 · 为什么 Agent 必须存在
 
-### §2.1 · 物理位置
+### §1.1 · 用户画像
+
+| 维度 | 描述 |
+|------|------|
+| 职业 | 出纳、会计、资金主管、代账会计 |
+| 技术水平 | 不编程、不写正则、不配 JSON、不会 SQL |
+| 工作习惯 | Excel 为主、网银导出、逐行核对 |
+| 期望 | 拿来就用，上传就出表，偶尔配置但不写代码 |
+
+### §1.2 · Agent 的定位
+
+Agent 是整个产品的**核心驱动力**，不是辅助工具：
+
+- **技术活全包**：所有"写代码、写规则、写映射"的活由 Agent 完成，用户只上传和确认
+- **越用越懂**：通过记忆积累，逐步了解用户的业务模式、账户习惯、报表偏好
+- **能力成长**：从初始的 5 个基础 skill，逐步学会处理更多银行格式、更多报表模板
+- **未来扩展**：多 Agent 协作（凭证 Agent、审计 Agent、合同审核 Agent）
+
+### §1.3 · 两种执行模式
+
+用户可以根据偏好选择 Agent 的工作方式：
+
+| 模式 | 适用场景 | 工作方式 | 用户确认 |
+|------|----------|----------|----------|
+| **脚本编排** | 准确性关键任务（导入、汇总、报表） | Agent 生成脚本 → 脚本确定性执行 | 审核脚本 + 确认结果 |
+| **直接 AI** | 非关键任务（文档、查询、建议） | Agent 直接处理并返回结果 | 直接查看结果 |
+
+脚本编排模式的核心链路：
+```
+用户上传 → Agent 分析 → 生成脚本(Parser/Rule artifact)
+→ 用户审核 → 确定性执行 → 用户确认结果
+```
+
+---
+
+## §2 · Agent 通用架构
+
+### §2.1 · 运行时核心
+
+```
+用户消息 → PromptBuilder（组装系统提示词）
+         → MemoryManager（注入记忆上下文）
+         → SkillRegistry（匹配激活技能）
+         → ToolRegistry（注册可用工具）
+         → 流式 LLM 调用
+         → 工具执行循环（最多 40 轮）
+         → 上下文压缩检查
+         → 记忆同步
+         → SSE 流式返回
+```
+
+### §2.2 · 模块组成
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| 运行时 | `runtime.py` | 核心对话循环、工具执行、错误恢复 |
+| 工作区 | `workspace.py` | Agent 文件系统隔离 |
+| 上下文 | `context.py` | 三段压缩保护（防止上下文溢出） |
+| 提示词 | `prompt_builder.py` | 系统提示词组装（身份+记忆+技能+工具） |
+| 权限 | `permission.py` | 工具白名单控制 |
+| 工具注册 | `tool_registry.py` | 注册 + 调度 Agent 可用工具 |
+| 技能注册 | `skill_registry.py` | 技能发现 + 热加载 + 匹配触发 |
+| 技能创建 | `skill_creator.py` | LLM 驱动的技能生成器 |
+| 技能执行 | `skill_executor.py` | 技能指令格式化 + 注入 |
+| 会话存储 | `session_store.py` | 消息历史加载 + 保存 |
+| 会话锁 | `session_lock.py` | 防止并发写入同一会话 |
+| 记忆存储 | `memory_store.py` | 记忆的 CRUD |
+| 记忆提供者 | `memory_provider.py` / `db_memory_provider.py` | 记忆的加载 + 注入 |
+| 记忆管理 | `memory_manager.py` | 记忆同步 + 预加载 + 清洗 |
+| 上下文整理 | `curator.py` | 技能生命周期检查 |
+| AI 适配 | `provider.py` | 多 Provider 流式调用 |
+| SSE | `sse_helper.py` | 流式事件格式化 |
+
+### §2.3 · 工具系统
+
+Agent 可调用的工具通过 `tool_registry.py` 注册，用户可在 Agent 设置中控制权限：
+
+| 工具 | 模块 | 能力 |
+|------|------|------|
+| `db_query` | `tools/db_ops.py` | 数据库查询（只读或受控写入） |
+| `db_execute` | `tools/db_ops.py` | 数据库写入（受权限控制） |
+| `file_list` | `tools/fs.py` | 列出文件 |
+| `file_read` | `tools/fs.py` | 读取文件内容 |
+| `file_write` | `tools/fs.py` | 写入文件 |
+| `file_parse` | `tools/file_parse.py` | 解析 PDF/DOCX/Excel/CSV |
+| `openpyxl_read` | `tools/openpyxl_ops.py` | Excel 读取 |
+| `openpyxl_write` | `tools/openpyxl_ops.py` | Excel 写入 |
+| `shell_exec` | `tools/shell_ops.py` | 受限 Shell 命令 |
+| `memory_save` | `tools/memory.py` | 保存记忆 |
+| `memory_search` | `tools/memory.py` | 搜索记忆 |
+| `skill_create` | `tools/skill_ops.py` | 创建新技能 |
+| `skill_list` | `tools/skill_ops.py` | 列出技能 |
+| `ask_user` | `tools/ask_user.py` | 询问用户确认 |
+
+### §2.4 · Agent 实例数据
+
+每个 Agent 实例在 `agents/` 目录下有独立的工作区：
+
+```
+agents/{agent_code}/
+├── workspace/          ← 工作文件
+│   ├── inbox/          ← 输入文件
+│   ├── outputs/        ← 输出文件
+│   └── tmp/            ← 临时文件
+├── sessions/           ← 会话数据
+├── memory/             ← 记忆存储
+└── skills/             ← 该 Agent 创建的技能
+    └── {skill_name}/
+        └── SKILL.md    ← 技能定义（frontmatter + body）
+```
+
+---
+
+## §3 · 记忆系统
+
+### §3.1 · 记忆层级
+
+| 层级 | 存储 | 生命周期 | 内容 |
+|------|------|----------|------|
+| 工作记忆 | 会话消息 | 单次会话 | 当前对话上下文 |
+| 短期记忆 | `agent_memories` 表 | 跨会话 | 近期交互摘要、待办事项 |
+| 长期记忆 | `agent_memories` 表 | 永久 | 用户偏好、业务知识、技能经验 |
+
+### §3.2 · 记忆注入机制
+
+每轮对话开始时：
+1. `MemoryManager.prefetch_with_query()` 根据用户消息预加载相关记忆
+2. `MemoryManager.build_system_prompt()` 构建记忆提示块
+3. 记忆块注入到系统提示词中
+4. Agent 响应时通过 `memory_save` 工具主动保存重要信息
+5. 对话结束时 `sync_all()` 同步本轮关键信息
+
+### §3.3 · 记忆清洗
+
+- `Scrubber` 清洗 LLM 输出中的 `<memory-context>` 标签，防止记忆泄露到用户界面
+- 记忆内容自动压缩，避免上下文膨胀
+- 隐私模式下，敏感数据（金额、账号）脱敏后存储
+
+---
+
+## §4 · 技能生命周期
+
+### §4.1 · 技能发现与加载
+
+```
+启动时扫描（startup_scan）
+  → 扫描 agents/{agent_code}/skills/ 目录
+  → 扫描 agents/system/skills/ 目录（全局技能）
+  → 读取每个技能的 SKILL.md frontmatter
+  → 注册到 SkillRegistry
+
+运行时热加载（hot_reload）
+  → 检查技能目录是否有变更
+  → 自动重新加载已变更的技能
+```
+
+### §4.2 · 技能匹配与触发
+
+```
+用户消息 → SkillRegistry.trigger(message)
+  → L1 扫描：关键词匹配（when_to_use 字段）
+  → 匹配成功 → 注入技能指令到提示词
+  → 匹配失败 → 注入 L1 技能摘要（供 Agent 自主决定）
+```
+
+### §4.3 · 技能创建
+
+用户可以要求 Agent 创建新技能，流程如下：
+
+```
+1. 用户描述需求（"帮我创建一个分析招行流水的技能"）
+2. skill_creator.py 捕获意图
+3. 分析样本文件，理解数据结构
+4. 生成标准 SKILL.md（frontmatter + workflow + rules）
+5. LLM 验证技能可用性
+6. 保存到 agents/{agent_code}/skills/{skill_name}/
+7. 自动注册到 SkillRegistry
+```
+
+技能定义格式（SKILL.md）：
+```yaml
+---
+name: skill_name
+description: "技能描述"
+when_to_use: "触发条件"
+allowed-tools:
+  - tool_name
+arguments:
+  param_name:
+    description: "参数说明"
+    required: true/false
+---
+
+# 技能名称
+
+## 工作流程
+（技能执行的步骤描述）
+
+## 规则
+（技能执行的约束和注意事项）
+```
+
+---
+
+## §5 · Fund Agent 专用约束
+
+Fund Agent 是 V1 阶段的核心财务 Agent，处理所有财务相关任务。它在通用 Agent 架构基础上增加了严格的约束。
+
+### §5.1 · 5 个基础 Skill（§C4 冻结）
+
+| # | Skill | 职责 | 输入 | 输出 |
+|---|-------|------|------|------|
+| 1 | `parser.bank` | 生成银行流水解析器 | 流水样本 + 账户上下文 | Parser artifact |
+| 2 | `parser.manual` | 生成手工流水解析器 | 手工表单字段映射 | Parser artifact |
+| 3 | `rule.template_fill` | 生成报表填充规则 | 模板 + 字段字典 | Rule artifact |
+| 4 | `rule.maintain` | 维护/迭代现有规则 | 原 Rule + 修改需求 | 新版 Rule artifact |
+| 5 | `template.inference` | 自动识别模板占位符 | 空白 Excel 模板 | 占位符绑定 + 置信度 |
+
+> 基础 5 skill 冻结于 §C4。新增 skill 走 §ChangeFlow。
+> 用户通过 `skill_creator` 创建的技能不受 §C4 限制。
+
+### §5.2 · 执行模式 · harness_strict
+
+Fund Agent 对准确性关键任务采用 harness_strict 模式：
+
+| 约束 | 说明 |
+|------|------|
+| 工具白名单 | 只能调 `backend/fund/primitives/` 白名单函数（§C5） |
+| 产物模板 | 输出必须符合 Pydantic Schema |
+| 步骤固定 | 每个 skill 的执行步骤在代码中写死，AI 只填参数 |
+| 沙箱执行 | 生成的 Python 代码必须通过 AST 扫描再入库 |
+
+### §5.3 · Fund Agent 物理位置
 
 ```
 backend/agents/fund/
-├── AGENT.md          ← Agent 主提示词（职责、边界、工具清单）
-├── harness.py        ← harness_strict 模式调度器
-├── schemas.py        ← 输入/输出 JSON Schema（Pydantic）
-├── memory.py         ← 样本库 / 字段字典 / 别名库的访问层
+├── harness.py        ← harness_strict 调度器
+├── schemas.py        ← 输入/输出 Pydantic Schema
+├── memory.py         ← 样本库/字段字典/别名库访问层
 └── skills/
     ├── parser_bank.py
     ├── parser_manual.py
@@ -49,160 +255,11 @@ backend/agents/fund/
     └── template_inference.py
 ```
 
-### §2.2 · 执行模式 · harness_strict
-
-**对比**：
-
-| 模式 | 适合场景 | 本项目是否采用 |
-|---|---|---|
-| hermes-style 自由 agent | 探索型、多工具自选 | **否**（风险：AI 随便调工具、修契约） |
-| harness_strict（2026 OpenAI） | 工具预定义、步骤固定、产物受约束 | **是** |
-| ReAct 循环 | 推理 + 行动多轮交替 | 局部用于 `template.inference` 的置信度判断 |
-
-harness_strict 强制：
-- **工具白名单**：只能调 `backend/fund/primitives/` 白名单函数（§C5）
-- **产物模板**：输出必须符合 Pydantic Schema（`schemas.py`）
-- **步骤固定**：每个 skill 的执行步骤在代码中写死，AI 只填参数
-- **沙箱执行**：Agent 生成的 Python 代码必须通过 AST 扫描（`tools/guards/check_primitives_whitelist.py`）再入库
-
 ---
 
-## §3 · 5 个 Skill 详细规约（§C4）
+## §6 · 字段字典 + 别名库
 
-### §3.1 · `parser.bank` · 生成银行流水解析器
-
-**输入**：
-```json
-{
-  "skill": "parser.bank",
-  "account_code": "ZH0001",
-  "sample_file": "uploads/batch-20260423/icbc_sample.xlsx",
-  "field_dictionary_snapshot": "fixtures/field_dictionary.json",
-  "alias_library_snapshot": "fixtures/alias_library.json",
-  "privacy_mode": "standard"
-}
-```
-
-**输出**（Parser artifact 草稿）：
-```json
-{
-  "name": "ICBC_网银_v1",
-  "kind": "bank",
-  "account_code": "ZH0001",
-  "code": "from fund.primitives.sheet_ops import ...\n\ndef parse(wb, ctx):\n    ...",
-  "primitives_imports": ["sheet_ops.read_sheet", "value_parsers.parse_date", "canonical.emit_row"],
-  "sample_check_log": {
-    "sample_rows": 50,
-    "parsed_rows": 50,
-    "canonical_violations": 0,
-    "amount_sum_in": "12345.67",
-    "amount_sum_out": "8901.23"
-  },
-  "confidence": 0.94
-}
-```
-
-**硬边界**：
-- 只能调白名单基元库
-- 输出的 `code` 必须通过 AST 扫描
-- `sample_check_log.canonical_violations` 必须为 0 才能入库
-- few-shot 至少 3 条该银行真实样本
-
-### §3.2 · `parser.manual` · 生成手工流水解析器
-
-**场景**：用户按"多主体 Excel"模式上传一份包含多家单位多账户的手工流水表。Agent 根据字段池（`manual_field_pool`）和模板方案（`manual_template_schemes`）生成解析器。
-
-**输入 / 输出** 与 §3.1 结构相同，`kind="manual"`。
-
-**额外约束**：
-- 必须支持"一行一条" 和 "一行多科目"两种布局
-- 必须识别"单位 / 账户 / 金额 / 摘要 / 对方 / 日期"6 个核心字段
-- 对无法匹配的字段，生成 `state="待确认"` 的行，不丢数据
-
-### §3.3 · `rule.template_fill` · 生成报表填充规则
-
-**输入**：
-```json
-{
-  "skill": "rule.template_fill",
-  "template_job_id": 42,
-  "placeholder_list": ["报表标题", "开始期间", ..., "月末余额"],
-  "template_file": "uploads/templates/cash_journal_blank.xlsx"
-}
-```
-
-**输出**（Rule artifact 草稿）：
-```json
-{
-  "name": "现金日记账_月账_v1",
-  "template_id": 42,
-  "placeholder_bindings": {
-    "报表标题":   { "primitive": "const",            "value": "现金日记账" },
-    "开始期间":   { "primitive": "date_range_start", "params": {} },
-    ...
-  },
-  "loop": { ... },
-  "primitives_imports": ["template_fill.const", "template_fill.date_range_start", ...],
-  "sample_check_log": {
-    "placeholder_bound": 18,
-    "placeholder_unbound": 0,
-    "placeholder_extra": 0,
-    "amount_match_rate": 0.998
-  }
-}
-```
-
-**硬边界**：
-- 18 个占位符必须**恰好**全部覆盖（§C2）
-- `placeholder_bindings` + `loop.columns` 的 key 合集 == 18 个占位符
-- 生成的 bindings 只能引用白名单 primitives
-
-### §3.4 · `rule.maintain` · 维护/迭代现有规则
-
-**场景**：已有 `现金日记账_月账_v1`，用户说"合计行要加粗"/"日期格式改成 MM月DD日"。
-
-**输入**：
-```json
-{
-  "skill": "rule.maintain",
-  "rule_id": 17,
-  "change_request": "日期格式改成 MM月DD日",
-  "user_id": "admin"
-}
-```
-
-**输出**：新版 Rule artifact（v2），旧版保留。不覆盖。
-
-### §3.5 · `template.inference` · 自动识别空白模板
-
-**三阶段流水线**：
-
-```
-Stage A · 纯代码结构解析（无 AI）
-  └─ 扫描 .xlsx / .xltx，找到 ${xxx} 或 {{xxx}} 或中文占位符
-  └─ 识别合并单元格、行数据锚点、表头行
-  
-Stage B · AI 语义映射
-  └─ 把 Stage A 的占位符列表传给 LLM
-  └─ LLM 返回每个占位符对应的字段字典 key 和建议 primitive
-  └─ 产出 Rule artifact 草稿 + 置信度
-  
-Stage C · 用户确认
-  └─ 前端显示：占位符 → 绑定 → 置信度
-  └─ 用户可接受 / 修改 / 拒绝
-  └─ 接受 → 入库 rule_artifacts
-```
-
-**置信度规则**：
-- 全部 ≥ 0.85 → 默认直接可用
-- 任一 < 0.70 → 前端红色标注，强制人工确认
-- 0.70–0.85 → 黄色提示，鼓励确认
-
----
-
-## §4 · 字段字典 + 别名库（种子数据）
-
-### §4.1 · 字段字典结构
+### §6.1 · 字段字典
 
 路径：`seed/field_dictionary.json`
 
@@ -212,99 +269,87 @@ Stage C · 用户确认
     "cn_name": "日期",
     "type": "DATE",
     "aliases": ["日期", "交易日期", "记账日期", "业务日期", "入账日期", "发生日期"]
-  },
-  "entity_code": { "cn_name": "单位编码", "type": "VARCHAR", "aliases": ["单位编码","主体编码","组织编码"] },
-  "entity_name": { "cn_name": "单位名称", "type": "VARCHAR", "aliases": ["单位","单位名称","主体","公司"] },
-  "account_code": { "cn_name": "账户编码", "type": "VARCHAR", "aliases": ["账户编码","账号","ZH 编码"] },
-  "account_name": { "cn_name": "账户名称", "type": "VARCHAR", "aliases": ["账户","账户名称","账户名"] },
-  "summary":     { "cn_name": "摘要",     "type": "TEXT",    "aliases": ["摘要","用途","备注","说明","事项"] },
-  "counterparty":{ "cn_name": "对方",     "type": "TEXT",    "aliases": ["对方","对方户名","往来单位","客户","付款方","收款方"] },
-  "amount_in":   { "cn_name": "收入",     "type": "NUMERIC", "aliases": ["收入","贷方","进账","贷记","入账金额","收款","到账"] },
-  "amount_out":  { "cn_name": "支出",     "type": "NUMERIC", "aliases": ["支出","借方","出账","借记","付款","付出"] },
-  "rolling_balance": { "cn_name": "余额", "type": "NUMERIC", "aliases": ["余额","账户余额","滚动余额"] }
+  }
 }
 ```
 
-### §4.2 · 别名库
+字段字典是 Agent 识别银行流水列头的核心参考。Agent 每次解析后可发现新别名并写回 `account_aliases` 表。
+
+### §6.2 · 别名库
 
 路径：`seed/alias_library.json`（运行时动态增长）
 
-```json
-{
-  "ICBC": ["工商银行", "ICBC", "中国工商银行"],
-  "DW0001": ["集团本部", "总部", "股份公司本部"]
-}
-```
-
-Agent 每次成功识别后，把新发现的别名写回 `account_aliases` 表（§T1.1），由 `master_match.register_alias` 基元完成。
+Agent 每次成功识别后，把新发现的别名写回 `account_aliases` 表，由 `master_match.register_alias` 基元完成。这构成了 Agent 的**学习积累**——处理过越多银行，识别能力越强。
 
 ---
 
-## §5 · 隐私三档
+## §7 · 隐私三档
 
-| 档位 | Agent 可见内容 | Agent 不可见 |
-|---|---|---|
-| `standard`（默认） | 列头 + 样本 5–10 行（金额脱敏到千位、单位脱敏为首字母） | 完整明细、对方明细、账号全位 |
+| 档位 | Agent 可见 | Agent 不可见 |
+|------|-----------|-------------|
+| `standard`（默认） | 列头 + 样本 5-10 行（金额脱敏到千位） | 完整明细、对方明细、账号全位 |
 | `strict` | 仅列头 + 占位符名称 | 任何数据行 |
-| `offline` | 不允许调 AI，只允许匹配已有 artifact | 全封闭 |
+| `offline` | 不允许调 AI，只匹配已有 artifact | 全封闭 |
 
-配置路径：`ai_configs.privacy_mode`，UI 切换后**立即生效**，不回填历史 artifact。
+配置路径：`ai_configs.privacy_mode`，UI 切换后立即生效。
 
 ---
 
-## §6 · 硬边界（8 条）
+## §8 · 用户可定制能力
 
-Fund Agent 在任何情况下**禁止**：
+### §8.1 · Agent 人格设定
+
+用户可以在 Agent 设置中自定义：
+- **名称和角色**：如"小账"、"财务助手"
+- **职责描述**：定义 Agent 负责什么、不负责什么
+- **工作风格**：简洁/详细、主动确认/直接执行
+
+### §8.2 · 工具权限
+
+用户可以控制 Agent 可使用的工具集合：
+- 财务 Agent：开放 db_ops + openpyxl + file_parse
+- 通用助手：开放 shell + fs + memory + skill_ops
+- 受限模式：仅开放 db_query + file_read
+
+### §8.3 · 技能管理
+
+- 用户可以要求 Agent 创建新技能（自然语言描述）
+- 用户可以查看、编辑、删除已有技能
+- 系统级技能不可删除（如 parse_bank_boc）
+
+---
+
+## §9 · 硬边界（10 条）
+
+Agent 在任何情况下**禁止**：
 
 1. 写非白名单代码（pandas / numpy / requests / os / pathlib / open）
 2. 发送用户原始 Excel 到 LLM（只能发脱敏后的样本）
-3. 新增第 6 个 skill
-4. 修改基础数据表列数 / 列名 / 枚举
-5. 修改 API 路由（AI 不得接触路由注册代码）
-6. 访问数据库以外的外部网络（除了配置的 AI Provider 域名）
-7. 执行任何 shell 命令 / subprocess
-8. 输出没有 `sample_check_log` 的 artifact
+3. 修改基础数据表列数 / 列名 / 枚举
+4. 修改 API 路由
+5. 访问数据库以外的外部网络（除 AI Provider 域名）
+6. 执行未授权的 shell 命令
+7. 绕过 AST 扫描入库 artifact
+8. 跨用户共享实际数据行
+9. 把用户数据写入 LLM provider 训练集
+10. 在 Runtime 执行阶段调用 LLM（§C8）
 
 ---
 
-## §7 · Agent Memory（记忆机制）
+## §10 · 未来演进方向
 
-### §7.1 · 短期记忆（单次 skill 调用内）
+以下能力 V1 不交付，但架构设计必须预留扩展空间：
 
-- 当前 skill 的输入 Schema
-- 当前样本（脱敏后）
-- 字段字典 snapshot
-- 上一轮基元调用的返回值
-
-### §7.2 · 长期记忆（跨 skill 跨会话）
-
-- `parser_artifacts` 表 —— 所有历史 Parser 代码
-- `rule_artifacts` 表 —— 所有历史 Rule 代码
-- `account_aliases` 表 —— 所有历史别名
-- `seed/field_dictionary.json` —— 字段字典（只读，修改需 ChangeFlow）
-
-### §7.3 · 禁止的"记忆"
-
-- 跨用户共享任何实际数据行
-- 把用户数据写入 LLM provider 的训练集（privacy_mode 控制）
-- 把 artifact 代码泄露给前端以外的调用者
-
----
-
-## §8 · v2 → v3 差异表
-
-| 项 | v2 | v3 |
-|---|---|---|
-| Agent 数量 | master + parser-assistant（2 个空壳） | Fund Agent 1 个（实体） |
-| skill 数量 | 0（只有空 AGENT.md） | 5（§C4 冻结） |
-| AI 介入阶段 | 仅连接测试 | 从 Phase 0 就生成 Parser/Rule |
-| 用户配模板 | 要 | 不要（AI 全包） |
-| 产物形态 | 无 | Parser/Rule artifact（代码 + 版本 + 校验日志） |
-| 沙箱 | 无 | AST 扫描 + 超时 + 内存限制 |
-| 隐私 | 无 | 3 档 |
-| Runtime AI | 允许 | 禁止（§C8） |
+| 方向 | 说明 |
+|------|------|
+| 多 Agent 协作 | 凭证 Agent、审计 Agent、合同审核 Agent 各自独立运行 |
+| Agent 间通信 | Agent 产出可作为另一个 Agent 的输入 |
+| 技能市场 | 用户可导出/导入技能，跨 Agent 共享 |
+| 角色模板 | 预置多种 Agent 角色（出纳助手、会计助手、审计助手） |
+| 知识沉淀 | Agent 从每次交互中提炼业务知识，形成可复用的知识库 |
 
 ---
 
 **版本**
-- v3.0 · 2026-04-23 · 首次发布
+- v4.0 · 2026-05-02 · 全面重写：从"5 固定 skill 的 Fund Agent"扩展为完整 Agent 能力体系
+- v3.0 · 2026-04-23 · AI-First artifact 方案

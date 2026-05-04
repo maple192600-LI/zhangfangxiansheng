@@ -1,15 +1,15 @@
 """权限网关
 
 控制 agent 可以调用哪些工具，哪些需要用户确认
+支持 toolset 分组粒度过滤
 """
 import json
-from typing import Optional
 
 
-# 默认权限模板
 DEFAULT_PERMISSION = {
     "allowed_tools": [
         "fs_list", "fs_read",
+        "file_parse",
         "memory_save", "memory_search",
         "skill_list", "skill_run",
         "ask_user",
@@ -23,6 +23,7 @@ DEFAULT_PERMISSION = {
         "db_insert_fund_event",
         "db_save_parser_template",
     ],
+    "disabled_toolsets": [],
     "allowed_paths": [
         "workspace",
         "skills",
@@ -54,3 +55,9 @@ def is_tool_allowed(permission: dict, tool_name: str) -> bool:
 def needs_confirm(permission: dict, tool_name: str) -> bool:
     """检查工具是否需要用户确认"""
     return tool_name in permission.get("needs_user_confirm", [])
+
+
+def is_toolset_enabled(permission: dict, toolset_name: str) -> bool:
+    """检查工具组是否启用"""
+    disabled = set(permission.get("disabled_toolsets", []))
+    return toolset_name not in disabled

@@ -42,7 +42,7 @@ class AIParseBody(BaseModel):
 
 class CommitByMappingBody(BaseModel):
     batch_code: str
-    account_code: str
+    account_code: Optional[str] = None
     mapping: Optional[Dict[str, Any]] = None
     template_id: Optional[int] = None
     template_name: Optional[str] = None
@@ -64,7 +64,10 @@ class SaveTemplateBody(BaseModel):
 async def upload(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename:
         return error(ErrorCode.PARAM_MISSING, "缺少文件名")
-    data = await file.read()
+    MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB
+    data = await file.read(MAX_UPLOAD_SIZE + 1)
+    if len(data) > MAX_UPLOAD_SIZE:
+        return error(ErrorCode.PARAM_FORMAT, "文件大小超过 20MB 限制")
     if not data:
         return error(ErrorCode.PARAM_MISSING, "文件为空")
     try:

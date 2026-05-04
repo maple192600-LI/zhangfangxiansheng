@@ -13,7 +13,7 @@ import os
 import re
 from typing import Optional
 
-from config import DATA_DIR
+from config import AGENTS_ROOT
 
 
 SKILL_CREATOR_TEMPLATE = '''---
@@ -76,12 +76,12 @@ def generate_skill_md(
 
 def get_skill_creator_dir() -> str:
     """获取 skill-creator 系统技能目录"""
-    return os.path.join(DATA_DIR, "agents", "system", "skills", "skill-creator")
+    return os.path.join(AGENTS_ROOT, "system", "skills", "skill-creator")
 
 
 def get_target_skill_dir(agent_code: str, skill_code: str) -> str:
     """获取新技能的目标目录"""
-    return os.path.join(DATA_DIR, "agents", agent_code, "skills", skill_code)
+    return os.path.join(AGENTS_ROOT, agent_code, "skills", skill_code)
 
 
 def save_skill(agent_code: str, skill_code: str, skill_md_content: str) -> str:

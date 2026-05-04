@@ -15,22 +15,10 @@
       <div class="flow-step" :class="{ active: step >= 4 }">完成</div>
     </div>
 
-    <!-- Step 1: 上传 -->
-    <div class="toolbar-row">
-      <label>导入账户</label>
-      <select v-model="accountCode" class="filter">
-        <option value="">请选择账户</option>
-        <optgroup v-for="group in accountGroups" :key="group.entity_id" :label="group.entity_name">
-          <option v-for="account in group.accounts" :key="account.account_code" :value="account.account_code">
-            {{ account.account_code }} {{ account.account_alias }}
-          </option>
-        </optgroup>
-      </select>
-      <label>调用智能体</label>
-      <select v-model="agentId" class="filter" style="min-width:180px">
-        <option :value="null">请选择智能体</option>
-        <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.display_name }}</option>
-      </select>
+    <!-- 无匹配规则提示 -->
+    <div v-if="noRuleHint" class="hint-panel" style="margin-bottom:14px">
+      该银行尚未配置解析规则，请前往 <strong style="cursor:pointer;color:var(--green)" @click="$router.push('/agent')">AI 智能体</strong> 创建规则后再导入
+      <button class="btn btn-secondary btn-sm" style="margin-left:10px" @click="noRuleHint = false">关闭</button>
     </div>
 
     <div v-if="step === 1" class="upload-box" @dragover.prevent @drop.prevent="onDrop" @click="triggerFileInput">
@@ -58,7 +46,7 @@
       </div>
     </div>
 
-    <!-- Step 2: 规则匹配详情 或 AI 解析（仅无规则匹配时显示） -->
+    <!-- Step 2: 规则匹配详情（有规则时自动进入预览，此区域仅作为回看） -->
     <div v-if="step === 2 && ruleMatch" class="panel" style="margin-top:14px">
       <div class="panel-title">规则匹配详情</div>
       <table style="margin-top:10px">
@@ -73,49 +61,7 @@
       </table>
       <div class="btn-row" style="margin-top:14px">
         <button class="btn btn-secondary" @click="reset">重新上传</button>
-        <button class="btn btn-secondary" @click="ruleMatch = null; aiParse()">使用 AI 重新解析</button>
         <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
-      </div>
-    </div>
-
-    <div v-if="step === 2 && !ruleMatch" class="panel" style="margin-top:14px">
-      <div class="panel-title">AI 智能解析列映射</div>
-      <div v-if="aiParsing" class="pending-line">
-        AI 正在分析表头，请稍候...
-        <button class="btn btn-secondary btn-sm" style="margin-left:12px" @click="cancelParse">取消</button>
-      </div>
-      <div v-else-if="aiResult.ok">
-        <div class="mapping-info">
-          <span class="tag tag-green">识别成功（{{ aiResult.matched_count }}/{{ aiResult.total_columns }} 列，置信度: {{ aiResult.confidence }}）</span>
-          <span style="margin-left:8px;color:var(--muted);font-size:12px">建议模板名: {{ aiResult.template_name }}</span>
-        </div>
-        <table style="margin-top:10px">
-          <thead><tr><th>银行列名</th><th>→</th><th>标准字段</th></tr></thead>
-          <tbody>
-            <tr v-for="(field, col) in displayMapping" :key="col">
-              <td>{{ col }}</td>
-              <td style="color:var(--green)">→</td>
-              <td><strong>{{ fieldLabel(field) }}</strong></td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="btn-row" style="margin-top:14px">
-          <button class="btn btn-secondary" @click="reset">重新上传</button>
-          <button class="btn btn-secondary" @click="aiParse">重新解析</button>
-          <button class="btn btn-accent" @click="doSaveAsRule" :disabled="savingRule">
-            {{ savingRule ? '保存中...' : '保存为规则' }}
-          </button>
-          <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
-        </div>
-      </div>
-      <div v-else>
-        <div class="hint-panel">
-          {{ aiResult.error || 'AI 解析失败' }}
-        </div>
-        <div class="btn-row" style="margin-top:12px">
-          <button class="btn btn-secondary" @click="reset">重新上传</button>
-          <button class="btn btn-primary" @click="aiParse">重试解析</button>
-        </div>
       </div>
     </div>
 
@@ -162,7 +108,7 @@
       <div class="panel-title">导入完成</div>
       <div class="summary-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
         <div><label>批次号</label><strong>{{ commitResult.batch_code }}</strong></div>
-        <div><label>导入账户</label><strong>{{ commitResult.account_code }}</strong></div>
+        <div><label>关联账户</label><strong>{{ commitResult.account_code || '自动匹配' }}</strong></div>
         <div><label>入库行数</label><strong>{{ commitResult.inserted_rows }}</strong></div>
       </div>
       <div class="btn-row" style="margin-top:14px">
@@ -182,16 +128,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as bank from '@/api/bank'
-import * as master from '@/api/master'
 import http from '@/api/index'
 
 const router = useRouter()
 const fileInput = ref(null)
 const uploadResult = ref({})
-const accountTree = ref([])
-const accountCode = ref('')
-const agents = ref([])
-const agentId = ref(null)
 const hint = ref('')
 const step = ref(1)
 const aiParsing = ref(false)
@@ -201,8 +142,7 @@ const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
 const savingRule = ref(false)
-
-const accountGroups = computed(() => accountTree.value || [])
+const noRuleHint = ref(false)
 
 const displayMapping = computed(() => {
   const m = ruleMatch.value?.mapping || aiResult.value?.mapping || {}
@@ -246,10 +186,7 @@ function onDrop(event) {
 
 async function upload(file) {
   hint.value = ''
-  if (!accountCode.value) {
-    hint.value = '请先选择导入账户'
-    return
-  }
+  noRuleHint.value = false
   try {
     uploadResult.value = await bank.uploadBankFile(file)
     step.value = 2
@@ -257,9 +194,7 @@ async function upload(file) {
     // 检测是否匹配到已有规则
     const match = uploadResult.value.template_match
     if (match && match.matched && match.mapping && Object.keys(match.mapping).length > 0) {
-      // 有匹配规则 → 直接用规则映射，跳过 AI 解析
       ruleMatch.value = match
-      // 兼容新格式（_columns + post_process）和旧格式（纯 key-value）
       const colMapping = match.mapping._columns || match.mapping
       const fieldCount = Object.keys(colMapping).filter(k => !k.startsWith('_')).length
       aiResult.value = {
@@ -270,35 +205,15 @@ async function upload(file) {
         matched_count: fieldCount,
         total_columns: uploadResult.value.headers?.length || 0,
       }
-      // 自动预览
       await doPreview()
     } else {
-      // 无匹配规则 → 调用 AI 智能体解析
+      // 无匹配规则 → 提示去 Agent 创建
       ruleMatch.value = null
-      await aiParse()
+      step.value = 1
+      noRuleHint.value = true
     }
   } catch (e) {
     hint.value = e.message || '上传失败'
-  }
-}
-
-async function aiParse() {
-  if (!agentId.value) {
-    aiResult.value = { ok: false, error: '请先选择要调用的 AI 智能体' }
-    return
-  }
-  aiParsing.value = true
-  aiResult.value = {}
-  try {
-    aiResult.value = await bank.aiParseHeaders({
-      headers: uploadResult.value.headers,
-      sample_rows: uploadResult.value.sample_rows,
-      agent_id: agentId.value,
-    })
-  } catch (e) {
-    aiResult.value = { ok: false, error: e.message || 'AI 解析失败，请点击重试或重新上传文件' }
-  } finally {
-    aiParsing.value = false
   }
 }
 
@@ -316,43 +231,12 @@ async function doPreview() {
   }
 }
 
-import { guessBank } from '@/utils/bankMap'
-
-// 从文件名推断银行名 + "流水规则"
-function inferRuleName() {
-  const name = uploadResult.value.file_name || ''
-  const bank = guessBank(name)
-  if (bank) return bank + '流水规则'
-  return aiResult.value.template_name || '银行流水规则'
-}
-
-async function doSaveAsRule() {
-  savingRule.value = true
-  hint.value = ''
-  try {
-    await bank.saveAsTemplate({
-      template_name: inferRuleName(),
-      file_format: uploadResult.value.detected_format || 'xlsx',
-      header_row: uploadResult.value.header_row || 0,
-      skip_rows: 0,
-      sample_headers: uploadResult.value.headers || [],
-      mapping_json: aiResult.value.mapping,
-    })
-    hint.value = '已保存为规则，可在「规则中心 → 银行流水规则」中查看'
-  } catch (e) {
-    hint.value = '保存规则失败: ' + (e.message || e)
-  } finally {
-    savingRule.value = false
-  }
-}
-
 async function doCommit() {
   committing.value = true
   hint.value = ''
   try {
     commitResult.value = await http.post('/bank-import/commit-by-mapping', {
       batch_code: uploadResult.value.batch_code,
-      account_code: accountCode.value,
       mapping: aiResult.value.mapping,
       template_id: ruleMatch.value?.template_id || null,
       template_name: aiResult.value.template_name,
@@ -374,28 +258,8 @@ function reset() {
   commitResult.value = {}
   ruleMatch.value = null
   hint.value = ''
+  noRuleHint.value = false
 }
-
-async function loadAccounts() {
-  try {
-    accountTree.value = await master.getAccountsTree()
-    const first = accountTree.value?.flatMap(group => group.accounts || [])[0]
-    if (first?.account_code) accountCode.value = first.account_code
-  } catch {
-    accountTree.value = []
-  }
-}
-
-async function loadAgents() {
-  try {
-    agents.value = await bank.getAgents()
-    if (agents.value.length && !agentId.value) agentId.value = agents.value[0].id
-  } catch {
-    agents.value = []
-  }
-}
-
-onMounted(() => { loadAccounts(); loadAgents() })
 </script>
 
 <style scoped>
@@ -418,9 +282,6 @@ onMounted(() => { loadAccounts(); loadAgents() })
 .flow-step.active { color: #fff; background: var(--green); border-color: var(--green); }
 .flow-step.done { color: var(--green); border-color: var(--green); cursor: pointer; }
 .flow-line { flex: 1; height: 1px; background: var(--line); }
-.toolbar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.toolbar-row label { font-size: 13px; color: var(--muted); }
-.toolbar-row .filter { min-width: 280px; }
 .upload-box {
   border: 2px dashed #d7cec1;
   border-radius: var(--radius-sm);
@@ -446,7 +307,5 @@ onMounted(() => { loadAccounts(); loadAgents() })
 .btn-row { display: flex; gap: 10px; justify-content: flex-end; }
 @media (max-width: 900px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .toolbar-row { align-items: stretch; flex-direction: column; }
-  .toolbar-row .filter { min-width: 0; width: 100%; }
 }
 </style>

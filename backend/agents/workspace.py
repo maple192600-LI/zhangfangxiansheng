@@ -1,17 +1,25 @@
 """工作区文件系统隔离
 
-每个 agent 有独立的工作区目录：data/agents/{agent_code}/
+每个 agent 有独立的工作区目录：agents/{agent_code}/
+AGENTS_ROOT 在项目根级别（非 backend/data/agents/）。
 """
 import os
+import tempfile
 from pathlib import Path
-from config import DATA_DIR
 
-AGENTS_ROOT = os.path.join(DATA_DIR, "agents")
+from config import AGENTS_ROOT
 
 
 def get_agent_root(agent_code: str) -> str:
     """获取 agent 工作区根目录"""
     return os.path.join(AGENTS_ROOT, agent_code)
+
+
+def get_skills_dir(agent_code: str | None = None) -> str:
+    """获取技能目录"""
+    if agent_code:
+        return os.path.join(get_agent_root(agent_code), "skills")
+    return os.path.join(AGENTS_ROOT, "system", "skills")
 
 
 def init_workspace(agent_code: str) -> str:
@@ -54,7 +62,7 @@ def list_files(agent_code: str, sub_dir: str = "workspace") -> list[dict]:
         rel = entry.relative_to(root)
         result.append({
             "name": entry.name,
-            "path": str(rel).replace("\\", "/"),
+            "path": f"{sub_dir}/{rel}".replace("\\", "/"),
             "is_dir": entry.is_dir(),
             "size": entry.stat().st_size if entry.is_file() else 0,
         })
@@ -68,6 +76,28 @@ def read_file(agent_code: str, relative_path: str) -> str | None:
         with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
     return None
+
+
+def atomic_write(agent_code: str, relative_path: str, content: str) -> dict:
+    """原子写入文件到工作区"""
+    abs_path = safe_path(agent_code, relative_path)
+    if abs_path is None:
+        return {"ok": False, "error": f"路径越界: {relative_path}"}
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(abs_path), prefix=".tmp_", suffix=".atom")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, abs_path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return {"ok": True, "path": abs_path}
 
 
 def write_file(agent_code: str, relative_path: str, content: str) -> str | None:

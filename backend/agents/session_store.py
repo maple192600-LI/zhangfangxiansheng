@@ -68,15 +68,31 @@ def load_recent_messages(db: Session, session_id: int, limit: int = 50) -> list[
         # 跳过错误消息（以 [错误] 开头的 assistant 消息），避免污染 LLM 上下文
         if r.role == "assistant" and r.content and r.content.startswith("[错误]"):
             continue
+        # 跳过完全空的 assistant 消息（无 content、无 tool_call、无 reasoning）
+        if r.role == "assistant" and not r.content and not r.tool_call_json and not r.reasoning_content:
+            continue
         msg = {"role": r.role}
         if r.content:
             msg["content"] = r.content
         if r.reasoning_content is not None:
             msg["reasoning_content"] = r.reasoning_content
-        if r.tool_call_json:
-            msg["tool_calls"] = json.loads(r.tool_call_json)
         if r.tool_result_json:
             msg["tool_result"] = json.loads(r.tool_result_json)
+
+        if r.role == "tool":
+            # tool 消息：只提取 tool_call_id，不设置 tool_calls
+            if r.tool_call_json:
+                try:
+                    tc_info = json.loads(r.tool_call_json)
+                    if "tool_call_id" in tc_info:
+                        msg["tool_call_id"] = tc_info["tool_call_id"]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        elif r.tool_call_json:
+            # assistant 消息：设置 tool_calls
+            raw = json.loads(r.tool_call_json)
+            msg["tool_calls"] = [raw] if isinstance(raw, dict) else raw
+
         result.append(msg)
     return result
 

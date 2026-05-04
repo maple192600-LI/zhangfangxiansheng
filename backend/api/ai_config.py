@@ -2,6 +2,7 @@
 
 GET/POST/PUT /api/ai-configs
 POST /api/ai-configs/{id}/test
+POST /api/ai-configs/fetch-models — 用 API Key 动态获取模型列表
 GET /api/ai-providers — 获取所有提供商和模型列表
 GET /api/ai-providers/ollama/models — 自动检测 Ollama 本地模型
 """
@@ -12,7 +13,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from core.response import error, success
-from core.ai_provider import get_provider_list, detect_ollama_models
+from core.ai_provider import get_provider_list, detect_ollama_models, fetch_remote_models, get_api_protocols
 from database import get_db
 from services import ai_config_service as svc
 
@@ -25,6 +26,10 @@ class AIConfigCreateBody(BaseModel):
     api_key: str
     base_url: Optional[str] = Field(None, max_length=255)
     model_name: str = Field("", max_length=100)
+    protocol: str = "openai"
+    note: Optional[str] = None
+    website_url: Optional[str] = Field(None, max_length=255)
+    send_user_agent: bool = False
     is_default: bool = False
     privacy_mode: str = "standard"
 
@@ -35,9 +40,19 @@ class AIConfigUpdateBody(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model_name: Optional[str] = None
+    protocol: Optional[str] = None
+    note: Optional[str] = None
+    website_url: Optional[str] = None
+    send_user_agent: Optional[bool] = None
     is_default: Optional[bool] = None
     privacy_mode: Optional[str] = None
     status: Optional[str] = None
+
+
+class FetchModelsBody(BaseModel):
+    base_url: str
+    api_key: str
+    protocol: str = "openai"
 
 
 @router.get("/ai-configs")
@@ -91,10 +106,30 @@ def test_ai_connection(config_id: int, db: Session = Depends(get_db)):
     return success(result)
 
 
+@router.post("/ai-configs/fetch-models")
+def fetch_models(body: FetchModelsBody):
+    """用 API Key 动态从供应商获取可用模型列表"""
+    try:
+        models = fetch_remote_models(
+            base_url=body.base_url,
+            api_key=body.api_key,
+            protocol=body.protocol,
+        )
+        return success(models)
+    except Exception as e:
+        return error(5001, f"获取模型列表失败: {str(e)}")
+
+
 @router.get("/ai-providers")
 def list_providers():
     """返回所有支持的 AI 提供商及其模型列表"""
     return success(get_provider_list())
+
+
+@router.get("/api-protocols")
+def list_protocols():
+    """返回所有 API 协议类型"""
+    return success(get_api_protocols())
 
 
 @router.get("/ai-providers/ollama/models")

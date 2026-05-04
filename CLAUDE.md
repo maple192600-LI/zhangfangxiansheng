@@ -2,113 +2,182 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ECC Skill Policy (MANDATORY)
+## 强制：文档入口
 
-Before writing or modifying code in this project, you MUST:
-1. Identify the task type (backend/frontend/testing/debugging/verification)
-2. Read the corresponding ECC skill SKILL.md from `~/.claude/skills/`
-3. Follow the skill's guidelines during implementation
+**每次会话开始，必须先读 [`docs/README.md`](docs/README.md)。** 该文件是所有开发文档的唯一入口，包含必读顺序和文件优先级。
 
-Mapping: Python backend → `python-patterns`, API design → `backend-patterns`, Testing → `python-testing`, Verification → `verification-loop`, Browser testing → `web-access`
+## Skill Policy
 
-**Do not write code without reading the matching skill first.**
+Skills auto-load via forced-eval hook. When the hook triggers a YES for a skill, read its SKILL.md before proceeding.
+
+| Task Type | Skill |
+|-----------|-------|
+| Python backend | `python-patterns` |
+| API/architecture | `backend-patterns`, `api-design` |
+| Frontend | `frontend-patterns` |
+| Testing | `python-testing`, `tdd-workflow` |
+| Verification | `verification-loop` |
+| Browser testing | `web-access` |
+| Debugging | `systematic-debugging` |
+| Code review | `requesting-code-review` |
+| Security | `security-review` |
+| Coding standards | `coding-standards` |
+| Complex planning | `blueprint` |
+| Codebase analysis | `codebase-onboarding` |
+| Architecture decisions | `architecture-decision-records` |
+| Research before coding | `search-first` |
+| Library docs lookup | `documentation-lookup` |
+| Product → engineering | `product-capability` |
+| Context management | `strategic-compact` |
 
 ## Project Overview
 
-**账房先生 (ZhangFang)** — 面向中国财务人员的本地部署财务工作台。当前阶段 V1，仅交付"出纳资金日报最小可用闭环"。
-
-本仓库当前是**纯文档总包**，包含完整的产品设计、技术约束、执行文档、数据库契约、API 契约、测试规范和样本骨架。代码将在后续开发中创建。
+**账房先生 (ZhangFang)** — 面向中国财务人员的本地部署财务工作台。Agent驱动的产品：Agent编写脚本/规则，脚本确定性处理数据，用户只需上传和确认。
 
 ## Tech Stack (Fixed)
 
 | Layer | Tech |
 |-------|------|
 | Backend | Python 3.11+ / FastAPI / SQLAlchemy |
-| Database | SQLite (V1) |
+| Database | SQLite |
 | Data Processing | Polars / openpyxl |
 | Frontend | Vue 3 / Vite / Ant Design Vue / ECharts |
-| OCR | PaddleOCR (backend integration) |
+| OCR | PaddleOCR (后续) |
 | Packaging | 前端静态编译 + 后端挂载 + PyInstaller |
 
 **未经批准不得更换上述主技术栈。**
 
-## Document Architecture (Must Read In Order)
+## Document Architecture
+
+所有文档在 `docs/` 目录下，入口为 [`docs/README.md`](docs/README.md)。
 
 ```
 docs/
-├── 00_governance/     ← 上位约束层（最高优先级）
-│   ├── 00_project_constitution.md   ← 项目宪法
-│   ├── 01_v1_scope_and_order.md     ← V1 范围与开发顺序
-│   ├── 02_user_constraints.md       ← 用户边界
+├── README.md                        ← 文档主入口（必读）
+├── 00_governance/                   ← 核心契约层（最高优先级）
+│   ├── 00_project_constitution.md   ← 项目宪法（冻结）
+│   ├── 01_v1_scope_and_order.md     ← 范围与顺序
+│   ├── 02_user_constraints.md       ← 用户约束
 │   ├── 03_tech_constraints.md       ← 技术约束
-│   └── 04_CLAUDE.md                 ← 项目级 Claude 指令
-├── 10_product_design/ ← 产品与设计层
-├── 20_execution/      ← 模块执行文档（Claude Code 直接开工输入）
-├── 30_contracts/      ← 契约层（数据库、字段、API、页面状态）
-├── 40_expected_outputs/ ← 期望输出定义
-├── 50_tests/          ← 测试与验收
-└── 60_claude_code_support/ ← 开工手册、目录规范、交付定义、协作协议
+│   ├── 08_anti_drift.md             ← 防跑偏机制
+│   └── 09_ai_capability_v3.md       ← Agent能力配置
+├── 10_product_design/               ← 产品设计
+├── 20_execution/                    ← 模块执行文档
+└── 30_contracts/                    ← 数据库/API/字段契约
 ```
 
-**冲突处理：** 文档冲突时以 governance → contracts → execution 优先级解决，先报告冲突再等待修订。
+**冲突处理：** constitution > contracts > execution > product_design。先报告冲突，不擅自决定。
 
-## Target Code Structure (After Development Begins)
+## Current Code Structure
 
 ```
 backend/
   main.py / config.py / database.py
-  api/         ← 路由层，只做请求收发
-  services/    ← 业务逻辑
-  db/          ← 数据模型定义
-  core/        ← 通用引擎（导出、解析、Agent、日志、备份）
-  parsers/     ← 银行流水解析器与模板匹配
-  agents/      ← Agent 骨架（shared/ + master/ + parser-assistant/）
-  data/        ← 种子数据
+  api/         ← 路由层（23个路由文件）
+  services/    ← 业务逻辑（18个服务文件）
+  db/          ← ORM表定义（25个表）
+  core/        ← 安全、响应格式、运行时守卫
+  agents/      ← Agent引擎（运行时+工具+记忆）
+  data/        ← SQLite数据库 + 上传/导出/备份
 frontend/
   src/
-    views/     ← 页面按模块拆分
-    components/
-    api/       ← 接口请求统一收敛
-    stores/ / router/ / styles/ / utils/
-tests/
-  backend/ / frontend/ / e2e/ / fixtures/
+    views/     ← 31个页面（含agent/子目录）
+    components/ / composables/ / stores/ / router/ / api/ / styles/
+agents/        ← Agent运行时数据（用户创建的实例）
+samples/       ← 样本文件
+templates/     ← 前端/手工模板
+references/    ← 截图、样式规范
+tools/guards/  ← 契约守卫脚本
+tests/         ← pytest测试
 ```
-
-## Development Order (Strict Sequence, No Skipping)
-
-1. 项目骨架与可运行环境
-2. 数据库与基础表
-3. 主数据中心（CRUD + 账户初始化 + 期初余额）
-4. AI 配置与 Agent 骨架
-5. 银行流水导入与模板识别骨架
-6. 手工流水双轨（快速录入 + 多主体 Excel 上传）
-7. 基础数据表与区间日报生成
-8. 首页总控台、导出、打印、看板、备份、回滚
-9. 集成测试与真实样本回归
 
 ## Key Constraints
 
-- **核心逻辑确定性优先**，AI 辅助其次；运行时 AI 不得自由决定账户归属、汇总正确性
+- **核心逻辑确定性优先**，AI辅助其次；报表生成禁止调LLM（§C8）
 - **表格是主战场**，卡片和图表只做辅助
 - **全中文 UI**，错误信息中文可读
 - **用户无需命令行**，双击即可启动
 - 路由层不承载业务逻辑，业务逻辑放 `services/`
 - API 统一响应格式：`{ "code": 0, "message": "ok", "data": {} }`
+- **增强层不阻断核心功能** — 模板/主题缺失时降级到默认行为
 
-## V1 Scope Boundaries
+## V1 Scope
 
-**包含：** 主数据中心、银行导入、手工流水双轨、日报生成、导出打印、基础看板、备份回滚、日志、AI 配置与 Agent 骨架
+**包含：** 主数据中心、银行导入、手工流水双轨、日报生成、导出打印、基础看板、备份回滚、日志、Agent系统
 
-**禁止：** 发票 OCR 正式流程、费用审批、合同管理、多人协作、集中部署、Electron/Tauri/Rust 重写、收费表格组件
+**禁止：** 发票OCR正式流程、费用审批、合同管理、多人协作、集中部署
 
 ## Visual Style
 
-稳重复克制的暖色系：柔和浅暖中性背景 + 低饱和稳重绿色主强调色 + 砂金/暖棕辅助色。大圆角、轻阴影、温度感微文案。详细规范见 `references/style_and_interaction/style_theme_spec.md`。
+稳重复克制的暖色系：柔和浅暖中性背景 + 低饱和稳重绿色主强调色 + 砂金/暖棕辅助色。详细规范见 `references/style_and_interaction/style_theme_spec.md`。
 
-## Per-Step Completion Requirements
+## Completion Requirements
 
-每步完成后必须输出：新增/修改文件清单、完成功能、已知风险、为何达到进入下一步条件。未达标不得跳步。
+每步完成后必须：1) 输出文件清单 2) 实际验证通过 3) 检查是否破坏其他功能。未达标不得跳步。
 
-## Collaboration Protocol
 
-详见 `docs/60_claude_code_support/12_claude_code_collaboration_protocol.md`。核心原则：严格执行文档，不是自由发挥型写手。遇到文档冲突或关键歧义必须停下报告。
+# CLAUDE.md
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

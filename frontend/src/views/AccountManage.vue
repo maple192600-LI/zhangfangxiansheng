@@ -2,16 +2,16 @@
   <div>
     <div class="section">
       <div class="section-title">
-        <h3>账户数据管理</h3>
-        <span>管理账户数据及其所属的核算组织、单位、银行基础信息</span>
+        <h3>主数据管理</h3>
+        <span>管理核算组织、单位、银行账户等基础数据</span>
       </div>
 
       <!-- 子标签页 -->
       <div class="tabs-bar">
         <button class="tab-btn" :class="{ active: activeTab === 'accounts' }" @click="activeTab = 'accounts'">账户列表</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'divisions' }" @click="activeTab = 'divisions'">核算组织</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'entities' }" @click="activeTab = 'entities'">单位维护</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'banks' }" @click="activeTab = 'banks'">银行账户</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'divisions' }" @click="activeTab = 'divisions'">核算管理</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'entities' }" @click="activeTab = 'entities'">单位管理</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'banks' }" @click="activeTab = 'banks'">账户管理</button>
       </div>
 
       <!-- ==================== 标签页1: 账户列表 ==================== -->
@@ -38,7 +38,6 @@
               <div class="dropdown-menu">
                 <button @click="batchAccounts('enable'); accDropdownOpen = false">批量启用</button>
                 <button @click="batchAccounts('disable'); accDropdownOpen = false">批量停用</button>
-                <button @click="batchAccounts('delete'); accDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
             <button class="btn btn-secondary" @click="downloadTemplate">下载导入模板</button>
@@ -94,7 +93,7 @@
         </template>
       </div>
 
-      <!-- ==================== 标签页2: 核算组织 ==================== -->
+      <!-- ==================== 标签页2: 核算管理 ==================== -->
       <div v-show="activeTab === 'divisions'">
         <div class="filters-bar">
           <select v-model="divFilterStatus" class="filter" style="width:90px">
@@ -109,13 +108,17 @@
               <div class="dropdown-menu">
                 <button @click="batchDivisions('enable'); divDropdownOpen = false">批量启用</button>
                 <button @click="batchDivisions('disable'); divDropdownOpen = false">批量停用</button>
-                <button @click="batchDivisions('delete'); divDropdownOpen = false">批量删除</button>
               </div>
             </div>
             <button class="btn btn-primary" @click="openDivForm()">+ 新建核算组织</button>
           </div>
         </div>
-        <div class="table-wrap">
+        <div v-if="!filteredDivisions.length" class="empty-state">
+          <div class="empty-icon">&#x1F4CB;</div>
+          <h4>暂无核算组织</h4>
+          <p>点击右上角「+ 新建核算组织」添加</p>
+        </div>
+        <div v-else class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -146,15 +149,12 @@
                   <button class="btn btn-warn btn-sm" @click="deleteDiv(d)">删除</button>
                 </td>
               </tr>
-              <tr v-if="!filteredDivisions.length">
-                <td colspan="8" style="text-align:center;color:var(--muted);padding:30px">暂无核算组织</td>
-              </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- ==================== 标签页3: 单位维护 ==================== -->
+      <!-- ==================== 标签页3: 单位管理 ==================== -->
       <div v-show="activeTab === 'entities'">
         <div class="filters-bar">
           <select v-model="entFilterDiv" class="filter">
@@ -174,13 +174,17 @@
               <div class="dropdown-menu">
                 <button @click="batchEntities('enable'); entDropdownOpen = false">批量启用</button>
                 <button @click="batchEntities('disable'); entDropdownOpen = false">批量停用</button>
-                <button @click="batchEntities('delete'); entDropdownOpen = false">批量删除</button>
               </div>
             </div>
             <button class="btn btn-primary" @click="openEntForm()">+ 新建单位</button>
           </div>
         </div>
-        <div class="table-wrap">
+        <div v-if="!filteredEntities_list.length" class="empty-state">
+          <div class="empty-icon">&#x1F3E2;</div>
+          <h4>暂无单位</h4>
+          <p>点击右上角「+ 新建单位」添加，或通过账户列表批量导入</p>
+        </div>
+        <div v-else class="table-wrap">
           <table>
             <thead>
               <tr>
@@ -212,9 +216,6 @@
                   <button class="btn btn-secondary btn-sm" v-else @click="toggleEntStatus(e,'enabled')">启用</button>
                   <button class="btn btn-warn btn-sm" @click="deleteEnt(e)">删除</button>
                 </td>
-              </tr>
-              <tr v-if="!filteredEntities_list.length">
-                <td colspan="9" style="text-align:center;color:var(--muted);padding:30px">暂无单位数据</td>
               </tr>
             </tbody>
           </table>
@@ -606,6 +607,33 @@ const banks = ref([])
 const importInput = ref(null)
 const activeTab = ref('accounts')
 
+// ── 默认列定义（无导入模板时的兜底） ──
+const DEFAULT_ACCOUNT_COLUMNS = [
+  { key: 'division_name', label: '核算组织', type: 'text' },
+  { key: 'entity_name', label: '所属单位', type: 'text' },
+  { key: 'account_code', label: '账户编号', type: 'code' },
+  { key: 'bank_name', label: '开户银行', type: 'text' },
+  { key: 'account_number', label: '银行账号', type: 'text' },
+  { key: 'branch_name', label: '开户行名称', type: 'text' },
+  { key: 'account_type', label: '账户类型', type: 'tag' },
+  { key: 'instrument_type', label: '资金类型', type: 'tag' },
+  { key: 'initial_balance', label: '期初余额', type: 'money' },
+  { key: 'status', label: '状态', type: 'status' },
+]
+
+const DEFAULT_BANK_COLUMNS = [
+  { key: 'entity_name', label: '所属单位', type: 'text' },
+  { key: 'account_code', label: '账户编号', type: 'code' },
+  { key: 'bank_name', label: '开户银行', type: 'text' },
+  { key: 'account_number', label: '银行账号', type: 'text' },
+  { key: 'branch_name', label: '开户行名称', type: 'text' },
+  { key: 'account_type', label: '账户类型', type: 'tag' },
+  { key: 'instrument_type', label: '资金类型', type: 'tag' },
+  { key: 'has_online_banking', label: '网银', type: 'bool' },
+  { key: 'initial_balance', label: '期初余额', type: 'money' },
+  { key: 'status', label: '状态', type: 'status' },
+]
+
 // ── 动态列定义：从后端获取（基于用户导入的模板列名） ──
 const accountColumns = ref([])
 
@@ -757,11 +785,11 @@ const filteredBankAccounts = computed(() => {
   return items
 })
 
-// 动态列：根据实际数据过滤掉全空列
+// 动态列：无模板时用默认列，有模板时过滤掉全空列
 const activeAccountColumns = computed(() => {
   const accs = accounts.value
-  const cols = accountColumns.value
-  if (!accs.length || !cols.length) return []
+  if (!accs.length) return []
+  const cols = accountColumns.value.length > 0 ? accountColumns.value : DEFAULT_ACCOUNT_COLUMNS
   return cols.filter(col => {
     return accs.some(a => {
       const v = a[col.key]
@@ -774,8 +802,9 @@ const activeAccountColumns = computed(() => {
 
 const activeBankColumns = computed(() => {
   const accs = filteredBankAccounts.value
-  const cols = bankAccountColumns.value
-  if (!accs.length || !cols.length) return []
+  if (!accs.length) return []
+  const raw = bankAccountColumns.value
+  const cols = raw.length > 0 ? raw : DEFAULT_BANK_COLUMNS
   return cols.filter(col => {
     return accs.some(a => {
       const v = a[col.key]
@@ -869,15 +898,11 @@ async function batchAccounts(action) {
 async function batchDivisions(action) {
   const ids = [...selectedDivIds.value]
   if (!ids.length) return
-  const labels = { enable: '启用', disable: '停用', delete: '删除' }
+  const labels = { enable: '启用', disable: '停用' }
   const label = labels[action] || action
-  if (action === 'delete') {
-    if (!confirm(`确定批量删除 ${ids.length} 个核算组织？将同时删除其下属单位和账户！此操作不可撤销！`)) return
-  } else {
-    if (!confirm(`确定批量${label} ${ids.length} 个核算组织？`)) return
-  }
+  if (!confirm(`确定批量${label} ${ids.length} 个核算组织？`)) return
   try {
-    const result = await api.batchActionDivisions(ids, action, action === 'delete')
+    const result = await api.batchActionDivisions(ids, action)
     const failedCount = result.failed?.length || 0
     if (failedCount > 0) {
       const msgs = result.failed.map(f => f.message).join('\n')
@@ -891,15 +916,11 @@ async function batchDivisions(action) {
 async function batchEntities(action) {
   const ids = [...selectedEntIds.value]
   if (!ids.length) return
-  const labels = { enable: '启用', disable: '停用', delete: '删除' }
+  const labels = { enable: '启用', disable: '停用' }
   const label = labels[action] || action
-  if (action === 'delete') {
-    if (!confirm(`确定批量删除 ${ids.length} 个单位？将同时删除其下属账户！此操作不可撤销！`)) return
-  } else {
-    if (!confirm(`确定批量${label} ${ids.length} 个单位？`)) return
-  }
+  if (!confirm(`确定批量${label} ${ids.length} 个单位？`)) return
   try {
-    const result = await api.batchActionEntities(ids, action, action === 'delete')
+    const result = await api.batchActionEntities(ids, action)
     const failedCount = result.failed?.length || 0
     if (failedCount > 0) {
       const msgs = result.failed.map(f => f.message).join('\n')
@@ -1060,13 +1081,11 @@ async function deleteDiv(item) {
     const unitCount = usage.unit_count || 0
     if (unitCount > 0) {
       const unitNames = (usage.units || []).map(u => `${u.entity_code} ${u.name || u.short_name}`).join('、')
-      const msg = `该核算组织下有 ${unitCount} 个单位：${unitNames}。删除后这些单位将不再归属任何核算组织。确认删除？`
-      if (!confirm(msg)) return
-      await api.deleteDivision(item.id, true)
-    } else {
-      if (!confirm(`确定删除核算组织「${item.name}」？`)) return
-      await api.deleteDivision(item.id)
+      alert(`该核算组织下有 ${unitCount} 个单位（${unitNames}），请先删除所有单位后再删除核算组织。`)
+      return
     }
+    if (!confirm(`确定删除核算组织「${item.name}」？此操作不可撤销。`)) return
+    await api.deleteDivision(item.id)
     await loadAll()
   } catch (e) { alert(e.message || '删除失败') }
 }
@@ -1122,8 +1141,8 @@ async function deleteEnt(item) {
     const usage = await api.getEntityUsage(item.id)
     const accountCount = usage.account_count || 0
     if (accountCount > 0) {
-      const accNames = (usage.accounts || []).map(a => `${a.account_code} ${a.account_alias}（${a.account_type}）`).join('\n')
-      alert(`单位「${item.short_name || item.name}」下有 ${accountCount} 个账户：\n${accNames}\n\n请先到「账户列表」中删除这些账户，再删除单位。`)
+      const accNames = (usage.accounts || []).map(a => `${a.account_code} ${a.account_alias}（${a.account_type}）`).join('、')
+      alert(`单位「${item.short_name || item.name}」下有 ${accountCount} 个银行账户（${accNames}），请先到「账户管理」中删除所有账户后再删除单位。`)
       return
     }
     if (!confirm(`确定删除单位「${item.short_name || item.name}」？此操作不可撤销。`)) return
@@ -1285,6 +1304,26 @@ onMounted(loadAll)
 /* 禁用行 */
 tr.disabled { opacity: 0.55; }
 tr.selected { background: #f0f5ef; }
+
+/* 空数据状态 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+}
+.empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.empty-state h4 {
+  margin: 0 0 8px 0;
+  color: var(--text);
+  font-size: 16px;
+}
+.empty-state p {
+  margin: 0;
+  font-size: 13px;
+}
 
 /* 勾选列 */
 .col-ck { width: 36px; text-align: center; }

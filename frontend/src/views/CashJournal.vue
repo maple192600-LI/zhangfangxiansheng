@@ -20,9 +20,6 @@
           <button class="btn btn-secondary" @click="doExport">导出</button>
           <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="loadReport">生成报表</button>
-          <button class="btn btn-accent" @click="smartReport" :disabled="smartReportLoading">
-            {{ smartReportLoading ? '生成中...' : '智能报表' }}
-          </button>
         </div>
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
@@ -126,28 +123,23 @@
       </div>
 
       <!-- 简化表头模式（无 layout 或 layout 只有表头） -->
-      <table v-else-if="templateColumns">
+      <table v-else-if="displayColumns.length">
         <thead>
           <tr>
-            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
+            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <template v-if="rows.length">
             <tr v-for="(r, idx) in rows" :key="idx">
-              <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
+              <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
             </tr>
           </template>
           <tr v-else>
-            <td :colspan="templateColumns.length" class="empty-cell">暂无日记账数据，选择日期范围和账户后点击"生成报表"</td>
+            <td :colspan="displayColumns.length" class="empty-cell">暂无日记账数据，选择日期范围和账户后点击"生成报表"</td>
           </tr>
         </tbody>
       </table>
-      <div v-else-if="templateLoaded" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h4>未配置报表模板</h4>
-        <p>请先在「系统设置 → 报表模板管理」中上传现金日记账模板</p>
-      </div>
     </div>
   </div>
 </template>
@@ -159,7 +151,6 @@ import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
-import http from '@/api'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -169,9 +160,20 @@ const entities = ref([])
 const blocks = ref([])
 const rows = ref([])
 const loading = ref(false)
-const smartReportLoading = ref(false)
 const errorMsg = ref('')
 const { templateColumns, templateLayout, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('cash_journal')
+
+const DEFAULT_COLUMNS = [
+  { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
+  { field_key: 'entity_name', header_name: '单位', width: 120, align: 'left' },
+  { field_key: 'account_name', header_name: '账户', width: 150, align: 'left' },
+  { field_key: 'summary_text', header_name: '摘要', width: 200, align: 'left' },
+  { field_key: 'income', header_name: '收入', width: 130, align: 'right' },
+  { field_key: 'expense', header_name: '支出', width: 130, align: 'right' },
+  { field_key: 'day_balance', header_name: '余额', width: 130, align: 'right' },
+]
+
+const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
 
 const MONEY_KEYS = new Set(['prev_balance', 'income', 'expense', 'day_balance', 'amount', 'rolling_balance'])
 function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }
@@ -414,40 +416,14 @@ async function loadReport() {
 
 async function doExport() {
   try {
-    const blob = await exportReport({ export_type: 'cash_journal', start_date: startDate.value || undefined, end_date: endDate.value || undefined })
+    const params = { export_type: 'cash_journal', start_date: startDate.value || undefined, end_date: endDate.value || undefined }
+    if (accountId.value) params.account_id = accountId.value
+    const blob = await exportReport(params)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url; a.download = `cash_journal.xlsx`; a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
-}
-
-async function smartReport() {
-  smartReportLoading.value = true
-  try {
-    const agents = await http.get('/agent/agents')
-    const agent = (agents || [])[0]
-    if (!agent) {
-      alert('请先创建一个智能体')
-      return
-    }
-    const res = await http.post(`/agent/agents/${agent.id}/skill-run`, {
-      skill_code: 'gen_report',
-      report_type: 'cash_journal',
-      start_date: startDate.value || undefined,
-      end_date: endDate.value || undefined,
-    })
-    const inner = res?.result || res
-    if (inner && inner.ok) {
-      alert(`报表已生成: ${inner.report_name}，${inner.row_count} 行数据，文件: ${inner.file_path}`)
-    } else {
-      alert('报表生成失败: ' + (inner?.error || '未知错误'))
-    }
-  } catch (e) {
-    alert('智能报表失败: ' + (e.message || e))
-  } finally {
-    smartReportLoading.value = false
-  }
 }
 
 onMounted(async () => {

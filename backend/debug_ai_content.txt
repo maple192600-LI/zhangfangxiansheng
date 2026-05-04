@@ -1,3 +1,0 @@
-LENGTH: 184
-REPR: '{"mapping": {"交易类型": "transaction_type", "交易日期": "business_date", "交易时间": "business_time", "交易后余额": "balance", "凭证号码": "voucher_no", "摘要": "summary_text"}, "template_name": "中国银行标准流水"}'
-TEXT: {"mapping": {"交易类型": "transaction_type", "交易日期": "business_date", "交易时间": "business_time", "交易后余额": "balance", "凭证号码": "voucher_no", "摘要": "summary_text"}, "template_name": "中国银行标准流水"}

@@ -74,7 +74,7 @@ def _get_template_columns(db, export_type: str) -> Optional[List[Dict]]:
     return None
 
 
-def generate_export(db, export_type: str, start_date: Optional[str], end_date: Optional[str], entity_id: Optional[int] = None, year: Optional[int] = None, month: Optional[int] = None) -> str:
+def generate_export(db, export_type: str, start_date: Optional[str], end_date: Optional[str], entity_id: Optional[int] = None, account_id: Optional[int] = None, year: Optional[int] = None, month: Optional[int] = None) -> str:
     """生成 Excel 导出文件，返回文件路径"""
     from services.base_data_service import query_base_data
     from services.report_service import (
@@ -127,7 +127,7 @@ def generate_export(db, export_type: str, start_date: Optional[str], end_date: O
     ws.freeze_panes = "A2"
 
     # 获取数据
-    rows = _fetch_data(db, export_type, start_date, end_date, entity_id, year, month)
+    rows = _fetch_data(db, export_type, start_date, end_date, entity_id, account_id, year, month)
 
     # 写数据行
     money_format = '#,##0.00'
@@ -176,7 +176,7 @@ def _get_money_columns(export_type: str):
     return mapping.get(export_type, [])
 
 
-def _fetch_data(db, export_type, start_date, end_date, entity_id, year=None, month=None) -> list:
+def _fetch_data(db, export_type, start_date, end_date, entity_id, account_id=None, year=None, month=None) -> list:
     """根据类型获取数据行"""
     from services.report_service import (
         daily_report, cash_journal, account_balance,
@@ -184,9 +184,17 @@ def _fetch_data(db, export_type, start_date, end_date, entity_id, year=None, mon
         major_balance, month_check, week_report, month_report, year_report,
     )
 
-    params = {"start_date": start_date, "end_date": end_date}
+    from datetime import datetime as _dt
+
+    # 将字符串日期转为 date 对象（report_service 期望 date 类型）
+    sd = _dt.strptime(start_date, "%Y-%m-%d").date() if isinstance(start_date, str) else start_date
+    ed = _dt.strptime(end_date, "%Y-%m-%d").date() if isinstance(end_date, str) else end_date
+
+    params = {"start_date": sd, "end_date": ed}
     if entity_id:
         params["entity_id"] = entity_id
+    if account_id:
+        params["account_id"] = account_id
 
     try:
         if export_type == "base_data":

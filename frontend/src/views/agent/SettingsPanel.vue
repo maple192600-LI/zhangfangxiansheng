@@ -28,7 +28,7 @@
               {{ cfg.display_name }}（{{ cfg.provider }}{{ cfg.model_name ? ' · ' + cfg.model_name : '' }}）
             </option>
           </select>
-          <span class="hint">可在「系统设置 → AI配置」中添加新的模型配置</span>
+          <span class="hint">可在「系统设置 → 模型配置」中添加新的模型配置</span>
         </div>
 
         <div class="sep"></div>
@@ -54,6 +54,35 @@
           </div>
           <input v-model.number="form.llm_max_tokens" type="number" class="inp" min="1024" max="524288" />
           <span class="hint">单次回复的最大输出 token 数（非上下文窗口）。值太小会导致回复被截断（Agent 半路断掉）。请根据所选用模型的支持范围合理设置。</span>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="block-head">
+          <h3>工具权限</h3>
+        </div>
+
+        <div v-if="toolsetsLoading" style="color:#aaa;font-size:13px">加载中...</div>
+        <div v-else class="tool-grid">
+          <div v-for="(tools, group) in toolsets" :key="group" class="tool-group">
+            <div class="tool-group-head">
+              <span class="tool-group-name">{{ groupLabel(group) }}</span>
+              <label class="toggle-label">
+                <input type="checkbox" :checked="isGroupEnabled(group)" @change="toggleGroup(group, $event.target.checked)" />
+                <span>{{ isGroupEnabled(group) ? '已启用' : '已禁用' }}</span>
+              </label>
+            </div>
+            <div class="tool-list">
+              <div v-for="tool in tools" :key="tool" class="tool-item" :class="getToolClass(tool)">
+                <span class="tool-name">{{ tool }}</span>
+                <select class="tool-perm-select" :value="getToolPerm(tool)" @change="setToolPerm(tool, $event.target.value)">
+                  <option value="allowed">允许</option>
+                  <option value="confirm">需确认</option>
+                  <option value="disabled">禁用</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="sep"></div>
@@ -116,6 +145,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useAgentsStore } from '@/stores/agents'
+import http from '@/api'
 
 const props = defineProps({ agent: Object })
 const emit = defineEmits(['updated', 'deleted'])
@@ -126,6 +156,69 @@ const aiConfigs = ref([])
 const saving = ref(false)
 const errMsg = ref('')
 const okMsg = ref('')
+const toolsets = ref({})
+const toolsetsLoading = ref(true)
+const permissions = ref({ allowed_tools: [], needs_user_confirm: [], disabled_toolsets: [] })
+
+const GROUP_LABELS = {
+  file: '文件操作', parse: '文件解析', shell: '脚本执行',
+  database: '数据库', excel: 'Excel', skill: '技能管理',
+  memory: '记忆', agent: '交互',
+}
+
+function groupLabel(g) { return GROUP_LABELS[g] || g }
+
+function getToolPerm(tool) {
+  if (permissions.value.allowed_tools?.includes(tool)) return 'allowed'
+  if (permissions.value.needs_user_confirm?.includes(tool)) return 'confirm'
+  return 'disabled'
+}
+
+function getToolClass(tool) {
+  const p = getToolPerm(tool)
+  return p === 'allowed' ? 'tool-allowed' : p === 'confirm' ? 'tool-confirm' : 'tool-disabled'
+}
+
+function setToolPerm(tool, val) {
+  const perms = { ...permissions.value }
+  perms.allowed_tools = (perms.allowed_tools || []).filter(t => t !== tool)
+  perms.needs_user_confirm = (perms.needs_user_confirm || []).filter(t => t !== tool)
+  if (val === 'allowed') perms.allowed_tools = [...perms.allowed_tools, tool]
+  else if (val === 'confirm') perms.needs_user_confirm = [...perms.needs_user_confirm, tool]
+  permissions.value = perms
+  savePermissions()
+}
+
+function isGroupEnabled(group) {
+  const tools = toolsets.value[group] || []
+  if (permissions.value.disabled_toolsets?.includes(group)) return false
+  return tools.some(t => getToolPerm(t) !== 'disabled')
+}
+
+function toggleGroup(group, enabled) {
+  const perms = { ...permissions.value }
+  perms.disabled_toolsets = (perms.disabled_toolsets || []).filter(g => g !== group)
+  const tools = toolsets.value[group] || []
+  if (enabled) {
+    tools.forEach(t => {
+      if (!perms.allowed_tools.includes(t) && !perms.needs_user_confirm.includes(t)) {
+        perms.allowed_tools = [...perms.allowed_tools, t]
+      }
+    })
+  } else {
+    perms.allowed_tools = perms.allowed_tools.filter(t => !tools.includes(t))
+    perms.needs_user_confirm = perms.needs_user_confirm.filter(t => !tools.includes(t))
+    perms.disabled_toolsets = [...(perms.disabled_toolsets || []), group]
+  }
+  permissions.value = perms
+  savePermissions()
+}
+
+async function savePermissions() {
+  try {
+    await http.put(`/agent/agents/${props.agent.id}/permissions`, permissions.value)
+  } catch {}
+}
 
 const tokenPresets = [
   { label: '4K', value: 4096, desc: '本地部署模型适用' },
@@ -145,6 +238,15 @@ onMounted(async () => {
     llm_max_tokens: props.agent.llm_max_tokens ?? 4096,
   }
   try { aiConfigs.value = await store.fetchAIConfigs() } catch {}
+  try {
+    const [toolsData, permData] = await Promise.all([
+      http.get('/agent/tools/list'),
+      http.get(`/agent/agents/${props.agent.id}/permissions`),
+    ])
+    toolsets.value = toolsData.toolsets || {}
+    permissions.value = permData || { allowed_tools: [], needs_user_confirm: [], disabled_toolsets: [] }
+  } catch {}
+  toolsetsLoading.value = false
 })
 
 function resetForm() {
@@ -327,5 +429,64 @@ function fmtTime(iso) {
   .settings-page {
     grid-template-columns: 1fr;
   }
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.tool-group {
+  border: 1px solid #ede8df;
+  border-radius: 10px;
+  padding: 12px;
+}
+.tool-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ede8df;
+}
+.tool-group-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #8c8680;
+  cursor: pointer;
+}
+.toggle-label input { cursor: pointer; }
+.tool-list { display: flex; flex-direction: column; gap: 4px; }
+.tool-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.tool-allowed { background: #eef3ec; color: #2f4330; }
+.tool-confirm { background: #f5f0e4; color: #8a7a3a; }
+.tool-disabled { background: #f7f4ee; color: #aaa; }
+.tool-name { font-family: monospace; font-size: 11px; }
+.tool-perm-select {
+  border: 1px solid #e7e0d5;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 4px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@media (max-width: 900px) {
+  .tool-grid { grid-template-columns: 1fr; }
 }
 </style>

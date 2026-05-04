@@ -1,4 +1,7 @@
 """认证服务 — 单用户 JWT 认证"""
+import secrets
+import string
+
 import jwt
 import bcrypt
 from datetime import datetime, timedelta, timezone
@@ -8,6 +11,11 @@ from sqlalchemy.orm import Session
 
 from config import SECRET_KEY, TOKEN_EXPIRE_MINUTES
 from db.tables import User
+
+
+def _generate_random_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 def hash_password(plain: str) -> str:
@@ -44,9 +52,10 @@ def get_or_create_default_user(db: Session) -> User:
     user = db.query(User).first()
     if user:
         return user
+    default_pwd = _generate_random_password()
     user = User(
         username="admin",
-        password_hash=hash_password("admin123"),
+        password_hash=hash_password(default_pwd),
         must_change_password=True,
     )
     db.add(user)
@@ -54,8 +63,9 @@ def get_or_create_default_user(db: Session) -> User:
     db.refresh(user)
     import logging
     logging.getLogger(__name__).warning(
-        "已创建默认用户 admin，首次登录后请立即修改密码"
+        "已创建默认用户 admin，密码: %s  首次登录后请立即修改密码", default_pwd
     )
+    print(f"[启动] 默认用户 admin 密码: {default_pwd}  请在首次登录后立即修改")
     return user
 
 

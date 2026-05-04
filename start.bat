@@ -14,17 +14,25 @@ if not exist "backend\venv\Scripts\python.exe" (
 )
 
 REM Kill any existing process on port 8000
-echo Checking port 8000...
 for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8000.*LISTENING"') do (
     echo Killing existing process PID %%a on port 8000...
     taskkill /F /PID %%a >nul 2>nul
-    timeout /t 1 /nobreak >nul
+)
+timeout /t 2 /nobreak >nul
+
+REM Build frontend if needed
+if not exist "frontend\dist\index.html" (
+    echo Building frontend...
+    cd frontend
+    call npx vite build
+    cd ..
 )
 
+REM Start backend (serves frontend from dist on port 8000)
+echo Starting on http://127.0.0.1:8000 ...
 cd backend
 
-REM Clear Python bytecode cache to prevent stale routes
-echo Clearing __pycache__...
+REM Clear Python bytecode cache
 for /d /r %%d in (__pycache__) do (
     if exist "%%d" rd /s /q "%%d" 2>nul
 )

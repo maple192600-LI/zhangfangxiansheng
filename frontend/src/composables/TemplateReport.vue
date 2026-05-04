@@ -31,6 +31,7 @@
         <div style="flex:1"></div>
         <div class="btn-row">
           <button class="btn btn-secondary" @click="doExport">导出</button>
+          <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="loadData">生成报表</button>
         </div>
       </div>

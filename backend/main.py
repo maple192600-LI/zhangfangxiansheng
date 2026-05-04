@@ -57,28 +57,32 @@ def _patch_schema():
     """增量补齐尚未通过 alembic 迁移的列（无害幂等）。"""
     from sqlalchemy import text as _t
     from database import engine
+
+    _SCHEMA_PATCHES = [
+        ("ALTER TABLE report_templates ADD COLUMN source_file_path VARCHAR(500)",
+         "report_templates.source_file_path"),
+        ("ALTER TABLE agents_v2 ADD COLUMN llm_timeout INTEGER NOT NULL DEFAULT 300",
+         "agents_v2.llm_timeout"),
+        ("ALTER TABLE agents_v2 ADD COLUMN llm_max_tokens INTEGER NOT NULL DEFAULT 4096",
+         "agents_v2.llm_max_tokens"),
+        ("ALTER TABLE agent_messages ADD COLUMN reasoning_content TEXT",
+         "agent_messages.reasoning_content"),
+        ("ALTER TABLE parser_templates ADD COLUMN account_code VARCHAR(30)",
+         "parser_templates.account_code"),
+    ]
+
     with engine.connect() as conn:
-        try:
-            conn.execute(_t("ALTER TABLE report_templates ADD COLUMN source_file_path VARCHAR(500)"))
-            conn.commit()
-            print("[schema] 已补齐 report_templates.source_file_path")
-        except Exception:
-            pass
-
-        try:
-            conn.execute(_t("ALTER TABLE agents_v2 ADD COLUMN llm_timeout INTEGER NOT NULL DEFAULT 300"))
-            conn.execute(_t("ALTER TABLE agents_v2 ADD COLUMN llm_max_tokens INTEGER NOT NULL DEFAULT 4096"))
-            conn.commit()
-            print("[schema] 已补齐 agents_v2.llm_timeout / llm_max_tokens")
-        except Exception:
-            pass
-
-        try:
-            conn.execute(_t("ALTER TABLE agent_messages ADD COLUMN reasoning_content TEXT"))
-            conn.commit()
-            print("[schema] 已补齐 agent_messages.reasoning_content")
-        except Exception:
-            pass
+        for sql, col_name in _SCHEMA_PATCHES:
+            try:
+                conn.execute(_t(sql))
+                conn.commit()
+                print(f"[schema] 已补齐 {col_name}")
+            except Exception as e:
+                err = str(e).lower()
+                if "duplicate column" in err or "already exists" in err:
+                    pass
+                else:
+                    print(f"[schema] 补齐 {col_name} 失败: {e}")
 
 
 def _run_alembic_upgrade():
@@ -132,7 +136,7 @@ def _register_global_skills():
     from agents.skill_loader import load_manifest
 
     system_skills_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "data", "agents", "system", "skills"
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents", "system", "skills")
     )
     if not os.path.isdir(system_skills_dir):
         return
@@ -191,6 +195,23 @@ async def lifespan(app: FastAPI):
 
 # ── 创建 FastAPI 实例 ──
 app = FastAPI(title="账房先生", version="1.0.0", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+import logging as _logging
+from fastapi.responses import JSONResponse as _JSONResponse
+
+_logger = _logging.getLogger(__name__)
+
+
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    traceback.print_exc()
+    _logger.error("未捕获异常 %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return _JSONResponse(
+        status_code=500,
+        content={"code": 5000, "message": "服务内部错误，请查看操作日志", "data": None},
+    )
 
 # ── CORS（本地部署 + 开发用）──
 _CORS_ORIGINS = os.environ.get(

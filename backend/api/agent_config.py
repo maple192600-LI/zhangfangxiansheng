@@ -1,4 +1,4 @@
-"""Agent 工作空间目录读取（V2 兼容）
+"""Agent 工作空间目录读取
 
 GET /api/agent-workspaces — 读取 agents/ 目录下实际的 agent 工作空间
 """

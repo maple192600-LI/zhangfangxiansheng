@@ -2,10 +2,14 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.environ.get("ZF_DB_PATH", os.path.join(DATA_DIR, "zhangfang.db"))
 BACKUP_DIR = os.path.join(BASE_DIR, "..", "backups")
 EXPORT_DIR = os.path.join(BASE_DIR, "..", "exports")
+
+# Agent 数据根目录 — 项目根级别 agents/（非 backend/data/agents/）
+AGENTS_ROOT = os.path.join(PROJECT_ROOT, "agents")
 
 HOST = "127.0.0.1"
 PORT = 8000
@@ -34,3 +38,4 @@ if SECRET_KEY == _DEFAULT_SECRET:
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(BACKUP_DIR, exist_ok=True)
 os.makedirs(EXPORT_DIR, exist_ok=True)
+os.makedirs(AGENTS_ROOT, exist_ok=True)

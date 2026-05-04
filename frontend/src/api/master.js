@@ -16,14 +16,14 @@ export const updateDivision = (id, data) =>
 export const updateDivisionStatus = (id, status) =>
   http.put(`/divisions/${id}/status`, { status })
 
-export const deleteDivision = (id, force = false) =>
-  http.delete(`/divisions/${id}`, { params: { force } })
+export const deleteDivision = (id) =>
+  http.delete(`/divisions/${id}`)
 
 export const getDivisionUsage = (id) =>
   http.get(`/divisions/${id}/usage`)
 
-export const batchActionDivisions = (ids, action, cascade = false) =>
-  http.post('/divisions/batch', { ids, action, cascade })
+export const batchActionDivisions = (ids, action) =>
+  http.post('/divisions/batch', { ids, action })
 
 // ── 法人 ──
 export const getEntities = (params) =>
@@ -44,8 +44,8 @@ export const deleteEntity = (id) =>
 export const getEntityUsage = (id) =>
   http.get(`/entities/${id}/usage`)
 
-export const batchActionEntities = (ids, action, cascade = false) =>
-  http.post('/entities/batch', { ids, action, cascade })
+export const batchActionEntities = (ids, action) =>
+  http.post('/entities/batch', { ids, action })
 
 // ── 银行 ──
 export const getBanks = (params) =>

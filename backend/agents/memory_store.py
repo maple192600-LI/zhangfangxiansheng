@@ -50,18 +50,38 @@ def save_memory(
 
 
 def search_memory(db: Session, agent_id: int, query: str, limit: int = 10) -> list[dict]:
-    """搜索记忆（关键词匹配）"""
+    """搜索记忆 — 关键词匹配，空 query 返回全部"""
+    if not query or not query.strip():
+        rows = (
+            db.query(AgentMemory)
+            .filter(AgentMemory.agent_id == agent_id)
+            .order_by(AgentMemory.last_used_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [_to_dict(r) for r in rows]
+
+    keywords = [w for w in query.split() if len(w) > 1]
     rows = (
         db.query(AgentMemory)
-        .filter(
-            AgentMemory.agent_id == agent_id,
-            AgentMemory.key.contains(query) | AgentMemory.content.contains(query),
-        )
+        .filter(AgentMemory.agent_id == agent_id)
         .order_by(AgentMemory.last_used_at.desc())
-        .limit(limit)
+        .limit(50)
         .all()
     )
-    return [_to_dict(r) for r in rows]
+
+    if not keywords:
+        return [_to_dict(r) for r in rows[:limit]]
+
+    scored = []
+    for row in rows:
+        text = f"{row.key} {row.content}".lower()
+        score = sum(1 for kw in keywords if kw.lower() in text)
+        if score > 0:
+            scored.append((score, row))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [_to_dict(r) for _, r in scored[:limit]]
 
 
 def get_relevant(db: Session, agent_id: int, query: str, limit: int = 5) -> list[dict]:

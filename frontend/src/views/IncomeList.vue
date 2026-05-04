@@ -20,23 +20,18 @@
           <button class="btn btn-primary" @click="page = 1; loadData()">生成报表</button>
         </div>
       </div>
-      <div v-if="templateLoaded && !templateColumns && !templateExcelHtml" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h4>未配置报表模板</h4>
-        <p>请先在「系统设置 → 数据中心 → 报表模板管理」中上传收入明细表模板</p>
-      </div>
-      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <table v-else-if="templateColumns">
+      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+      <table v-else-if="displayColumns.length">
         <thead>
           <tr>
-            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
+            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in rows" :key="r.id">
-            <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
+            <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
           </tr>
-          <tr v-if="!rows.length"><td :colspan="templateColumns.length" class="empty-cell">暂无收入数据</td></tr>
+          <tr v-if="!rows.length"><td :colspan="displayColumns.length" class="empty-cell">暂无收入数据</td></tr>
         </tbody>
       </table>
     </div>
@@ -50,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -67,6 +62,18 @@ const total = ref(0)
 const page = ref(1)
 const totalPages = ref(1)
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('income_list')
+
+const DEFAULT_COLUMNS = [
+  { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
+  { field_key: 'entity_name', header_name: '单位简称', width: 120, align: 'left' },
+  { field_key: 'account_name', header_name: '账户名称', width: 150, align: 'left' },
+  { field_key: 'summary_text', header_name: '摘要', width: 200, align: 'left' },
+  { field_key: 'counterparty_name', header_name: '对方', width: 120, align: 'left' },
+  { field_key: 'amount', header_name: '收入金额', width: 130, align: 'right' },
+  { field_key: 'rolling_balance', header_name: '余额', width: 130, align: 'right' },
+]
+
+const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
 
 const MONEY_KEYS = new Set(['amount', 'rolling_balance'])
 function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }

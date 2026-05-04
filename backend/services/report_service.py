@@ -23,43 +23,59 @@ def daily_report(
     entity_id: Optional[int] = None,
 ) -> List[Dict]:
     """按法人汇总：期初/收入/支出/净变动/期末"""
-    # 获取所有实体
     eq = db.query(Entity).filter(Entity.status == "enabled")
     if entity_id:
         eq = eq.filter(Entity.id == entity_id)
     entities = eq.all()
+    entity_map = {e.id: e for e in entities}
+
+    # 一次性查出所有相关账户
+    account_q = db.query(Account).filter(
+        Account.status == "enabled",
+        Account.include_in_daily_report == True,
+    )
+    if entity_id:
+        account_q = account_q.filter(Account.entity_id == entity_id)
+    accounts = account_q.all()
+
+    # 按 entity 分组
+    accounts_by_entity = defaultdict(list)
+    for a in accounts:
+        accounts_by_entity[a.entity_id].append(a)
+
+    # 批量查询期间收支
+    account_codes = [a.account_code for a in accounts]
+    sum_rows = {}
+    if account_codes:
+        sums = (
+            db.query(
+                FundEvent.account_code,
+                func.coalesce(func.sum(FundEvent.amount_in), 0),
+                func.coalesce(func.sum(FundEvent.amount_out), 0),
+            )
+            .filter(
+                FundEvent.account_code.in_(account_codes),
+                FundEvent.state == "正常",
+                FundEvent.business_date >= start_date,
+                FundEvent.business_date <= end_date,
+            )
+            .group_by(FundEvent.account_code)
+            .all()
+        )
+        for row in sums:
+            sum_rows[row[0]] = (float(row[1]), float(row[2]))
+
+    # 批量查期初余额
+    opening_map = {}
+    for a in accounts:
+        opening_map[a.account_code] = get_opening_balance(db, a.id, start_date)
 
     results = []
-    for ent in entities:
-        # 该实体下所有纳入日报的账户
-        accounts = db.query(Account).filter(
-            Account.entity_id == ent.id,
-            Account.status == "enabled",
-            Account.include_in_daily_report == True,
-        ).all()
-
-        opening = 0.0
-        income = 0.0
-        expense = 0.0
-
-        for acct in accounts:
-            opening += get_opening_balance(db, acct.id, start_date)
-            row = (
-                db.query(
-                    func.coalesce(func.sum(FundEvent.amount_in), 0),
-                    func.coalesce(func.sum(FundEvent.amount_out), 0),
-                )
-                .filter(
-                    FundEvent.account_code == acct.account_code,
-                    FundEvent.state == "正常",
-                    FundEvent.business_date >= start_date,
-                    FundEvent.business_date <= end_date,
-                )
-                .first()
-            )
-            income += float(row[0]) if row else 0
-            expense += float(row[1]) if row else 0
-
+    for ent_id, ent in entity_map.items():
+        ent_accounts = accounts_by_entity.get(ent_id, [])
+        opening = sum(opening_map.get(a.account_code, 0.0) for a in ent_accounts)
+        income = sum(sum_rows.get(a.account_code, (0, 0))[0] for a in ent_accounts)
+        expense = sum(sum_rows.get(a.account_code, (0, 0))[1] for a in ent_accounts)
         ending = opening + income - expense
         results.append({
             "entity_id": ent.id,
@@ -162,40 +178,59 @@ def account_balance(
     if entity_id:
         eq = eq.filter(Entity.id == entity_id)
     entities = eq.all()
+    entity_map = {e.id: e for e in entities}
+
+    account_q = db.query(Account).filter(
+        Account.status == "enabled",
+        Account.include_in_daily_report == True,
+    )
+    if entity_id:
+        account_q = account_q.filter(Account.entity_id == entity_id)
+    accounts = account_q.all()
+
+    accounts_by_entity = defaultdict(list)
+    for a in accounts:
+        accounts_by_entity[a.entity_id].append(a)
+
+    # 批量查收支
+    account_codes = [a.account_code for a in accounts]
+    sum_rows = {}
+    if account_codes:
+        sums = (
+            db.query(
+                FundEvent.account_code,
+                func.coalesce(func.sum(FundEvent.amount_in), 0),
+                func.coalesce(func.sum(FundEvent.amount_out), 0),
+            )
+            .filter(
+                FundEvent.account_code.in_(account_codes),
+                FundEvent.state == "正常",
+                FundEvent.business_date >= start_date,
+                FundEvent.business_date <= end_date,
+            )
+            .group_by(FundEvent.account_code)
+            .all()
+        )
+        for row in sums:
+            sum_rows[row[0]] = (float(row[1]), float(row[2]))
+
+    opening_map = {}
+    for a in accounts:
+        opening_map[a.account_code] = get_opening_balance(db, a.id, start_date)
 
     rows = []
-    for ent in entities:
-        accounts = db.query(Account).filter(
-            Account.entity_id == ent.id,
-            Account.status == "enabled",
-            Account.include_in_daily_report == True,
-        ).all()
-
-        if not accounts:
+    for ent_id, ent in entity_map.items():
+        ent_accounts = accounts_by_entity.get(ent_id, [])
+        if not ent_accounts:
             continue
 
         ent_income = 0.0
         ent_expense = 0.0
         ent_opening = 0.0
 
-        for acct in accounts:
-            opening = get_opening_balance(db, acct.id, start_date)
-            row = (
-                db.query(
-                    func.coalesce(func.sum(FundEvent.amount_in), 0),
-                    func.coalesce(func.sum(FundEvent.amount_out), 0),
-                )
-                .filter(
-                    FundEvent.account_code == acct.account_code,
-                    FundEvent.state == "正常",
-                    FundEvent.business_date >= start_date,
-                    FundEvent.business_date <= end_date,
-                )
-                .first()
-            )
-
-            inc = float(row[0]) if row else 0
-            exp = float(row[1]) if row else 0
+        for acct in ent_accounts:
+            opening = opening_map.get(acct.account_code, 0.0)
+            inc, exp = sum_rows.get(acct.account_code, (0.0, 0.0))
             ending = opening + inc - exp
 
             ent_opening += opening
@@ -214,7 +249,6 @@ def account_balance(
                 "is_subtotal": False,
             })
 
-        # 法人小计行
         rows.append({
             "entity_id": ent.id,
             "entity_name": f"{ent.short_name} 小计",
@@ -328,40 +362,58 @@ def major_balance(
     if entity_id:
         eq = eq.filter(Entity.id == entity_id)
     entities = eq.all()
+    entity_map = {e.id: e for e in entities}
+
+    account_q = db.query(Account).filter(
+        Account.status == "enabled",
+        Account.instrument_type == "银行存款",
+    )
+    if entity_id:
+        account_q = account_q.filter(Account.entity_id == entity_id)
+    accounts = account_q.all()
+
+    accounts_by_entity = defaultdict(list)
+    for a in accounts:
+        accounts_by_entity[a.entity_id].append(a)
+
+    account_codes = [a.account_code for a in accounts]
+    sum_rows = {}
+    if account_codes:
+        sums = (
+            db.query(
+                FundEvent.account_code,
+                func.coalesce(func.sum(FundEvent.amount_in), 0),
+                func.coalesce(func.sum(FundEvent.amount_out), 0),
+            )
+            .filter(
+                FundEvent.account_code.in_(account_codes),
+                FundEvent.state == "正常",
+                FundEvent.business_date >= start_date,
+                FundEvent.business_date <= end_date,
+            )
+            .group_by(FundEvent.account_code)
+            .all()
+        )
+        for row in sums:
+            sum_rows[row[0]] = (float(row[1]), float(row[2]))
+
+    opening_map = {}
+    for a in accounts:
+        opening_map[a.account_code] = get_opening_balance(db, a.id, start_date)
 
     rows = []
-    for ent in entities:
-        accounts = db.query(Account).filter(
-            Account.entity_id == ent.id,
-            Account.status == "enabled",
-            Account.instrument_type == "银行存款",
-        ).all()
-
-        if not accounts:
+    for ent_id, ent in entity_map.items():
+        ent_accounts = accounts_by_entity.get(ent_id, [])
+        if not ent_accounts:
             continue
 
         ent_income = 0.0
         ent_expense = 0.0
         ent_opening = 0.0
 
-        for acct in accounts:
-            opening = get_opening_balance(db, acct.id, start_date)
-            row = (
-                db.query(
-                    func.coalesce(func.sum(FundEvent.amount_in), 0),
-                    func.coalesce(func.sum(FundEvent.amount_out), 0),
-                )
-                .filter(
-                    FundEvent.account_code == acct.account_code,
-                    FundEvent.state == "正常",
-                    FundEvent.business_date >= start_date,
-                    FundEvent.business_date <= end_date,
-                )
-                .first()
-            )
-
-            inc = float(row[0]) if row else 0
-            exp = float(row[1]) if row else 0
+        for acct in ent_accounts:
+            opening = opening_map.get(acct.account_code, 0.0)
+            inc, exp = sum_rows.get(acct.account_code, (0.0, 0.0))
             ending = opening + inc - exp
 
             ent_opening += opening
@@ -380,18 +432,17 @@ def major_balance(
                 "is_subtotal": False,
             })
 
-        if accounts:
-            rows.append({
-                "entity_id": ent.id,
-                "entity_name": f"{ent.short_name} 小计",
-                "account_id": None,
-                "account_name": None,
-                "opening_balance": round(ent_opening, 2),
-                "period_income": round(ent_income, 2),
-                "period_expense": round(ent_expense, 2),
-                "ending_balance": round(ent_opening + ent_income - ent_expense, 2),
-                "is_subtotal": True,
-            })
+        rows.append({
+            "entity_id": ent.id,
+            "entity_name": f"{ent.short_name} 小计",
+            "account_id": None,
+            "account_name": None,
+            "opening_balance": round(ent_opening, 2),
+            "period_income": round(ent_income, 2),
+            "period_expense": round(ent_expense, 2),
+            "ending_balance": round(ent_opening + ent_income - ent_expense, 2),
+            "is_subtotal": True,
+        })
 
     return rows
 

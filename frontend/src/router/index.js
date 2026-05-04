@@ -84,7 +84,7 @@ const routes = [
       { path: 'exception/receipt', name: 'exception-receipt', component: () => import('@/views/ExceptionCenter.vue') },
       { path: 'exception/other', name: 'exception-other', component: () => import('@/views/ExceptionCenter.vue') },
 
-      // 系统设置 > AI配置
+      // 系统设置 > 模型配置
       { path: 'ai-config', name: 'ai-config', component: () => import('@/views/AIConfig.vue') },
 
       // 系统设置 > 用户和权限

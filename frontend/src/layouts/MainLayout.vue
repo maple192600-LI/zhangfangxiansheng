@@ -314,7 +314,7 @@ const navData = {
     secondary: {
       '数据中心': {
         tabs: [
-          { name: '账户数据管理', explain: '管理账户及其所属核算组织、单位、银行信息', route: 'account-manage' },
+          { name: '主数据管理', explain: '管理核算组织、单位、银行账户等基础数据', route: 'account-manage' },
           { name: '报表模板管理', explain: '数据中心下的报表模板管理页。', route: 'data-report-tpl' },
           { name: '部门信息管理', explain: '数据中心下的部门信息管理页。', route: 'data-department' },
           { name: '合同台账管理', explain: '数据中心下的合同台账管理页。', route: 'data-contract' },
@@ -337,9 +337,9 @@ const navData = {
           { name: '其他可能出现的异常', explain: '异常中心下的其他异常页。', route: 'exception-other' }
         ]
       },
-      'AI配置': {
+      '模型配置': {
         tabs: [
-          { name: 'API KEY配置', explain: 'AI 配置下的 API KEY 配置页。', route: 'ai-config' }
+          { name: '模型配置', explain: '配置 AI 模型供应商和 API Key。', route: 'ai-config' }
         ]
       },
       '用户和权限': {

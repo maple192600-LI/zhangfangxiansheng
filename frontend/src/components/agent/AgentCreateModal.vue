@@ -51,7 +51,7 @@
             {{ cfg.display_name }}（{{ cfg.provider }}{{ cfg.model_name ? ' · ' + cfg.model_name : '' }}）
           </option>
         </select>
-        <p class="field-tip">选择已配置的 AI 模型，可在「系统设置 → AI配置」中添加</p>
+        <p class="field-tip">选择已配置的 AI 模型，可在「系统设置 → 模型配置」中添加</p>
       </div>
 
       <div class="modal-footer">

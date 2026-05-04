@@ -36,16 +36,20 @@ _DENIED_MODULES = frozenset({
 @register_tool(read_only=False, concurrent_safe=False)
 def python_exec(code: str, ctx: ToolContext = None) -> dict:
     """执行一段 Python 代码并返回输出。code 为 Python 代码字符串。注意：在受限沙箱环境中运行，无法访问文件系统或外部网络。"""
-    # 注入工作区路径
-    from agents.workspace import get_agent_root
-    workspace_root = get_agent_root(ctx.agent_code)
+    # 安全检查：拦截危险关键字
+    _DANGEROUS_PATTERNS = [
+        "__import__", "import os", "import sys", "import subprocess",
+        "from os", "from sys", "open(", "exec(", "eval(",
+        "getattr", "__class__", "__subclasses__", "__builtins__",
+        "compile(", "__code__",
+    ]
+    code_lower = code.lower()
+    for pattern in _DANGEROUS_PATTERNS:
+        if pattern.lower() in code_lower:
+            return {"ok": False, "error": f"沙箱拒绝执行：代码包含受限操作 '{pattern}'"}
 
-    local_vars = {
-        "workspace_root": workspace_root,
-        "agent_code": ctx.agent_code,
-    }
+    local_vars: dict = {}
 
-    # 捕获 stdout/stderr
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     stdout_buf = io.StringIO()
@@ -64,7 +68,7 @@ def python_exec(code: str, ctx: ToolContext = None) -> dict:
             "variables": {
                 k: str(v)[:200]
                 for k, v in local_vars.items()
-                if not k.startswith("_") and k not in ("workspace_root", "agent_code")
+                if not k.startswith("_")
             },
         }
     except Exception:

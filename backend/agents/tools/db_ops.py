@@ -1,6 +1,7 @@
 """数据库业务查询工具 — 查询主数据、资金流水等"""
 import json
 from datetime import date, datetime
+from decimal import Decimal
 
 from agents.tool_registry import register_tool, ToolContext
 
@@ -92,6 +93,7 @@ def db_insert_fund_event(
 @register_tool(read_only=False)
 def db_save_parser_template(
     template_name: str,
+    account_code: str = "",
     file_format: str = "xlsx",
     header_row: int = 0,
     skip_rows: int = 0,
@@ -99,7 +101,7 @@ def db_save_parser_template(
     mapping_json: str = "{}",
     ctx: ToolContext = None,
 ) -> dict:
-    """保存银行流水解析规则模板到规则中心。template_name 规则名称（如"中国银行流水规则"），file_format 文件格式(xlsx/xls/csv)，header_row 表头所在行号(0起)，skip_rows 数据跳过行数，sample_headers 样本表头JSON数组字符串，mapping_json 列映射JSON字符串（银行列名→标准字段）。标准字段包括: business_date(交易日期), business_time(交易时间), income_amount(收入金额), expense_amount(支出金额), balance(余额), counterparty_name(对方户名), summary_text(摘要), counterpart_account(对方账号), counterpart_bank(对方开户行), transaction_type(交易类型), voucher_no(凭证号)。"""
+    """保存银行流水解析规则模板到规则中心。template_name 规则名称（如"中国银行流水规则"），account_code 关联的账户编号（如"ZH0008"），file_format 文件格式(xlsx/xls/csv)，header_row 表头所在行号(0起)，skip_rows 数据跳过行数，sample_headers 样本表头JSON数组字符串，mapping_json 列映射JSON字符串（银行列名→标准字段）。标准字段包括: business_date(交易日期), business_time(交易时间), income_amount(收入金额), expense_amount(支出金额), balance(余额), counterparty_name(对方户名), summary_text(摘要), counterpart_account(对方账号), counterpart_bank(对方开户行), transaction_type(交易类型), voucher_no(凭证号)。"""
     from db.tables import ParserTemplate
     import json as _json
 
@@ -126,6 +128,7 @@ def db_save_parser_template(
             skip_rows=skip_rows,
             sample_headers=_json.dumps(headers, ensure_ascii=False),
             mapping_json=_json.dumps(mapping, ensure_ascii=False),
+            account_code=account_code or None,
             created_by="ai_assist",
             status="active",
         )
@@ -150,6 +153,8 @@ def _row_to_dict(row) -> dict:
         val = getattr(row, col.name, None)
         if isinstance(val, (date, datetime)):
             val = val.isoformat()
+        elif isinstance(val, Decimal):
+            val = float(val)
         elif isinstance(val, (bytes, bytearray)):
             val = "<binary>"
         result[col.name] = val

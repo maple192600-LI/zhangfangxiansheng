@@ -20,13 +20,17 @@ def list_ai_configs(db: Session) -> List[Dict[str, Any]]:
 
 
 def create_ai_config(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
-    local_key = encrypt_key(data["api_key"])
+    local_key = encrypt_key(data.get("api_key", ""))
     obj = AIConfig(
-        provider=data["provider"],
+        provider=data.get("provider", ""),
         display_name=data["display_name"],
         api_key_local=local_key,
         base_url=data.get("base_url"),
         model_name=data.get("model_name", ""),
+        protocol=data.get("protocol", "openai"),
+        note=data.get("note"),
+        website_url=data.get("website_url"),
+        send_user_agent=data.get("send_user_agent", False),
         is_default=data.get("is_default", False),
         privacy_mode=validate_privacy_mode(data.get("privacy_mode")),
         status="active",
@@ -54,6 +58,14 @@ def update_ai_config(db: Session, config_id: int, data: Dict[str, Any]) -> Dict[
         obj.base_url = data["base_url"]
     if "model_name" in data:
         obj.model_name = data["model_name"]
+    if "protocol" in data:
+        obj.protocol = data["protocol"]
+    if "note" in data:
+        obj.note = data["note"]
+    if "website_url" in data:
+        obj.website_url = data["website_url"]
+    if "send_user_agent" in data:
+        obj.send_user_agent = data["send_user_agent"]
     if "is_default" in data and data["is_default"]:
         _clear_default(db)
         obj.is_default = True
@@ -127,6 +139,10 @@ def _ai_config_out(r: AIConfig) -> Dict[str, Any]:
         "display_name": r.display_name,
         "base_url": r.base_url,
         "model_name": r.model_name,
+        "protocol": r.protocol,
+        "note": r.note,
+        "website_url": r.website_url,
+        "send_user_agent": r.send_user_agent,
         "is_default": r.is_default,
         "privacy_mode": r.privacy_mode,
         "status": r.status,

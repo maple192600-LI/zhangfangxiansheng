@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from core.response import success, error
 from db.tables import Agent, AIConfig, Skill
-from agents.workspace import init_workspace, safe_path, list_files, get_agent_root
+from agents.workspace import init_workspace, safe_path, list_files, get_agent_root, read_file, atomic_write
 from agents.runtime import run_turn
 from agents import session_store
 from agents import memory_store
@@ -207,8 +207,14 @@ async def send_message(session_id: int, request: Request, db: Session = Depends(
         return error(2001, "智能体不存在")
 
     async def event_stream():
-        async for chunk in run_turn(agent, session_id, user_text, db):
-            yield chunk
+        try:
+            async for chunk in run_turn(agent, session_id, user_text, db):
+                yield chunk
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            logger.error("event_stream error: %s", e, exc_info=True)
+            yield f"event: error\ndata: {{\"message\": \"{e}\"}}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -310,6 +316,48 @@ async def upload_agent_file(agent_id: int, file: UploadFile = File(...), sub_dir
     })
 
 
+@router.get("/agents/{agent_id}/files/content")
+def read_agent_file(agent_id: int, path: str, db: Session = Depends(get_db)):
+    """读取 agent 工作区文件内容"""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    content = read_file(agent.agent_code, path)
+    if content is None:
+        return error(3001, "文件不存在或路径无效")
+    return success({"path": path, "content": content})
+
+
+@router.put("/agents/{agent_id}/files/content")
+async def write_agent_file(agent_id: int, request: Request, db: Session = Depends(get_db)):
+    """保存文件到 agent 工作区"""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    body = await request.json()
+    path = body.get("path", "").strip()
+    content = body.get("content", "")
+    if not path:
+        return error(1001, "文件路径不能为空")
+    result = atomic_write(agent.agent_code, path, content)
+    if not result["ok"]:
+        return error(3001, result.get("error", "写入失败"))
+    return success(result)
+
+
+@router.delete("/agents/{agent_id}/files/content")
+def delete_agent_file(agent_id: int, path: str, db: Session = Depends(get_db)):
+    """删除 agent 工作区文件"""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    abs_path = safe_path(agent.agent_code, path)
+    if not abs_path or not os.path.isfile(abs_path):
+        return error(3001, "文件不存在或路径无效")
+    os.remove(abs_path)
+    return success(None, "已删除")
+
+
 # ── 技能管理 ──
 
 # ── 记忆管理 ──
@@ -351,6 +399,26 @@ def delete_agent_memory(agent_id: int, memory_id: int, db: Session = Depends(get
     db.delete(mem)
     db.commit()
     return success(None, "已删除")
+
+
+@router.put("/agents/{agent_id}/memories/{memory_id}")
+async def update_agent_memory(agent_id: int, memory_id: int, request: Request, db: Session = Depends(get_db)):
+    """更新记忆"""
+    from db.tables import AgentMemory
+    mem = db.query(AgentMemory).filter(
+        AgentMemory.id == memory_id, AgentMemory.agent_id == agent_id
+    ).first()
+    if not mem:
+        return error(2001, "记忆不存在")
+    body = await request.json()
+    key = (body.get("key") or "").strip()
+    content = (body.get("content") or "").strip()
+    if key:
+        mem.key = key
+    if content:
+        mem.content = content
+    db.commit()
+    return success({"id": mem.id, "key": mem.key, "content": mem.content})
 
 
 @router.delete("/agents/{agent_id}/sessions/{session_id}")
@@ -492,3 +560,38 @@ async def test_agent_skill(agent_id: int, request: Request, db: Session = Depend
         traceback.print_exc()
         return error(5000, f"技能测试失败: {e}")
     return success(result)
+
+
+# ── 工具列表 + 权限配置 ──
+
+@router.get("/tools/list")
+def get_tools():
+    """返回所有可用工具及其分组"""
+    from agents.tool_registry import list_tools, list_toolsets
+    return success({"tools": list_tools(), "toolsets": list_toolsets()})
+
+
+@router.get("/agents/{agent_id}/permissions")
+def get_agent_permissions(agent_id: int, db: Session = Depends(get_db)):
+    """获取智能体的工具权限配置"""
+    from agents.permission import get_permission
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    perm = get_permission(agent.permission_json)
+    return success(perm)
+
+
+@router.put("/agents/{agent_id}/permissions")
+def update_agent_permissions(agent_id: int, request: Request, db: Session = Depends(get_db)):
+    """更新智能体的工具权限配置"""
+    import json as _json
+    from datetime import datetime
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.status == "deleted":
+        return error(2001, "智能体不存在")
+    body = request.json() if hasattr(request, '_json') else request.json()
+    agent.permission_json = _json.dumps(body, ensure_ascii=False)
+    agent.updated_at = datetime.now()
+    db.commit()
+    return success({"ok": True})

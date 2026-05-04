@@ -68,6 +68,18 @@ export const useAgentsStore = defineStore('agents', () => {
     })
   }
 
+  async function readFile(agentId, path) {
+    return await http.get(`/agent/agents/${agentId}/files/content`, { params: { path } })
+  }
+
+  async function writeFile(agentId, path, content) {
+    return await http.put(`/agent/agents/${agentId}/files/content`, { path, content })
+  }
+
+  async function deleteFile(agentId, path) {
+    return await http.delete(`/agent/agents/${agentId}/files/content`, { params: { path } })
+  }
+
   async function listSkills(agentId) {
     return await http.get(`/agent/agents/${agentId}/skills`)
   }
@@ -84,6 +96,10 @@ export const useAgentsStore = defineStore('agents', () => {
     return await http.delete(`/agent/agents/${agentId}/memories/${memoryId}`)
   }
 
+  async function updateMemory(agentId, memoryId, key, content) {
+    return await http.put(`/agent/agents/${agentId}/memories/${memoryId}`, { key, content })
+  }
+
   async function deleteSession(agentId, sessionId) {
     return await http.delete(`/agent/agents/${agentId}/sessions/${sessionId}`)
   }
@@ -92,7 +108,7 @@ export const useAgentsStore = defineStore('agents', () => {
     list, loading,
     fetchAll, createAgent, updateAgent, deleteAgent, getAgent,
     fetchAIConfigs, createSession, listSessions, getMessages,
-    listFiles, uploadFile, listSkills,
-    listMemories, saveMemory, deleteMemory, deleteSession,
+    listFiles, uploadFile, readFile, writeFile, deleteFile, listSkills,
+    listMemories, saveMemory, deleteMemory, updateMemory, deleteSession,
   }
 })

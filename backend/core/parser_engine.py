@@ -159,8 +159,8 @@ def match_template(
     """根据表头匹配模板
 
     匹配策略：
-    - 核心指标：文件列命中率 = overlap / len(header_set)（文件的列有多少比例在模板中能找到）
-    - 最低要求：命中率 >= 60%，且至少命中 3 个列
+    - 核心指标：模板覆盖率 = overlap / len(sample_set)（模板的列有多少比例在文件中能找到）
+    - 最低要求：覆盖率 >= 70%，且至少命中 3 个列
     """
     header_set = {h.strip() for h in headers if h.strip()}
     if not header_set:
@@ -181,16 +181,27 @@ def match_template(
 
         sample_set = {h.strip() for h in sample_list if h.strip()}
         if not sample_set:
-            continue
+            # 回退：用 mapping_json 的 key 作为匹配源
+            mapping = tpl.get("mapping_json", {})
+            if isinstance(mapping, str):
+                try:
+                    mapping = json.loads(mapping)
+                except (json.JSONDecodeError, TypeError):
+                    mapping = {}
+            if isinstance(mapping, dict) and "_columns" in mapping:
+                mapping = mapping["_columns"]
+            sample_set = {h.strip() for h in mapping.keys() if h.strip()}
+            if not sample_set:
+                continue
 
         overlap = len(header_set & sample_set)
         if overlap < 3:
             continue
 
-        # 文件列命中率：文件的列有多少能在模板中找到
-        score = overlap / len(header_set)
+        # 模板覆盖率：模板的列有多少能在文件中找到
+        score = overlap / len(sample_set)
 
-        if score > best_score and score >= 0.6:
+        if score > best_score and score >= 0.7:
             best_score = score
             best_match = tpl
 

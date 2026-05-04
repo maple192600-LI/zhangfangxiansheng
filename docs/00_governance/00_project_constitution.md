@@ -1,4 +1,4 @@
-# 00 · 项目宪法（v3 · FROZEN CONTRACTS）
+# 00 · 项目宪法（v4 · FROZEN CONTRACTS）
 
 > 本文件是本项目所有"不可变"约定的**唯一真相源**。任何 AI 或人类开发者在产出代码、SQL、API、UI 交互之前，必须先确认本文件中相关条款的编号，并在 commit 前过一次 `tools/guards/` 校验。
 >
@@ -7,7 +7,7 @@
 > 相关文档：
 > - [01_v1_scope_and_order.md](01_v1_scope_and_order.md) · V1 范围与执行顺序
 > - [08_anti_drift.md](08_anti_drift.md) · 防跑偏六层机制
-> - [09_ai_capability_v3.md](09_ai_capability_v3.md) · Fund Agent 能力配置
+> - [09_ai_capability_v3.md](09_ai_capability_v3.md) · Agent 能力体系
 > - [30_contracts/](../30_contracts/) · 数据库 / 字段 / API 契约
 
 ---
@@ -39,7 +39,7 @@ CHECK 约束：
 
 不变量：
 - 12 列列序 / 列名 / 枚举值冻结，新增字段一律走辅助列（batch_id / parser_artifact_id / created_at / updated_at）
-- §C8 Runtime 无 AI 原则下，运行时填入 fund_events 的代码必须来自 Parser/Rule artifact，不得有其它路径
+- §C8 脚本编排模式下，运行时填入 fund_events 的代码必须来自 Parser/Rule artifact，不得有其它路径
 
 ---
 
@@ -99,11 +99,13 @@ CHECK 约束：
 
 ---
 
-## §C4 · Fund Agent · 5 skill 不可增不可减
+## §C4 · Agent 技能体系
 
-V1 阶段 Fund Agent 仅有且必有如下 5 个 skill：
+### §C4.1 · 预置财务技能
 
-| # | skill | 职责 | 输入 | 输出 |
+V1 阶段预置以下 5 个财务技能，Agent 可在此基础上通过 `skill_creator` 动态创建新技能：
+
+| # | Skill | 职责 | 输入 | 输出 |
 |---|---|---|---|---|
 | 1 | `parser.bank` | 生成银行流水解析器 | 流水样本 + 账户上下文 | Parser artifact（Python 代码） |
 | 2 | `parser.manual` | 生成手工流水解析器 | 手工表单字段映射 | Parser artifact |
@@ -111,7 +113,13 @@ V1 阶段 Fund Agent 仅有且必有如下 5 个 skill：
 | 4 | `rule.maintain` | 维护/迭代现有规则 | 原 Rule + 修改需求 | 新版 Rule artifact |
 | 5 | `template.inference` | 自动识别空白模板的占位符并出规则草稿 | 空白 Excel 模板 | 带占位符的模板 + Rule artifact 草稿 + 置信度 |
 
-> 任何"第 6 个 skill"的新增 = 违反 §C4。如需新增必须走 §ChangeFlow。
+### §C4.2 · 技能创建机制
+
+- Agent 可通过 `skill_creator` 动态创建新技能（如处理新银行格式、新报表类型）
+- 用户可要求 Agent 创建技能，也可在 Agent 设置中管理已有技能
+- 新技能遵循标准 SKILL.md 格式（frontmatter + body）
+- 技能存放在 `agents/{agent_code}/skills/` 或 `agents/system/skills/` 目录
+- 技能通过 `SkillRegistry` 自动发现、热加载、匹配触发
 
 详细能力配置见 [09_ai_capability_v3.md](09_ai_capability_v3.md)。
 
@@ -135,19 +143,22 @@ Parser/Rule artifact 的 AST 扫描必须满足：
 - 所有顶层 `import` 和 `from ... import` 的目标模块路径必须以 `fund.primitives.` 开头，或属于 Python 标准库的 **白名单子集**（`datetime / decimal / typing / re`）
 - 禁止 `pandas / numpy / requests / os / sys / subprocess / pathlib / open()` 等
 
+此限制仅适用于 Parser/Rule artifact（脚本编排产物）。Agent 通用工具（db_ops / fs / openpyxl_ops 等）不受此限。
+
 违反 = `tools/guards/check_primitives_whitelist.py` 拒绝 commit。
 
 ---
 
-## §C6 · 数据库 · v3 活动表集合
+## §C6 · 数据库 · v4 活动表集合
 
 ```
+── 原有 20 表 ──
 1. divisions
 2. entities
 3. banks
 4. accounts
 5. account_aliases
-6. parser_templates                ← 仍在用作"已生效模板列表" UI 渲染（与 parser_artifacts 互补）
+6. parser_templates
 7. manual_field_pool
 8. manual_template_schemes
 9. import_batches
@@ -159,20 +170,30 @@ Parser/Rule artifact 的 AST 扫描必须满足：
 15. operation_logs
 16. users
 17. report_templates
-18. parser_artifacts               ← Fund Agent 长期记忆（§7.2）
-19. rule_artifacts                 ← 同上
-20. template_inference_job         ← template.inference 三阶段流水线状态表
+18. parser_artifacts               ← Fund Agent 长期记忆
+19. rule_artifacts
+20. template_inference_job
+
+── V1.1 Agent 系统扩展表 ──
+21. agents_v2                      ← Agent 实例
+22. agent_sessions                 ← Agent 会话
+23. agent_messages                 ← Agent 消息（含工具调用和推理内容）
+24. agent_runs                     ← Agent 运行记录
+25. agent_memories                 ← Agent 记忆存储
+26. skills_v2                      ← 技能注册表
+27. sqlite_sequence                ← SQLite 自增序列（系统表）
+28. (预留)
 ```
 
-合计 20 表。完整 DDL 见 [`../30_contracts/20_database_schema.md`](../30_contracts/20_database_schema.md) §T1-§T6。
+合计 28 表（含 1 系统表）。完整 DDL 见 [`../30_contracts/20_database_schema.md`](../30_contracts/20_database_schema.md) §T1-§T7。
 
 ---
 
-## §C7 · API · 42 端点清单上限
+## §C7 · API 端点
 
-API 端点总数上限 **42**（见 [`../30_contracts/23_api_contracts.md`](../30_contracts/23_api_contracts.md)）。任何新增端点必须：
-- 属于 42 条清单之一，**或**
-- 走 §ChangeFlow 追加并更新 `23_api_contracts.md`
+API 端点清单见 [`../30_contracts/23_api_contracts.md`](../30_contracts/23_api_contracts.md)。
+
+原始设计 42 端点上限，V1.1 阶段因 Agent 系统扩展已追加至 59 个端点。后续新增端点需更新 `23_api_contracts.md`。
 
 统一响应格式（强制）：
 
@@ -184,28 +205,27 @@ API 端点总数上限 **42**（见 [`../30_contracts/23_api_contracts.md`](../3
 
 ---
 
-## §C8 · Runtime 无 AI 原则
+## §C8 · 脚本编排确定性原则
 
-以下阶段**禁止调用任何 LLM**：
+对于准确性关键任务（流水导入、报表生成、数据汇总），Agent 生成脚本（Parser/Rule artifact），脚本确定性执行。执行阶段**禁止调用任何 LLM**：
+
 - 流水导入执行（Parser artifact 已就绪 → 纯代码执行）
 - 报表生成执行（Rule artifact 已就绪 → 纯代码执行）
 - 写库、汇总、导出
 
-LLM 仅在以下阶段可调用：
-- Fund Agent 的 5 个 skill 被**显式触发**时
-- AI 配置的连接测试
+Agent 处理非脚本任务（回答问题、生成文档、分析建议、技能创建）时正常使用 AI 能力，不受此限制。
 
-违反 = CRITICAL 级缺陷，直接回滚 PR。
+违反（脚本编排产物执行阶段调用 LLM） = CRITICAL 级缺陷，直接回滚 PR。
 
 ---
 
-## §C9 · 用户零编程原则（新增 v3）
+## §C9 · 用户零编程原则
 
 目标用户是中国财务人员（出纳、会计），**不会编程、不会写模板、不会配字段映射**。系统所有页面必须满足：
 
 - 用户只需点击按钮、上传 Excel、下载 Excel
 - 不暴露任何 JSON 编辑、正则表达式、字段映射配置界面
-- 模板识别 / 字段匹配 / 规则生成**全部由 Fund Agent 完成**
+- 模板识别 / 字段匹配 / 规则生成**全部由 Agent 完成**
 - 所有 AI 产出必须可见可审（前端展示版本号、样本校验结果、可接受 / 拒绝）
 
 违反 = HIGH 级缺陷。
@@ -219,7 +239,7 @@ LLM 仅在以下阶段可调用：
 3. 运行 `tools/guards/check_contract_hash.py --update` 重算 `contracts.lock`
 4. Commit 消息必须以 `chore(constitution):` 开头
 5. 触发 `tools/guards/` 全量回归
-6. 在 `docs/60_claude_code_support/HANDOFF/` 写一份 `constitution_change_YYYYMMDD.md` 说明 why / what / impact
+6. 在 commit message 中说明 why / what / impact
 
 ---
 
@@ -229,11 +249,11 @@ LLM 仅在以下阶段可调用：
 §C1  · CANONICAL_12 基础数据表
 §C2  · 18 占位符模板
 §C3  · 20 列账户主数据
-§C4  · 5 个 skill
+§C4  · Agent 技能体系（预置 5 个 + 动态创建）
 §C5  · 基元库白名单
-§C6  · v3 活动表集合
-§C7  · 42 API 端点 + 响应格式
-§C8  · Runtime 无 AI
+§C6  · v4 活动表集合（28 表）
+§C7  · API 端点清单
+§C8  · 脚本编排确定性原则
 §C9  · 用户零编程原则
 §ChangeFlow · 修改流程
 ```
@@ -241,5 +261,6 @@ LLM 仅在以下阶段可调用：
 ---
 
 **版本**
-- v3.0 · 2026-04-23 · 基于 AI-First 反转和现状盘点重写（覆盖 v1 / v2）
+- v4.0 · 2026-05-02 · §C4 改为动态技能体系、§C6 更新 28 表、§C7 更新端点数、§C8 改为脚本编排确定性、§ChangeFlow 删除已归档目录引用
+- v3.0 · 2026-04-23 · AI-First artifact 方案
 - v2 · 原英文版归档见 git 历史

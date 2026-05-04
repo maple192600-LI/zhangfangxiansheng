@@ -1,0 +1,20 @@
+
+name: parse_bank_flow
+version: "3.0"
+description: 通用银行流水智能解析——自动识别不同银行流水格式，联查数据中心实体判断内部交易，按出纳习惯生成摘要，输出结构化预览数据。
+params:
+  file_path:
+    type: string
+    required: true
+    description: 银行流水文件路径
+reference_examples:
+  - bank: 中国银行
+    account: 139252780563
+    format: xls
+    features:
+      - 38列中英双语表头，表头第9行
+      - 来账=收入，往账=支出
+      - 交易金额单列带正负方向
+      - 付款人/收款人分列，按方向取对方
+      - 内部实体含养护集团体系50家
+      - 摘要规则：询证函→支账户管理费，邮费→付款手续费

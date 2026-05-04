@@ -7,6 +7,9 @@ export const getBaseData = (params) =>
 export const rebuildBalance = () =>
   http.post('/base-data/rebuild')
 
+export const batchDeleteBaseData = (ids) =>
+  http.post('/base-data/batch-delete', { ids })
+
 // 报表
 export const getDailyReport = (params) =>
   http.get('/reports/daily', { params })

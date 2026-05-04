@@ -483,6 +483,122 @@ CREATE TABLE template_inference_job (
 
 ---
 
+## §T7 · Agent 系统扩展表
+
+### §T7.1 · `agents_v2` — Agent 实例
+
+```sql
+CREATE TABLE agents_v2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_code VARCHAR(50) NOT NULL UNIQUE,
+  display_name VARCHAR(100) NOT NULL,
+  role_prompt TEXT NOT NULL DEFAULT '',
+  ai_config_id INTEGER REFERENCES ai_configs(id) ON DELETE SET NULL,
+  workspace_path VARCHAR(500) NOT NULL,
+  llm_timeout INTEGER NOT NULL DEFAULT 300,
+  llm_max_tokens INTEGER NOT NULL DEFAULT 16384,
+  permission_json TEXT NOT NULL DEFAULT '{}',
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_by VARCHAR(50),
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL
+);
+CREATE INDEX idx_agents_v2_status ON agents_v2(status);
+```
+
+### §T7.2 · `skills_v2` — 技能注册
+
+```sql
+CREATE TABLE skills_v2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  skill_code VARCHAR(80) NOT NULL UNIQUE,
+  display_name VARCHAR(150) NOT NULL,
+  description TEXT,
+  owner_agent_id INTEGER REFERENCES agents_v2(id) ON DELETE SET NULL,
+  manifest_json TEXT NOT NULL DEFAULT '{}',
+  source_path VARCHAR(500) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  verified_at DATETIME,
+  test_pass_count INTEGER NOT NULL DEFAULT 0,
+  test_fail_count INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL
+);
+CREATE INDEX idx_skills_v2_status ON skills_v2(status);
+```
+
+### §T7.3 · `agent_sessions` — Agent 会话
+
+```sql
+CREATE TABLE agent_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id INTEGER NOT NULL REFERENCES agents_v2(id) ON DELETE CASCADE,
+  title VARCHAR(200),
+  context_summary TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  created_at DATETIME NOT NULL,
+  last_active_at DATETIME NOT NULL
+);
+CREATE INDEX idx_agent_sessions_agent ON agent_sessions(agent_id);
+```
+
+### §T7.4 · `agent_messages` — Agent 消息
+
+```sql
+CREATE TABLE agent_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+  role VARCHAR(20) NOT NULL,
+  content TEXT,
+  reasoning_content TEXT,
+  tool_call_json TEXT,
+  tool_result_json TEXT,
+  duration_ms INTEGER,
+  created_at DATETIME NOT NULL
+);
+CREATE INDEX idx_agent_messages_session ON agent_messages(session_id);
+```
+
+### §T7.5 · `agent_runs` — Agent 运行记录
+
+```sql
+CREATE TABLE agent_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  skill_id INTEGER REFERENCES skills_v2(id) ON DELETE SET NULL,
+  agent_id INTEGER REFERENCES agents_v2(id) ON DELETE SET NULL,
+  session_id INTEGER REFERENCES agent_sessions(id) ON DELETE SET NULL,
+  inputs_json TEXT,
+  outputs_json TEXT,
+  logs TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  duration_ms INTEGER,
+  created_at DATETIME NOT NULL
+);
+CREATE INDEX idx_agent_runs_agent ON agent_runs(agent_id);
+```
+
+### §T7.6 · `agent_memories` — Agent 记忆
+
+```sql
+CREATE TABLE agent_memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id INTEGER NOT NULL REFERENCES agents_v2(id) ON DELETE CASCADE,
+  key VARCHAR(200) NOT NULL,
+  content TEXT NOT NULL,
+  scope VARCHAR(30) NOT NULL DEFAULT 'agent',
+  confidence NUMERIC(5,4) NOT NULL DEFAULT 1.0,
+  source VARCHAR(50),
+  created_at DATETIME NOT NULL,
+  last_used_at DATETIME NOT NULL
+);
+CREATE INDEX idx_agent_memories_agent ON agent_memories(agent_id);
+CREATE INDEX idx_agent_memories_key ON agent_memories(agent_id, key);
+```
+
+---
+
 **版本**
+- v4.0 · 2026-05-02 · 新增 §T7 Agent 系统扩展表（6 张表 DDL）
 - v3.1 · 2026-04-25 · Phase 0 文档复位为 v3 真实 Schema，20 表清单与三张 artifact 表恢复。
 - v3.0 · 2026-04-23 · AI-First artifact schema。

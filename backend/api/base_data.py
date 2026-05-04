@@ -1,8 +1,9 @@
-"""基础数据 API — 查询 + 滚动余额重建"""
+"""基础数据 API — 查询 + 滚动余额重建 + 批量删除"""
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from fastapi import Depends
 
@@ -13,6 +14,10 @@ from services import base_data_service as svc
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/base-data", tags=["base-data"])
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: List[int]
 
 
 @router.get("")
@@ -48,3 +53,16 @@ def rebuild_balance(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error("余额重建失败: %s", str(e), exc_info=True)
         return error(5000, "余额重建失败，请稍后重试")
+
+
+@router.post("/batch-delete")
+def batch_delete(body: BatchDeleteRequest, db: Session = Depends(get_db)):
+    from db.tables import FundEvent
+    deleted = 0
+    for fid in body.ids:
+        row = db.query(FundEvent).filter(FundEvent.id == fid).first()
+        if row:
+            db.delete(row)
+            deleted += 1
+    db.commit()
+    return success({"deleted": deleted, "total_requested": len(body.ids)})

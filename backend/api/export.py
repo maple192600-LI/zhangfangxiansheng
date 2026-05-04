@@ -22,6 +22,7 @@ class ExportRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     entity_id: Optional[int] = None
+    account_id: Optional[int] = None
     year: Optional[int] = None
     month: Optional[int] = None
 
@@ -41,7 +42,7 @@ def export_report(req: ExportRequest, db: Session = Depends(get_db)):
     try:
         filepath = svc.generate_export(
             db, req.export_type, req.start_date, req.end_date,
-            req.entity_id, req.year, req.month,
+            req.entity_id, req.account_id, req.year, req.month,
         )
         log_service.write_log(db, action="export_excel", module="export", detail={
             "export_type": req.export_type,

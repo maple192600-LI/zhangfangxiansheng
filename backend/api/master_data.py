@@ -28,7 +28,6 @@ router = APIRouter()
 class BatchAction(BaseModel):
     ids: List[int]
     action: str  # "enable" | "disable" | "delete"
-    cascade: bool = False  # 级联删除下属数据
 
 
 # ──────────────────────────────────────────
@@ -86,9 +85,9 @@ def toggle_division_status(
 
 
 @router.delete("/divisions/{division_id}")
-def delete_division(division_id: int, force: bool = Query(False), db: Session = Depends(get_db)):
+def delete_division(division_id: int, db: Session = Depends(get_db)):
     try:
-        svc.delete_division(db, division_id, force=force)
+        svc.delete_division(db, division_id)
     except ValueError as e:
         return error(2001, str(e))
     return success(None, message="核算组织已删除")
@@ -104,7 +103,7 @@ def get_division_usage(division_id: int, db: Session = Depends(get_db)):
 
 @router.post("/divisions/batch")
 def batch_divisions(body: BatchAction, db: Session = Depends(get_db)):
-    return success(svc.batch_action_divisions(db, body.ids, body.action, cascade=body.cascade))
+    return success(svc.batch_action_divisions(db, body.ids, body.action))
 
 
 # ──────────────────────────────────────────
@@ -183,7 +182,7 @@ def get_entity_usage(entity_id: int, db: Session = Depends(get_db)):
 
 @router.post("/entities/batch")
 def batch_entities(body: BatchAction, db: Session = Depends(get_db)):
-    return success(svc.batch_action_entities(db, body.ids, body.action, cascade=body.cascade))
+    return success(svc.batch_action_entities(db, body.ids, body.action))
 
 
 # ──────────────────────────────────────────

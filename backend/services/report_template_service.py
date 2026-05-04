@@ -591,7 +591,6 @@ PLACEHOLDER_MAP: Dict[str, str] = {
     "{{月}}": "month",
     "{{日}}": "day",
     "{{月初余额}}": "prev_balance",
-    "{{月初余额}}": "prev_balance",
     "{{期初余额}}": "prev_balance",
     "{{摘要}}": "summary_text",
     "{{收入}}": "income",

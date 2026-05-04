@@ -42,9 +42,6 @@
         :agent-id="agent.id"
         @start-teach="onStartTeach"
       />
-      <div v-if="activeTab === 'files' && agent" class="tab-full">
-        <FilePanel :agent-id="agent.id" class="file-panel-full" />
-      </div>
       <MemoryPanel
         v-if="activeTab === 'memory' && agent"
         :agent-id="agent.id"
@@ -87,7 +84,6 @@ const chatPanelRef = ref(null)
 
 const tabs = [
   { key: 'chat', label: '聊天' },
-  { key: 'files', label: '文件' },
   { key: 'skills', label: '技能' },
   { key: 'memory', label: '记忆' },
   { key: 'sessions', label: '会话' },

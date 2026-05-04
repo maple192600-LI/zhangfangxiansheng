@@ -1,44 +1,76 @@
-# 02 User Constraints
+# 02 · 用户约束
 
-## 1. Target user
+> 配合 [00_project_constitution.md](00_project_constitution.md) 使用。
 
-Primary user:
+---
 
-- cashier
-- treasury operator
-- finance staff
+## §1 · 目标用户
 
-Secondary viewer:
+### §1.1 主要用户
 
-- finance manager
-- business owner
-- management
+| 维度 | 描述 |
+|------|------|
+| 职业 | 出纳、会计、资金主管、代账会计 |
+| 企业规模 | 小微企业、个体工商户、个人财务工作者 |
+| 年龄 | 主力 30-55 岁 |
+| 技术水平 | 不编程、不写正则、不配JSON、不会SQL |
 
-## 2. Working habits
+### §1.2 次要用户
 
-Users prefer:
+- 财务经理（查看报表）
+- 企业老板（查看日报/周报）
 
-- one large table
-- filters
-- search
-- checking row by row
-- exporting Excel
-- printing
+### §1.3 核心诉求
 
-Users dislike:
+- 拿来就用的财务工具，不需要折腾就能出报表
+- 双击启动，不装环境
+- 上传流水，立即出表
+- 偶尔配置，但不写代码
 
-- repetitive pop-up forms
-- deep hidden interaction
-- too many page jumps
-- command line
-- technical configuration
+### §1.4 痛点
 
-## 3. Product implication
+- 重复性手工劳动多
+- Excel公式容易出错
+- 没有IT部门支持
+- 现有财务软件（用友/金蝶）太重太贵
 
-Therefore the system must:
+---
 
-- keep table-first interaction
-- keep the home page as work control board, not a management BI screen
-- keep manual flow fast enough to beat old Excel practice
-- support many manual accounts in one workbook
-- separate display structure from machine parsing structure
+## §2 · 用户操作习惯
+
+### §2.1 用户习惯做的事
+
+- 一个大表里看所有数据
+- 用筛选和搜索找行
+- 逐行核对金额
+- 导出Excel发给老板
+- 打印报表归档
+
+### §2.2 用户讨厌的操作
+
+- 反复弹出的表单
+- 层层隐藏的交互
+- 频繁的页面跳转
+- 命令行操作
+- 技术配置（JSON/正则/映射）
+
+---
+
+## §3 · 产品含义
+
+因此系统必须：
+
+- **表格为主战场** — 首页和工作页面以表格为核心交互方式
+- **首页是工作总控台** — 不是管理BI大屏，是出纳的第一工作台
+- **手工录入要快** — 不能比原来的Excel做法还慢
+- **增强层不阻断核心** — 模板/主题缺失时数据仍能正常显示
+- **Agent承担技术活** — 所有"写代码、写规则、写映射"的活由Agent完成，用户只上传和确认
+
+---
+
+## §4 · 对非技术用户的沟通原则
+
+- 用业务语言，不用技术黑话
+- 主动发现和拦截问题，不让用户当测试员
+- 改完代码后自行验证，不让用户验证
+- 不让用户做系统能自动完成的事（重启服务、构建前端、配置环境）

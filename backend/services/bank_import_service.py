@@ -18,7 +18,12 @@ from core.parser_engine import (
     read_file_from_bytes,
 )
 from core.ai_call import chat
-from core.pii_masker import mask_row
+from core.ai_parse_utils import (
+    strip_thinking_tags, extract_and_parse_json,
+    find_active_agent, call_agent_for_mapping,
+    shorten_headers, format_sample_text,
+    restore_mapping_keys, validate_mapping_confidence,
+)
 from core.security import decrypt_key
 from db.tables import FundEvent, ImportBatch, ParserTemplate, AIConfig
 from config import DATA_DIR
@@ -85,6 +90,7 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
             "mapping_json": t.mapping_json,
             "id": t.id,
             "template_name": t.template_name,
+            "account_code": t.account_code,
         }
         for t in templates
     ])
@@ -133,6 +139,7 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
             "template_name": tpl["template_name"],
             "mapping": tpl_mapping,
             "header_row": tpl.get("header_row", header_idx),
+            "account_code": tpl.get("account_code"),
             "confidence": "high",
         }
 
@@ -280,13 +287,13 @@ def commit(db: Session, batch_code: str, parser_artifact_id: int) -> Dict[str, A
 def commit_by_mapping(
     db: Session,
     batch_code: str,
-    account_code: str,
+    account_code: Optional[str] = None,
     mapping: Optional[Dict[str, str]] = None,
     template_id: Optional[int] = None,
     template_name: str = None,
     sample_headers: list = None,
 ) -> Dict[str, Any]:
-    """基于模板映射直接提交入库（不依赖 fund agent parser artifact）"""
+    """基于模板映射直接提交入库（不依赖 fund agent parser artifact）。account_code 可从模板自动获取。"""
     batch = db.query(ImportBatch).filter(ImportBatch.batch_code == batch_code).first()
     if not batch:
         raise ValueError("批次不存在")
@@ -295,7 +302,26 @@ def commit_by_mapping(
     if not file_path:
         raise ValueError("原始上传文件未找到")
 
-    # 获取账户信息
+    # 获取账户信息 — 优先使用传入的 account_code，否则从模板获取
+    tpl_mapping = mapping
+    h_row = None
+    tpl = None
+
+    if template_id:
+        tpl = db.query(ParserTemplate).filter(ParserTemplate.id == template_id).first()
+        if tpl:
+            h_row = tpl.header_row
+            raw_mapping = tpl.mapping_json
+            if isinstance(raw_mapping, str):
+                tpl_mapping = json.loads(raw_mapping)
+            else:
+                tpl_mapping = raw_mapping
+            if not account_code:
+                account_code = tpl.account_code
+
+    if not account_code:
+        raise ValueError("未指定账户，且模板中也无关联账户，请先通过 AI 智能体创建包含账户的解析规则")
+
     from db.tables import Account, Entity
     account = db.query(Account).filter(Account.account_code == account_code).first()
     if not account:
@@ -307,26 +333,17 @@ def commit_by_mapping(
 
     # 读取文件并应用映射
     fmt = detect_format(batch.source_name or "")
+    with open(file_path, "rb") as fh:
+        file_data = fh.read()
     rows_raw = read_file_from_bytes(
-        open(file_path, "rb").read(),
+        file_data,
         batch.source_name or "",
         fmt,
     )
     header_idx = detect_header_row(rows_raw)
 
-    tpl_mapping = mapping
-    h_row = header_idx
-
-    if template_id and not tpl_mapping:
-        tpl = db.query(ParserTemplate).filter(ParserTemplate.id == template_id).first()
-        if not tpl:
-            raise ValueError("模板不存在")
-        h_row = tpl.header_row
-        raw_mapping = tpl.mapping_json
-        if isinstance(raw_mapping, str):
-            tpl_mapping = json.loads(raw_mapping)
-        else:
-            tpl_mapping = raw_mapping
+    if h_row is None:
+        h_row = header_idx
 
     if not tpl_mapping:
         raise ValueError("未提供列映射，请先配置模板或手动映射")
@@ -375,6 +392,7 @@ def commit_by_mapping(
 
     # 自动保存映射为解析模板（规则中心 → 银行流水规则）
     _auto_save_template(db, batch, h_row, tpl_mapping, account_alias,
+                        account_code=account_code,
                         template_name=template_name, sample_headers=sample_headers)
 
     db.commit()
@@ -444,10 +462,8 @@ def _find_uploaded_file(batch_code: str, source_name: str) -> Optional[str]:
     if not os.path.isdir(upload_dir):
         return None
     for filename in os.listdir(upload_dir):
-        if batch_code in filename or (source_name and filename.endswith(source_name)):
-            path = os.path.join(upload_dir, filename)
-            if os.path.isfile(path):
-                return path
+        if filename.startswith(batch_code + "_") and os.path.isfile(os.path.join(upload_dir, filename)):
+            return os.path.join(upload_dir, filename)
     return None
 
 
@@ -496,23 +512,6 @@ def _validate_row(row: Dict) -> List[str]:
         errors.append("TEMPLATE_PARSE_FAILED")
 
     return errors
-
-
-def _infer_direction(row: Dict) -> str:
-    income = normalize_amount(row.get("income_amount", "")) or 0
-    expense = normalize_amount(row.get("expense_amount", "")) or 0
-    if income > 0:
-        return "income"
-    if expense > 0:
-        return "expense"
-    return "unknown"
-
-
-def _to_date(val) -> Optional[date]:
-    s = normalize_date(str(val)) if val else None
-    if s:
-        return date.fromisoformat(s)
-    return None
 
 
 def _tpl_out(r: ParserTemplate) -> Dict:
@@ -565,57 +564,15 @@ STANDARD_FIELDS = {
 
 
 def ai_parse_headers(db: Session, headers: list, sample_rows: list = None, agent_id: int = None) -> Dict[str, Any]:
-    """通过指定智能体分析银行流水表头，自动生成列映射。
-
-    使用智能体的完整角色设定和 AI 配置，而非独立调用 AI API。
-
-    Args:
-        headers: 检测到的表头列名列表
-        sample_rows: 可选的前几行样本数据
-        agent_id: 指定调用的智能体 ID，为 None 时取第一个活跃智能体
-    Returns:
-        {"mapping": {银行列名: 标准字段}, "suggested_name": str, "confidence": str}
-    """
-    from db.tables import AgentV2
-
-    # 查找指定的智能体，未指定则取第一个活跃的
-    if agent_id:
-        agent = db.query(AgentV2).filter(
-            AgentV2.id == agent_id,
-            AgentV2.status == "active",
-        ).first()
-    else:
-        agent = db.query(AgentV2).filter(
-            AgentV2.status == "active",
-        ).order_by(AgentV2.sort_order.desc()).first()
-
+    """通过指定智能体分析银行流水表头，自动生成列映射。"""
+    agent = find_active_agent(db, agent_id)
     if not agent or not agent.ai_config:
-        return {
-            "ok": False,
-            "error": "未找到可用的 AI 智能体，请先在「AI智能体」中创建并配置",
-        }
+        return {"ok": False, "error": "未找到可用的 AI 智能体，请先在「AI智能体」中创建并配置"}
 
-    ai_cfg = agent.ai_config
-    api_key = decrypt_key(ai_cfg.api_key_local)
-
-    # 构造 prompt — 包含标准字段定义和任务指令
     field_desc = "\n".join(f"  - {k}: {v}" for k, v in STANDARD_FIELDS.items())
-    short_headers = []
-    for h in headers:
-        bracket = h.find("[")
-        short_headers.append(h[:bracket].strip() if bracket > 0 else h)
-    header_list = ", ".join(f'"{h}"' for h in short_headers)
-
-    sample_text = ""
-    if sample_rows:
-        lines = []
-        for row in sample_rows[:3]:
-            if isinstance(row, (list, tuple)):
-                # 不脱敏，让 AI 看到真实数据来判断
-                cells = [str(c).strip()[:30] for c in row]
-                lines.append(" | ".join(cells))
-        if lines:
-            sample_text = f"\n\n前几行样本数据:\n" + "\n".join(lines)
+    short = shorten_headers(headers)
+    header_list = ", ".join(f'"{h}"' for h in short)
+    sample_text = format_sample_text(sample_rows, max_rows=3)
 
     user_message = f"""请分析以下银行流水的表头和样本数据，将每列映射到对应的标准字段。
 
@@ -643,152 +600,27 @@ def ai_parse_headers(db: Session, headers: list, sample_rows: list = None, agent
 请严格返回如下 JSON 格式（不要包含其他文字）:
 {{"mapping": {{"银行列名1": "field1", "银行列名2": "field2"}}, "template_name": "建议的模板名称"}}"""
 
-    # 使用智能体的 role_prompt 作为 system message
-    system_prompt = f"你是「{agent.display_name}」，一个 AI 智能体。"
-    if agent.role_prompt:
-        system_prompt += f"\n\n{agent.role_prompt}"
+    ai_result = call_agent_for_mapping(agent, user_message)
+    if not ai_result.get("ok"):
+        return ai_result
 
-    # 追加任务限定：让智能体只输出 JSON，不进入交互对话模式
-    system_prompt += "\n\n【当前任务模式】你现在处于「列映射任务」模式，不要与用户对话，只需完成列映射并返回严格的 JSON 结果。不要输出任何 JSON 以外的内容。"
-
-    result = chat(
-        provider=ai_cfg.provider,
-        api_key=api_key,
-        base_url=ai_cfg.base_url,
-        model_name=ai_cfg.model_name,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        max_tokens=agent.llm_max_tokens or 4096,
-        timeout=agent.llm_timeout or 90,
-    )
-
-    if not result.get("ok"):
-        return {
-            "ok": False,
-            "error": f"AI 调用失败: {result.get('error', '未知错误')}",
-            "error_code": result.get("error_code", "AI_CALL_FAILED"),
-            "error_category": result.get("error_category", "unknown"),
-        }
-
-    content = result["content"].strip()
-
-    # 清理思考标签（部分模型如 GLM 会返回 <think/> 内容）
-    content = _strip_thinking_tags(content)
-
-    # 尝试从返回内容中提取 JSON
-    parsed = _extract_and_parse_json(content)
-    if parsed is None:
-        return {
-            "ok": False,
-            "error": "AI 返回格式异常，请重试或手动配置映射",
-            "error_code": "AI_JSON_PARSE_FAILED",
-            "error_category": "parse",
-            "hint": "建议改用手工映射",
-            "raw": content,
-        }
-
+    parsed = ai_result["parsed"]
     mapping = parsed.get("mapping", {})
     template_name = parsed.get("template_name", "AI自动识别模板")
+    mapping = restore_mapping_keys(mapping, headers)
 
-    # 将短列名映射回原始列名
-    short_to_original = {}
-    for orig in headers:
-        bracket = orig.find("[")
-        short = orig[:bracket].strip() if bracket > 0 else orig
-        short_to_original[short] = orig
-
-    restored_mapping = {}
-    for bank_col, field_code in mapping.items():
-        original_col = short_to_original.get(bank_col, bank_col)
-        restored_mapping[original_col] = field_code
-    mapping = restored_mapping
-
-    # 验证映射字段合法性
-    valid_mapping = {}
-    for bank_col, field_code in mapping.items():
-        if field_code in STANDARD_FIELDS:
-            valid_mapping[bank_col] = field_code
-
+    valid_mapping = {k: v for k, v in mapping.items() if v in STANDARD_FIELDS}
     if not valid_mapping:
         return {"ok": False, "error": "AI 未能识别出有效的列映射"}
-
-    has_date = any(v == "business_date" for v in valid_mapping.values())
-    confidence = "high" if has_date and len(valid_mapping) >= 3 else "medium" if has_date else "low"
 
     return {
         "ok": True,
         "mapping": valid_mapping,
         "template_name": template_name,
-        "confidence": confidence,
+        "confidence": validate_mapping_confidence(valid_mapping, len(headers)),
         "matched_count": len(valid_mapping),
         "total_columns": len(headers),
     }
-
-
-def _extract_json_object(text: str) -> Optional[str]:
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    return match.group(0) if match else None
-
-
-def _strip_thinking_tags(text: str) -> str:
-    """去除模型返回的思考标签内容（<think/>、<reasoning/> 等）"""
-    text = re.sub(r"<think[^>]*>.*?</think\s*>", "", text, flags=re.S)
-    text = re.sub(r"<reasoning[^>]*>.*?</reasoning\s*>", "", text, flags=re.S)
-    text = re.sub(r"<reflection[^>]*>.*?</reflection\s*>", "", text, flags=re.S)
-    return text.strip()
-
-
-def _extract_and_parse_json(text: str) -> Optional[dict]:
-    """从 AI 返回文本中提取并解析 JSON，支持多种格式：
-    1. 纯 JSON
-    2. markdown 代码块包裹
-    3. JSON 前后有额外文本
-    4. 嵌套代码块
-    """
-    text = text.strip()
-
-    # 尝试1：直接解析
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    # 尝试2：去掉 markdown 代码块
-    code_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, flags=re.S)
-    if code_match:
-        try:
-            return json.loads(code_match.group(1).strip())
-        except json.JSONDecodeError:
-            pass
-
-    # 尝试3：提取最外层 { }
-    extracted = _extract_json_object(text)
-    if extracted:
-        try:
-            return json.loads(extracted)
-        except json.JSONDecodeError:
-            pass
-
-    # 尝试4：查找 "mapping" 关键字后的 JSON 对象
-    mapping_match = re.search(r'\{\s*"mapping"\s*:', text, flags=re.S)
-    if mapping_match:
-        start = mapping_match.start()
-        sub = text[start:]
-        depth = 0
-        for i, ch in enumerate(sub):
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(sub[: i + 1])
-                    except json.JSONDecodeError:
-                        break
-
-    return None
 
 
 def _auto_save_template(
@@ -797,6 +629,7 @@ def _auto_save_template(
     header_row: int,
     mapping: Dict[str, str],
     account_alias: str,
+    account_code: str = None,
     template_name: str = None,
     sample_headers: list = None,
 ) -> None:
@@ -828,6 +661,7 @@ def _auto_save_template(
     if existing:
         existing.mapping_json = mapping_str
         existing.sample_headers = headers_str
+        existing.account_code = account_code
         existing.updated_at = datetime.now()
     else:
         obj = ParserTemplate(
@@ -838,6 +672,7 @@ def _auto_save_template(
             skip_rows=0,
             sample_headers=headers_str,
             mapping_json=mapping_str,
+            account_code=account_code,
             created_by="ai_assist",
             status="active",
         )

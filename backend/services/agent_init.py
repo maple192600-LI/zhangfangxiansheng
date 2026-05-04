@@ -1,4 +1,4 @@
-"""Agent workspace bootstrap — V2 only."""
+"""Agent workspace bootstrap."""
 import os
 
 from config import BASE_DIR

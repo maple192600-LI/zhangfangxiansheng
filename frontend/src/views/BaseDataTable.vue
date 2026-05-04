@@ -21,6 +21,7 @@
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div style="flex:1"></div>
         <div class="btn-row">
+          <button v-if="selectedIds.length" class="btn btn-danger" @click="doBatchDelete">删除选中 ({{ selectedIds.length }})</button>
           <button class="btn btn-secondary" @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</button>
           <button class="btn btn-secondary" @click="doExport('base_data')">导出</button>
           <button class="btn btn-secondary" @click="window.print()">打印</button>
@@ -37,14 +38,16 @@
       <table v-else-if="templateColumns && templateColumns.length">
         <thead>
           <tr>
+            <th style="width:36px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
             <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in rows" :key="r.id">
+          <tr v-for="r in rows" :key="r.id" :class="{ selected: selectedIds.includes(r.id) }">
+            <td><input type="checkbox" :value="r.id" v-model="selectedIds" /></td>
             <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
           </tr>
-          <tr v-if="!rows.length"><td :colspan="templateColumns.length" class="empty-cell">暂无数据，请先录入或导入流水</td></tr>
+          <tr v-if="!rows.length"><td :colspan="templateColumns.length + 1" class="empty-cell">暂无数据，请先录入或导入流水</td></tr>
         </tbody>
       </table>
 
@@ -53,6 +56,7 @@
         <table>
           <thead>
             <tr>
+              <th style="width:36px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
               <th>日期</th>
               <th>方向</th>
               <th>摘要</th>
@@ -63,7 +67,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in rows" :key="r.id">
+            <tr v-for="r in rows" :key="r.id" :class="{ selected: selectedIds.includes(r.id) }">
+              <td><input type="checkbox" :value="r.id" v-model="selectedIds" /></td>
               <td>{{ r.business_date }}</td>
               <td>{{ r.direction === 'income' ? '收入' : '支出' }}</td>
               <td>{{ r.summary_text }}</td>
@@ -93,7 +98,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -108,7 +113,24 @@ const totalPages = ref(1)
 const rebuilding = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
+const selectedIds = ref([])
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('base_data')
+
+const allSelected = computed(() => rows.value.length > 0 && selectedIds.value.length === rows.value.length)
+function toggleAll(e) {
+  selectedIds.value = e.target.checked ? rows.value.map(r => r.id) : []
+}
+
+async function doBatchDelete() {
+  if (!selectedIds.value.length) return
+  if (!confirm(`确定删除选中的 ${selectedIds.value.length} 条数据？此操作不可撤销。`)) return
+  try {
+    const result = await api.batchDeleteBaseData(selectedIds.value)
+    alert(`成功删除 ${result.deleted} 条`)
+    selectedIds.value = []
+    loadData()
+  } catch (e) { alert('删除失败: ' + (e.message || '')) }
+}
 
 const MONEY_KEYS_BD = new Set(['income_amount', 'expense_amount', 'rolling_balance'])
 function colClass(key) { return MONEY_KEYS_BD.has(key) ? 'money' : '' }
@@ -176,4 +198,8 @@ onMounted(async () => {
 
 <style scoped>
 @import './common.css';
+
+tr.selected { background: #fff3e0; }
+.btn-danger { background: #d32f2f; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.btn-danger:hover { background: #b71c1c; }
 </style>

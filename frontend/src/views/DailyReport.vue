@@ -18,41 +18,33 @@
           <button class="btn btn-secondary" @click="doExport">导出</button>
           <button class="btn btn-secondary" @click="window.print()">打印</button>
           <button class="btn btn-primary" @click="loadReport">生成报表</button>
-          <button class="btn btn-accent" @click="smartReport" :disabled="smartReportLoading">
-            {{ smartReportLoading ? '生成中...' : '智能报表' }}
-          </button>
         </div>
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成日报...</p></div>
-      <div v-else-if="templateLoaded && !templateColumns && !templateExcelHtml" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h4>未配置报表模板</h4>
-        <p>请先在「系统设置 → 数据中心 → 报表模板管理」中上传资金日报模板</p>
-      </div>
       <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <table v-else-if="templateColumns">
+      <table v-else-if="displayColumns.length">
         <thead>
           <tr>
-            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
+            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in rows" :key="r.entity_id">
-            <td v-for="col in templateColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellValue(r, col.field_key) }}</td>
+            <td v-for="col in displayColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellValue(r, col.field_key) }}</td>
           </tr>
           <tr v-if="!rows.length">
-            <td :colspan="templateColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
+            <td :colspan="displayColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
           </tr>
           <tr class="total-row" v-if="rows.length > 1">
-            <td v-for="(col, idx) in templateColumns" :key="'t'+col.field_key" class="money"><strong>{{ idx === 0 ? '合计' : fmtAmt(totalMap[col.field_key]) }}</strong></td>
+            <td v-for="(col, idx) in displayColumns" :key="'t'+col.field_key" class="money"><strong>{{ idx === 0 ? '合计' : fmtAmt(totalMap[col.field_key]) }}</strong></td>
           </tr>
         </tbody>
       </table>
-      <div v-else class="empty-state">
+      <div v-else-if="!loading" class="empty-state">
         <div class="empty-icon">📊</div>
         <h4>暂无日报数据</h4>
-        <p>选择日期范围后点击"生成日报"</p>
+        <p>选择日期范围后点击"生成报表"</p>
       </div>
     </div>
   </div>
@@ -65,7 +57,6 @@ import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
-import http from '@/api'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -76,6 +67,17 @@ const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('daily_report')
+
+const DEFAULT_COLUMNS = [
+  { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+  { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+  { field_key: 'total_income', header_name: '收入合计', width: 140, align: 'right' },
+  { field_key: 'total_expense', header_name: '支出合计', width: 140, align: 'right' },
+  { field_key: 'net_change', header_name: '净变动', width: 140, align: 'right' },
+  { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+]
+
+const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
 
 const MONEY_KEYS = new Set(['opening_balance', 'total_income', 'total_expense', 'net_change', 'ending_balance'])
 function isMoneyKey(key) { return MONEY_KEYS.has(key) }
@@ -123,32 +125,6 @@ async function doExport() {
     a.href = url; a.download = `daily_report.xlsx`; a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
-}
-
-const smartReportLoading = ref(false)
-async function smartReport() {
-  smartReportLoading.value = true
-  try {
-    const agents = await http.get('/agent/agents')
-    const agent = (agents || [])[0]
-    if (!agent) { alert('请先创建一个智能体'); return }
-    const res = await http.post(`/agent/agents/${agent.id}/skill-run`, {
-      skill_code: 'gen_report',
-      report_type: 'daily_report',
-      start_date: startDate.value || undefined,
-      end_date: endDate.value || undefined,
-    })
-    const inner = res?.result || res
-    if (inner && inner.ok) {
-      alert(`报表已生成: ${inner.report_name}，${inner.row_count} 行数据，文件: ${inner.file_path}`)
-    } else {
-      alert('报表生成失败: ' + (inner?.error || '未知错误'))
-    }
-  } catch (e) {
-    alert('智能报表失败: ' + (e.message || e))
-  } finally {
-    smartReportLoading.value = false
-  }
 }
 
 onMounted(async () => {

@@ -27,6 +27,18 @@ Thumbs.db
 # Claude Code
 .claude/
 
+# Logs
+*.log
+
+# Test coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Upload temp files
+backend/data/uploads/
+backend/tmp_skill_content.txt
+
 # Backups & exports (runtime data)
 backups/*.zip
 exports/*.xlsx

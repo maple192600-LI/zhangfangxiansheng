@@ -99,29 +99,24 @@ python tools/guards/check_api_inventory.py
 | 1 | **文件清单** | 新增 / 修改 / 删除的文件路径（git diff 能印证） |
 | 2 | **测试证据** | 单元测试通过日志 / 覆盖率数字 / 手动验证截图 |
 | 3 | **Guards 绿** | 5 个 guards 脚本全部通过（贴命令和输出） |
-| 4 | **Handoff 文档** | 在 `docs/60_claude_code_support/HANDOFF/` 写一份该任务的 `handoff_P{x}-T{y}.md` |
+| 4 | **Handoff 文档** | 在 commit message 中说明任务目标、变更内容和影响范围 |
 
 **任一缺失** = 任务未完成，不允许进入下一任务。
 
 ---
 
-## §6 · Layer 4 · Handoff 文档模板
+## §6 · Layer 4 · Handoff 约定
 
-路径：`docs/60_claude_code_support/HANDOFF/handoff_P{x}-T{y}.md`
+每次重大变更的 commit message 必须包含：
 
-```markdown
-# Handoff · P0-T3 · 基元库实现
+```text
+chore/feat/fix(scope): 简述
 
-## 任务
-实现 `backend/fund/primitives/` 下 7 模块 37 函数。
-
-## 交付清单
-- 新增：backend/fund/primitives/{sheet_ops,value_parsers,canonical,master_match,base_queries,aggregations,template_fill}.py
-- 新增：tests/fund/primitives/test_*.py（对应 7 个测试文件）
-- 修改：backend/__init__.py（export fund 模块）
-
-## 测试证据
-- pytest tests/fund/primitives/ → 128 passed
+目标：本次变更要达成什么
+变更：新增/修改/删除了哪些文件
+影响：对其他模块的影响
+验证：如何确认变更正确（测试命令或手动验证步骤）
+```
 - coverage report: 93%
 
 ## Guards

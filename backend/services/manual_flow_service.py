@@ -20,8 +20,13 @@ from core.parser_engine import (
     normalize_amount,
 )
 from core.pii_masker import mask_row
-from core.security import decrypt_key
-from db.tables import FundEvent, ImportBatch, Account, Entity, AccountAlias
+from core.ai_parse_utils import (
+    strip_thinking_tags, extract_and_parse_json,
+    find_active_agent, call_agent_for_mapping,
+    shorten_headers, format_sample_text,
+    restore_mapping_keys, validate_mapping_confidence,
+)
+from db.tables import FundEvent, ImportBatch, Account, Entity, AccountAlias, ManualFieldPool
 from services.manual_scheme_service import get_scheme_by_code
 from services import log_service
 
@@ -226,7 +231,22 @@ def upload_workbook(db: Session, file_data: bytes, filename: str, scheme_code: s
 
 
 def preview_manual(db: Session, batch_code: str, scheme_code: str = None) -> Dict:
-    raise NotImplementedError("Phase 1 后手工流水预览改由 parser.manual artifact 生成，当前由 Phase 3/5 接管。")
+    batch = db.query(ImportBatch).filter(ImportBatch.batch_code == batch_code).first()
+    if not batch:
+        raise ValueError("批次不存在")
+
+    # 快速录入场景：已有 FundEvent，直接构建预览
+    if batch.source_type == "manual_quick":
+        return _preview_from_events(db, batch)
+
+    # Excel 上传场景：如果已有 parser_artifact，通过 artifact runtime 生成预览
+    if batch.source_type == "manual_file":
+        existing_events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).count()
+        if existing_events > 0:
+            return _preview_from_events(db, batch)
+        raise ValueError("Excel 预览需要先通过 commit 步骤指定解析器，请使用 commit 接口并传入 parser_artifact_id")
+
+    raise ValueError(f"不支持的批次类型: {batch.source_type}")
 
 
 def _preview_from_events(db: Session, batch: ImportBatch) -> Dict:
@@ -375,7 +395,7 @@ def export_template(db: Session, scheme_code: str, include_example: bool = False
     if not scheme:
         raise ValueError(f"方案不存在: {scheme_code}")
 
-    pool_map = {f.field_code: f for f in db.query(__import__("db.tables", fromlist=["ManualFieldPool"]).ManualFieldPool).all()}
+    pool_map = {f.field_code: f for f in db.query(ManualFieldPool).all()}
     headers = []
     hints = []
     for fc in scheme.selected_fields:
@@ -504,7 +524,21 @@ def _event_to_dict(ev: FundEvent) -> Dict:
 
 
 def _create_fund_event(db: Session, batch_id: int, source_type: str, parsed: Dict):
-    raise NotImplementedError("FundEvent 写入由后续 Parser artifact Runtime 负责。")
+    income = parsed.get("income_amount")
+    expense = parsed.get("expense_amount")
+    ev = FundEvent(
+        batch_id=batch_id,
+        business_date=parsed.get("date"),
+        summary=parsed.get("summary_text", ""),
+        counterparty=parsed.get("counterparty_name", ""),
+        amount_in=float(income) if income else 0,
+        amount_out=float(expense) if expense else 0,
+        balance=0,
+        state=parsed.get("parse_status", "正常") if parsed.get("parse_status") == "valid" else parsed.get("parse_status", "正常"),
+        source=source_type,
+    )
+    db.add(ev)
+    db.flush()
 
 
 def _find_manual_upload(batch: ImportBatch) -> Optional[str]:
@@ -555,55 +589,27 @@ def ai_parse_headers(
     agent_id: int = None,
     scheme_code: str = None,
 ) -> Dict[str, Any]:
-    """通过指定智能体分析手工流水表头，自动生成列映射。
-
-    使用当前方案的 field_pool 作为可用字段列表。
-    """
-    from db.tables import AgentV2, ManualFieldPool
-
-    # 查找指定的智能体
-    if agent_id:
-        agent = db.query(AgentV2).filter(
-            AgentV2.id == agent_id, AgentV2.status == "active",
-        ).first()
-    else:
-        agent = db.query(AgentV2).filter(
-            AgentV2.status == "active",
-        ).order_by(AgentV2.sort_order.desc()).first()
-
+    """通过指定智能体分析手工流水表头，自动生成列映射。"""
+    agent = find_active_agent(db, agent_id)
     if not agent or not agent.ai_config:
         return {"ok": False, "error": "未找到可用的 AI 智能体，请先在「AI智能体」中创建并配置"}
 
     # 获取方案的可用字段
     pool = db.query(ManualFieldPool).filter(ManualFieldPool.status == "active").all()
     field_map = {f.field_code: f.field_name_cn for f in pool}
-
-    # 如果指定了方案，只使用方案选中的字段
     available_fields = dict(field_map)
     if scheme_code:
         scheme = get_scheme_by_code(db, scheme_code)
         if scheme:
             available_fields = {fc: field_map.get(fc, fc) for fc in scheme.selected_fields if fc in field_map}
 
-    ai_cfg = agent.ai_config
-    api_key = decrypt_key(ai_cfg.api_key_local)
-
-    # 构建 prompt
     field_desc = "\n".join(f"  - {k}: {v}" for k, v in available_fields.items())
-    short_headers = []
-    for h in headers:
-        bracket = h.find("[")
-        short_headers.append(h[:bracket].strip() if bracket > 0 else h)
-    header_list = ", ".join(f'"{h}"' for h in short_headers)
-
-    sample_text = ""
-    if sample_rows:
-        lines = []
-        for row in sample_rows[:2]:
-            if isinstance(row, (list, tuple)):
-                lines.append(" | ".join(mask_row(row, short_headers)))
-        if lines:
-            sample_text = f"\n\n前几行样本数据:\n" + "\n".join(lines)
+    short = shorten_headers(headers)
+    header_list = ", ".join(f'"{h}"' for h in short)
+    sample_text = format_sample_text(
+        sample_rows, max_rows=2,
+        mask_fn=lambda row: mask_row(row, short),
+    )
 
     user_message = f"""请分析以下手工流水表的表头列名，将每列映射到对应的标准字段。
 
@@ -624,97 +630,22 @@ def ai_parse_headers(
 请严格返回如下 JSON 格式（不要包含其他文字）:
 {{"mapping": {{"Excel列名1": "field_code1", "Excel列名2": "field_code2"}}}}"""
 
-    system_prompt = f"你是「{agent.display_name}」，一个 AI 智能体。"
-    if agent.role_prompt:
-        system_prompt += f"\n\n{agent.role_prompt}"
-    system_prompt += "\n\n【当前任务模式】你现在处于「列映射任务」模式，不要与用户对话，只需完成列映射并返回严格的 JSON 结果。不要输出任何 JSON 以外的内容。"
+    ai_result = call_agent_for_mapping(agent, user_message)
+    if not ai_result.get("ok"):
+        return ai_result
 
-    result = chat(
-        provider=ai_cfg.provider,
-        api_key=api_key,
-        base_url=ai_cfg.base_url,
-        model_name=ai_cfg.model_name,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        max_tokens=agent.llm_max_tokens or 4096,
-        timeout=agent.llm_timeout or 90,
-    )
-
-    if not result.get("ok"):
-        return {"ok": False, "error": f"AI 调用失败: {result.get('error', '未知错误')}"}
-
-    content = result["content"].strip()
-    content = _strip_thinking_tags(content)
-
-    parsed = _extract_and_parse_json(content)
-    if parsed is None:
-        return {
-            "ok": False,
-            "error": "AI 返回格式异常，请重试或手动配置映射",
-            "raw": content,
-        }
-
+    parsed = ai_result["parsed"]
     mapping = parsed.get("mapping", {})
+    mapping = restore_mapping_keys(mapping, headers)
 
-    # 将短列名映射回原始列名
-    short_to_original = {}
-    for orig in headers:
-        bracket = orig.find("[")
-        short = orig[:bracket].strip() if bracket > 0 else orig
-        short_to_original[short] = orig
-
-    restored_mapping = {}
-    for excel_col, field_code in mapping.items():
-        original_col = short_to_original.get(excel_col, excel_col)
-        restored_mapping[original_col] = field_code
-    mapping = restored_mapping
-
-    # 验证映射字段合法性
-    valid_mapping = {}
-    for excel_col, field_code in mapping.items():
-        if field_code in field_map:
-            valid_mapping[excel_col] = field_code
-
+    valid_mapping = {k: v for k, v in mapping.items() if v in field_map}
     if not valid_mapping:
         return {"ok": False, "error": "AI 未能识别出有效的列映射"}
-
-    has_date = any(v == "business_date" for v in valid_mapping.values())
-    confidence = "high" if has_date and len(valid_mapping) >= 3 else "medium" if has_date else "low"
 
     return {
         "ok": True,
         "mapping": valid_mapping,
-        "confidence": confidence,
+        "confidence": validate_mapping_confidence(valid_mapping, len(headers)),
         "matched_count": len(valid_mapping),
         "total_columns": len(headers),
     }
-
-
-def _strip_thinking_tags(text: str) -> str:
-    text = re.sub(r"<think[^>]*>.*?</think\s*>", "", text, flags=re.S)
-    text = re.sub(r"<reasoning[^>]*>.*?</reasoning\s*>", "", text, flags=re.S)
-    text = re.sub(r"<reflection[^>]*>.*?</reflection\s*>", "", text, flags=re.S)
-    return text.strip()
-
-
-def _extract_and_parse_json(text: str) -> Optional[dict]:
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    code_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, flags=re.S)
-    if code_match:
-        try:
-            return json.loads(code_match.group(1).strip())
-        except json.JSONDecodeError:
-            pass
-    obj_match = re.search(r"\{.*\}", text, flags=re.S)
-    if obj_match:
-        try:
-            return json.loads(obj_match.group(0))
-        except json.JSONDecodeError:
-            pass
-    return None

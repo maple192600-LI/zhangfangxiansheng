@@ -20,43 +20,38 @@
           <button class="btn btn-primary" @click="loadReport">生成报表</button>
         </div>
       </div>
-      <div v-if="templateLoaded && !templateColumns && !templateExcelHtml" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h4>未配置报表模板</h4>
-        <p>请先在「系统设置 → 数据中心 → 报表模板管理」中上传账户余额表模板</p>
-      </div>
-      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <table v-else-if="templateColumns">
+      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+      <table v-else-if="displayColumns.length">
         <thead>
           <tr>
-            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
+            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(r, idx) in rows" :key="idx">
             <tr v-if="r.is_subtotal" class="subtotal-row">
-              <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }"><strong>{{ cellVal(r, col.field_key) }}</strong></td>
+              <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }"><strong>{{ cellVal(r, col.field_key) }}</strong></td>
             </tr>
             <tr v-else>
-              <td v-for="col in templateColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
+              <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
             </tr>
           </template>
           <tr v-if="!rows.length">
-            <td :colspan="templateColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
+            <td :colspan="displayColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
           </tr>
         </tbody>
       </table>
-      <div v-else class="empty-state">
+      <div v-else-if="!loading" class="empty-state">
         <div class="empty-icon">🏦</div>
         <h4>暂无余额数据</h4>
-        <p>选择日期范围后点击"查询"</p>
+        <p>选择日期范围后点击"生成报表"</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -69,7 +64,19 @@ const endDate = ref(today)
 const entityId = ref(null)
 const entities = ref([])
 const rows = ref([])
+const loading = ref(false)
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
+
+const DEFAULT_COLUMNS = [
+  { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+  { field_key: 'account_name', header_name: '账户名称', width: 180, align: 'left' },
+  { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+  { field_key: 'period_income', header_name: '本期收入', width: 140, align: 'right' },
+  { field_key: 'period_expense', header_name: '本期支出', width: 140, align: 'right' },
+  { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+]
+
+const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
 
 const MONEY_KEYS = new Set(['opening_balance', 'period_income', 'period_expense', 'ending_balance'])
 function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }

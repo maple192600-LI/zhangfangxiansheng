@@ -13,6 +13,47 @@ import httpx
 from core.ai_provider import PROVIDER_CONFIG
 
 
+def _sanitize_messages(messages: list[dict], provider: str) -> list[dict]:
+    """清洗消息列表，确保 API 兼容性
+
+    - 移除 reasoning_content（仅 DeepSeek 支持）
+    - 移除 _pending_pop 等内部标记
+    - 移除 tool 消息上的非法字段（tool_calls, tool_result）
+    - 确保 tool result 的 content 是 string
+    """
+    # tool 消息只允许的字段
+    TOOL_ALLOWED_KEYS = {"role", "tool_call_id", "content"}
+
+    cleaned = []
+    for msg in messages:
+        m = {}
+        for k, v in msg.items():
+            if k.startswith("_"):
+                continue
+            if k == "reasoning_content" and provider != "deepseek":
+                continue
+            m[k] = v
+
+        # tool 消息：只保留合法字段
+        if m.get("role") == "tool":
+            m = {k: v for k, v in m.items() if k in TOOL_ALLOWED_KEYS}
+            if not isinstance(m.get("content"), str):
+                m["content"] = json.dumps(m.get("content", ""), ensure_ascii=False)
+
+        # assistant 消息的 content 为空字符串时设为 None
+        if m.get("role") == "assistant" and m.get("content") == "":
+            m["content"] = None
+
+        # assistant 消息必须有 content 或 tool_calls，否则 provider 报错
+        if m.get("role") == "assistant" and not m.get("content") and not m.get("tool_calls"):
+            m["content"] = "（继续处理）"
+            if "reasoning_content" in m:
+                del m["reasoning_content"]
+
+        cleaned.append(m)
+    return cleaned
+
+
 async def stream_chat(
     provider: str,
     api_key: str,
@@ -32,7 +73,14 @@ async def stream_chat(
       {"type": "error", "error": "..."}
     """
     cfg = PROVIDER_CONFIG.get(provider, {})
+    provider_limit = cfg.get("max_tokens_limit", 0)
+    if provider_limit > 0 and max_tokens > provider_limit:
+        max_tokens = provider_limit
     url = (base_url or cfg.get("base_url", "")).rstrip("/")
+
+    # 清洗消息：移除非标准字段，确保 content 格式正确
+    messages = _sanitize_messages(messages, provider)
+
 
     if not url:
         yield {"type": "error", "error": "缺少 AI 配置的 base_url"}
@@ -95,7 +143,7 @@ async def _stream_ollama(
                         full_text += content
                         yield {"type": "text", "text": content}
 
-                    tc_list = msg.get("tool_calls", [])
+                    tc_list = msg.get("tool_calls") or []
                     if tc_list:
                         for tc in tc_list:
                             func = tc.get("function", {})
@@ -182,11 +230,11 @@ async def _stream_openai_compatible(
                         msg = error_text.decode("utf-8", errors="replace")[:200]
 
                     if resp.status_code == 400 and tools:
-                        # 模型可能不支持 function calling，降级重试
-                        async for evt in _stream_openai_compatible(
-                            url, api_key, model_name, messages, None, max_tokens, timeout, cfg
-                        ):
-                            yield evt
+                        # 区分消息格式错误和模型不支持 function calling
+                        if "tool" in msg.lower() and "role" in msg.lower():
+                            yield {"type": "error", "error": f"AI 服务返回 400（消息格式错误）: {msg}"}
+                        else:
+                            yield {"type": "error", "error": f"AI 服务返回 400（模型可能不支持 function calling）: {msg}"}
                         return
                     yield {"type": "error", "error": f"连接 AI 服务失败: HTTP {resp.status_code} — {msg}"}
                     return
@@ -217,12 +265,12 @@ async def _stream_openai_compatible(
                         except json.JSONDecodeError:
                             continue
 
-                        choices = chunk.get("choices", [])
+                        choices = chunk.get("choices") or []
                         if not choices:
                             continue
 
-                        choice = choices[0]
-                        delta = choice.get("delta", {})
+                        choice = choices[0] if choices[0] else {}
+                        delta = choice.get("delta") or {}
                         finish_reason = choice.get("finish_reason")
 
                         content = delta.get("content", "")
@@ -237,7 +285,7 @@ async def _stream_openai_compatible(
                         if finish_reason:
                             captured_finish_reason = finish_reason
 
-                        tc_deltas = delta.get("tool_calls", [])
+                        tc_deltas = delta.get("tool_calls") or []
                         for tc_delta in tc_deltas:
                             idx = tc_delta.get("index", 0)
                             func = tc_delta.get("function", {})
@@ -261,16 +309,13 @@ async def _stream_openai_compatible(
                 yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
                 return
 
-        # 有内容但没收到 [DONE]
+        # 有内容但没收到 [DONE] — 直接结束
         if full_text or tool_calls_acc:
             for idx in sorted(tool_calls_acc.keys()):
                 yield _emit_tool_call(tool_calls_acc[idx])
             yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
         else:
-            async for evt in _non_stream_fallback_fallback(
-                full_url, headers, body, timeout
-            ):
-                yield evt
+            yield {"type": "done", "stop_reason": "no_content"}
 
     except httpx.TimeoutException:
         yield {"type": "error", "error": "连接 AI 服务超时"}
@@ -303,51 +348,6 @@ def _extract_error_detail(exc: httpx.HTTPStatusError) -> str:
         return str(err_obj)[:200]
     except Exception:
         return f"HTTP {exc.response.status_code}"
-
-
-async def _non_stream_fallback_fallback(
-    full_url: str,
-    headers: dict[str, str],
-    body: dict[str, Any],
-    timeout: int,
-) -> AsyncGenerator[dict, None]:
-    """流式请求失败后的非流式兜底"""
-    body["stream"] = False
-
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(full_url, json=body, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-
-        choices = data.get("choices", [])
-        content = choices[0].get("message", {}).get("content", "") if choices else ""
-
-        if content:
-            yield {"type": "text", "text": content}
-
-        if choices:
-            tool_calls = choices[0].get("message", {}).get("tool_calls", [])
-            for tc in tool_calls:
-                func = tc.get("function", {})
-                name = func.get("name", "")
-                args_str = func.get("arguments", "{}")
-                try:
-                    args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except json.JSONDecodeError:
-                    args = {}
-                tool_call = {"name": name, "arguments": args}
-                if tc.get("id"):
-                    tool_call["id"] = tc["id"]
-                yield {"type": "tool_call", "tool_call": tool_call}
-
-        yield {"type": "done", "stop_reason": "end_turn"}
-
-    except httpx.HTTPStatusError as e:
-        error_detail = _extract_error_detail(e)
-        yield {"type": "error", "error": f"AI 调用失败: HTTP {e.response.status_code} — {error_detail}"}
-    except Exception as e:
-        yield {"type": "error", "error": f"AI 调用失败: {str(e)}"}
 
 
 async def _non_stream_fallback(
