@@ -43,6 +43,8 @@ MAX_TURNS = 40
 # ── 工具确认等待注册表 ────────────────────────────────────
 import asyncio
 
+_curator_last_run: dict[str, float] = {}
+
 _confirm_events: dict[str, asyncio.Event] = {}
 _confirm_results: dict[str, dict] = {}
 
@@ -105,14 +107,17 @@ async def _run_turn_inner(
     """核心对话循环（已获取 session 锁）"""
     save_message(db, session_id, "user", content=user_text)
 
-    # Curator 技能生命周期检查（后台执行，不阻塞主流程）
-    try:
-        curator = Curator(agent.agent_code)
-        result = curator.maybe_run()
-        if result and (result.get("stale", 0) > 0 or result.get("archived", 0) > 0):
-            logger.info("Curator %s: stale=%d archived=%d", agent.agent_code, result.get("stale", 0), result.get("archived", 0))
-    except Exception as e:
-        logger.warning("Curator failed for %s: %s", agent.agent_code, e)
+    # Curator 技能生命周期检查（每 5 分钟最多执行一次，避免每条消息都检查）
+    curator_key = agent.agent_code
+    if curator_key not in _curator_last_run or time.time() - _curator_last_run[curator_key] > 300:
+        try:
+            curator = Curator(agent.agent_code)
+            result = curator.maybe_run()
+            _curator_last_run[curator_key] = time.time()
+            if result and (result.get("stale", 0) > 0 or result.get("archived", 0) > 0):
+                logger.info("Curator %s: stale=%d archived=%d", agent.agent_code, result.get("stale", 0), result.get("archived", 0))
+        except Exception as e:
+            logger.warning("Curator failed for %s: %s", agent.agent_code, e)
 
     history = load_recent_messages(db, session_id)
     # 用户消息已在上方 save_message 写入 DB，load_recent_messages 会加载它
@@ -441,23 +446,6 @@ async def _generate_llm_summary(ai_config, messages: list[dict], api_key_plain: 
         return None
 
 
-def _pop_next_tool_call_id(messages: list[dict]) -> str:
-    """从最后一条 assistant 消息的 tool_calls 中按顺序取出下一个 tool_call_id
-
-    用于 DB 历史重建时，tool 消息没有存储 tool_call_id 的情况。
-    """
-    for i in range(len(messages) - 1, -1, -1):
-        msg = messages[i]
-        if msg.get("role") == "assistant" and msg.get("tool_calls"):
-            tcs = msg["tool_calls"]
-            # 用 _pending_pop 标记追踪已消费的 tool_call_id
-            pop_idx = msg.get("_pending_pop", 0)
-            if pop_idx < len(tcs):
-                msg["_pending_pop"] = pop_idx + 1
-                return tcs[pop_idx].get("id", f"call_{pop_idx}")
-    return "call_unknown"
-
-
 def _build_tool_result_content(result: dict, tool_name: str):
     """构建工具结果消息内容。所有结果统一返回 JSON 字符串。"""
     if tool_name == "file_parse" and result.get("format") == "image":
@@ -491,15 +479,16 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
         for m in history
     )
 
+    # 正向消费队列：当 tool 消息缺少 tool_call_id 时，从上一个 assistant 的 tool_calls 中按序取出
+    _pending_ids: list[str] = []
+
     for msg in history:
         role = msg.get("role", "user")
         if role == "tool":
             content = msg.get("content", msg.get("tool_result", ""))
-            # tool 消息需要 tool_call_id
-            # DB 中 tool 消息没有存 tool_call_id，从最后一个 assistant 的 tool_calls 队列中按顺序取
             tc_id = msg.get("tool_call_id", "")
-            if not tc_id:
-                tc_id = _pop_next_tool_call_id(result)
+            if not tc_id and _pending_ids:
+                tc_id = _pending_ids.pop(0)
             result.append({
                 "role": "tool",
                 "tool_call_id": tc_id,
@@ -525,7 +514,6 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
 
             prev = result[-1] if result else None
             if prev and prev.get("role") == "assistant" and prev.get("tool_calls"):
-                # 合并到上一条 assistant 消息
                 prev["tool_calls"].extend(openai_calls)
             else:
                 assistant_msg = {
@@ -539,6 +527,9 @@ def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:
                 elif has_thinking:
                     assistant_msg["reasoning_content"] = ""
                 result.append(assistant_msg)
+
+            # 将 tool_call_ids 加入消费队列，供后续 tool 消息使用
+            _pending_ids.extend(tc["id"] for tc in openai_calls)
         else:
             content = msg.get("content", "")
             reasoning = msg.get("reasoning_content")

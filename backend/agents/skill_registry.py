@@ -172,24 +172,32 @@ class SkillRegistry:
     def __init__(self):
         self._skills: dict[str, SkillMeta] = {}
         self._loaded = False
+        self._loaded_agents: set[str] = set()
+        self._last_hot_reload: float = 0.0
 
     def startup_scan(self, agent_code: Optional[str] = None) -> None:
         """启动时扫描技能目录，构建 L1 索引
 
-        采用增量更新：只新增/替换变化的技能，不移除已有的。
+        只在首次调用或新 agent_code 时执行扫描，避免每条消息都遍历文件系统。
         """
-        new_skills: dict[str, SkillMeta] = {}
+        # 系统 skills 只需加载一次
+        need_system = not self._loaded
+        need_agent = agent_code and agent_code not in self._loaded_agents
 
-        system_dir = os.path.join(AGENTS_ROOT, "system", "skills")
-        if os.path.isdir(system_dir):
-            for name in os.listdir(system_dir):
-                path = os.path.join(system_dir, name)
-                if os.path.isdir(path):
-                    meta = load_skill_l1(path)
-                    if meta:
-                        new_skills[meta.code] = meta
+        if not need_system and not need_agent:
+            return
 
-        if agent_code:
+        if need_system:
+            system_dir = os.path.join(AGENTS_ROOT, "system", "skills")
+            if os.path.isdir(system_dir):
+                for name in os.listdir(system_dir):
+                    path = os.path.join(system_dir, name)
+                    if os.path.isdir(path):
+                        meta = load_skill_l1(path)
+                        if meta:
+                            self._skills[meta.code] = meta
+
+        if need_agent:
             agent_dir = os.path.join(AGENTS_ROOT, agent_code, "skills")
             if os.path.isdir(agent_dir):
                 for name in os.listdir(agent_dir):
@@ -197,14 +205,22 @@ class SkillRegistry:
                     if os.path.isdir(path):
                         meta = load_skill_l1(path)
                         if meta:
-                            new_skills[meta.code] = meta
+                            self._skills[meta.code] = meta
+            self._loaded_agents.add(agent_code)
 
-        # 增量更新：只替换已有或新增的，不删除
-        self._skills.update(new_skills)
         self._loaded = True
 
-    def hot_reload(self) -> list[str]:
-        """热更新：检查 mtime 变化"""
+    def hot_reload(self, min_interval: float = 60.0) -> list[str]:
+        """热更新：检查 mtime 变化
+
+        受 min_interval 门控，避免每次消息都检查文件系统。
+        """
+        import time as _time
+        now = _time.time()
+        if now - self._last_hot_reload < min_interval:
+            return []
+        self._last_hot_reload = now
+
         changed = []
         for code, skill in list(self._skills.items()):
             skill_md = os.path.join(skill.skill_dir, "SKILL.md")

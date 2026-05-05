@@ -30,9 +30,9 @@ TOOLSETS: dict[str, list[str]] = {
     "file": ["fs_list", "fs_read", "fs_write", "fs_edit"],
     "parse": ["file_parse"],
     "shell": ["python_exec"],
-    "database": ["db_query_business", "db_insert_fund_event", "db_save_parser_template", "fund_skill_run"],
-    "excel": ["openpyxl_read", "openpyxl_write"],
-    "skill": ["skill_list", "skill_run", "skill_test", "skill_create"],
+    "database": ["db_query_business", "db_insert_fund_event", "db_save_parser_template", "db_delete_parser_template", "fund_skill_run"],
+    "excel": ["openpyxl_read", "openpyxl_write", "openpyxl_edit"],
+    "skill": ["skill_list", "skill_run", "skill_test", "skill_create", "skill_install", "skill_check_deps"],
     "memory": ["memory_save", "memory_search"],
     "agent": ["ask_user"],
 }
@@ -79,17 +79,23 @@ def get_tools_for_llm(agent_permission: dict) -> list[dict]:
     """根据 agent 权限返回可用的工具列表（用于 LLM function calling）
 
     支持 disabled_toolsets 批量禁用整个工具组。
+    结果按权限配置缓存，相同权限配置不重复构建。
     """
-    allowed = set(agent_permission.get("allowed_tools", []))
-    needs_confirm = set(agent_permission.get("needs_user_confirm", []))
-    disabled_toolsets = set(agent_permission.get("disabled_toolsets", []))
+    # 构建缓存 key
+    allowed = frozenset(agent_permission.get("allowed_tools", []))
+    needs_confirm = frozenset(agent_permission.get("needs_user_confirm", []))
+    disabled_toolsets = frozenset(agent_permission.get("disabled_toolsets", []))
+    cache_key = (allowed, needs_confirm, disabled_toolsets)
+
+    if cache_key in _tools_cache:
+        return _tools_cache[cache_key]
 
     # 展开 disabled_toolsets 为具体工具名
     disabled = set()
     for ts in disabled_toolsets:
         disabled.update(TOOLSETS.get(ts, []))
 
-    usable = (allowed | needs_confirm) - disabled
+    usable = (set(allowed) | set(needs_confirm)) - disabled
     result = []
     for name in usable:
         td = _TOOLS.get(name)
@@ -102,7 +108,12 @@ def get_tools_for_llm(agent_permission: dict) -> list[dict]:
                     "parameters": td.input_schema,
                 },
             })
+
+    _tools_cache[cache_key] = result
     return result
+
+
+_tools_cache: dict[tuple, list[dict]] = {}
 
 
 async def execute_tool(name: str, args: dict, ctx: "ToolContext") -> dict:
@@ -114,9 +125,35 @@ async def execute_tool(name: str, args: dict, ctx: "ToolContext") -> dict:
         result = td.func(ctx=ctx, **args)
         if inspect.isawaitable(result):
             result = await result
+        result = _trim_tool_result(result, name)
         return {"ok": True, "result": result}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+_MAX_TOOL_RESULT_CHARS = 8000
+
+
+def _trim_tool_result(result: dict, tool_name: str) -> dict:
+    """截断过大的工具结果，防止吃掉上下文窗口"""
+    if not isinstance(result, dict):
+        return result
+
+    content = result.get("content", "")
+    if isinstance(content, str) and len(content) > _MAX_TOOL_RESULT_CHARS:
+        head = content[:int(_MAX_TOOL_RESULT_CHARS * 0.8)]
+        tail = content[-int(_MAX_TOOL_RESULT_CHARS * 0.2):]
+        result["content"] = head + f"\n\n[...已截断，原始内容共 {len(content)} 字符，仅展示前 80% 和后 20%...]\n\n" + tail
+        result["truncated"] = True
+
+    rows = result.get("rows", [])
+    if isinstance(rows, list) and len(rows) > 200:
+        result["rows"] = rows[:200]
+        result["rows_truncated"] = True
+        result["total_rows"] = len(rows)
+        result["truncated_hint"] = f"仅展示前 200 行，共 {len(rows)} 行"
+
+    return result
 
 
 def _infer_schema(func: Callable) -> dict:

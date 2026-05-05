@@ -8,6 +8,7 @@
 - 超时自动重试（TimeoutException / HTTP 5xx，最多 2 次，指数退避）
 - Anthropic SSE 流式支持
 - 超时分级（根据 max_tokens 动态调整）
+- 连接池复用（全局 httpx.AsyncClient）
 """
 import json
 import time
@@ -19,6 +20,18 @@ from core.ai_provider import PROVIDER_CONFIG
 
 MAX_RETRIES = 2
 RETRY_DELAYS = [1, 3]
+
+# 全局连接池 — 复用 TCP 连接，避免每次请求都建新连接
+_shared_client: httpx.AsyncClient | None = None
+
+
+async def _get_client(timeout: int) -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(timeout=timeout)
+    else:
+        _shared_client.timeout = httpx.Timeout(timeout)
+    return _shared_client
 
 
 def _sanitize_messages(messages: list[dict], provider: str) -> list[dict]:
@@ -170,36 +183,36 @@ async def _stream_ollama(
     headers = {"Content-Type": "application/json"}
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", full_url, json=body, headers=headers) as resp:
-                resp.raise_for_status()
-                full_text = ""
+        client = await _get_client(timeout)
+        async with client.stream("POST", full_url, json=body, headers=headers) as resp:
+            resp.raise_for_status()
+            full_text = ""
 
-                async for raw_line in resp.aiter_lines():
-                    line = raw_line.strip()
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+            async for raw_line in resp.aiter_lines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-                    msg = chunk.get("message", {})
-                    content = msg.get("content", "")
-                    if content:
-                        full_text += content
-                        yield {"type": "text", "text": content}
+                msg = chunk.get("message", {})
+                content = msg.get("content", "")
+                if content:
+                    full_text += content
+                    yield {"type": "text", "text": content}
 
-                    tc_list = msg.get("tool_calls") or []
-                    if tc_list:
-                        for tc in tc_list:
-                            yield _emit_tool_call_from_ollama(tc)
+                tc_list = msg.get("tool_calls") or []
+                if tc_list:
+                    for tc in tc_list:
+                        yield _emit_tool_call_from_ollama(tc)
 
-                    if chunk.get("done", False):
-                        if not full_text:
-                            yield {"type": "text", "text": ""}
-                        yield {"type": "done", "stop_reason": "end_turn"}
-                        return
+                if chunk.get("done", False):
+                    if not full_text:
+                        yield {"type": "text", "text": ""}
+                    yield {"type": "done", "stop_reason": "end_turn"}
+                    return
 
     except httpx.HTTPStatusError as e:
         error_detail = _extract_error_detail(e)
@@ -264,89 +277,89 @@ async def _stream_openai_compatible(
     captured_finish_reason: str | None = None
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", full_url, json=body, headers=headers) as resp:
-                if resp.status_code >= 400:
-                    error_text = await resp.aread()
-                    try:
-                        error_data = json.loads(error_text)
-                        error_detail = error_data.get("error", {})
-                        if isinstance(error_detail, dict):
-                            msg = error_detail.get("message", error_text.decode()[:200])
-                        else:
-                            msg = str(error_detail)[:200]
-                    except Exception:
-                        msg = error_text.decode("utf-8", errors="replace")[:200]
+        client = await _get_client(timeout)
+        async with client.stream("POST", full_url, json=body, headers=headers) as resp:
+            if resp.status_code >= 400:
+                error_text = await resp.aread()
+                try:
+                    error_data = json.loads(error_text)
+                    error_detail = error_data.get("error", {})
+                    if isinstance(error_detail, dict):
+                        msg = error_detail.get("message", error_text.decode()[:200])
+                    else:
+                        msg = str(error_detail)[:200]
+                except Exception:
+                    msg = error_text.decode("utf-8", errors="replace")[:200]
 
-                    if resp.status_code == 400 and tools:
-                        if "tool" in msg.lower() and "role" in msg.lower():
-                            yield {"type": "error", "error": f"AI 服务返回 400（消息格式错误）: {msg}"}
-                        else:
-                            yield {"type": "error", "error": f"AI 服务返回 400（模型可能不支持 function calling）: {msg}"}
-                        return
-                    yield {"type": "error", "error": f"连接 AI 服务失败: HTTP {resp.status_code} — {msg}"}
+                if resp.status_code == 400 and tools:
+                    if "tool" in msg.lower() and "role" in msg.lower():
+                        yield {"type": "error", "error": f"AI 服务返回 400（消息格式错误）: {msg}"}
+                    else:
+                        yield {"type": "error", "error": f"AI 服务返回 400（模型可能不支持 function calling）: {msg}"}
                     return
+                yield {"type": "error", "error": f"连接 AI 服务失败: HTTP {resp.status_code} — {msg}"}
+                return
 
-                buffer = ""
-                async for raw_chunk in resp.aiter_text():
-                    buffer += raw_chunk
+            buffer = ""
+            async for raw_chunk in resp.aiter_text():
+                buffer += raw_chunk
 
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        line = line.strip()
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
 
-                        if not line or not line.startswith("data:"):
-                            continue
+                    if not line or not line.startswith("data:"):
+                        continue
 
-                        data_str = line[len("data:"):].strip()
+                    data_str = line[len("data:"):].strip()
 
-                        if data_str == "[DONE]":
-                            for idx in sorted(tool_calls_acc.keys()):
-                                yield _emit_tool_call(tool_calls_acc[idx])
-                            if not full_text and not tool_calls_acc:
-                                yield {"type": "text", "text": ""}
-                            yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
-                            return
+                    if data_str == "[DONE]":
+                        for idx in sorted(tool_calls_acc.keys()):
+                            yield _emit_tool_call(tool_calls_acc[idx])
+                        if not full_text and not tool_calls_acc:
+                            yield {"type": "text", "text": ""}
+                        yield {"type": "done", "stop_reason": captured_finish_reason or "end_turn", "reasoning_content": reasoning_text}
+                        return
 
-                        try:
-                            chunk = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            continue
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
 
-                        choices = chunk.get("choices") or []
-                        if not choices:
-                            continue
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
 
-                        choice = choices[0] if choices[0] else {}
-                        delta = choice.get("delta") or {}
-                        finish_reason = choice.get("finish_reason")
+                    choice = choices[0] if choices[0] else {}
+                    delta = choice.get("delta") or {}
+                    finish_reason = choice.get("finish_reason")
 
-                        content = delta.get("content", "")
-                        if content:
-                            full_text += content
-                            yield {"type": "text", "text": content}
+                    content = delta.get("content", "")
+                    if content:
+                        full_text += content
+                        yield {"type": "text", "text": content}
 
-                        rc = delta.get("reasoning_content", "")
-                        if rc:
-                            reasoning_text += rc
+                    rc = delta.get("reasoning_content", "")
+                    if rc:
+                        reasoning_text += rc
 
-                        if finish_reason:
-                            captured_finish_reason = finish_reason
+                    if finish_reason:
+                        captured_finish_reason = finish_reason
 
-                        tc_deltas = delta.get("tool_calls") or []
-                        for tc_delta in tc_deltas:
-                            idx = tc_delta.get("index", 0)
-                            func = tc_delta.get("function", {})
+                    tc_deltas = delta.get("tool_calls") or []
+                    for tc_delta in tc_deltas:
+                        idx = tc_delta.get("index", 0)
+                        func = tc_delta.get("function", {})
 
-                            if idx not in tool_calls_acc:
-                                tool_calls_acc[idx] = {"name": "", "arguments_str": "", "id": ""}
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {"name": "", "arguments_str": "", "id": ""}
 
-                            if tc_delta.get("id"):
-                                tool_calls_acc[idx]["id"] = tc_delta["id"]
-                            if func.get("name"):
-                                tool_calls_acc[idx]["name"] = func["name"]
-                            if func.get("arguments"):
-                                tool_calls_acc[idx]["arguments_str"] += func["arguments"]
+                        if tc_delta.get("id"):
+                            tool_calls_acc[idx]["id"] = tc_delta["id"]
+                        if func.get("name"):
+                            tool_calls_acc[idx]["name"] = func["name"]
+                        if func.get("arguments"):
+                            tool_calls_acc[idx]["arguments_str"] += func["arguments"]
 
         if buffer.strip().startswith("data:"):
             data_str = buffer.strip()[len("data:"):].strip()
@@ -404,73 +417,73 @@ async def _stream_anthropic(
     tool_calls_acc: dict[int, dict] = {}
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", full_url, json=body, headers=headers) as resp:
-                if resp.status_code >= 400:
-                    error_text = await resp.aread()
+        client = await _get_client(timeout)
+        async with client.stream("POST", full_url, json=body, headers=headers) as resp:
+            if resp.status_code >= 400:
+                error_text = await resp.aread()
+                try:
+                    error_data = json.loads(error_text)
+                    msg = error_data.get("error", {}).get("message", error_text.decode()[:200])
+                except Exception:
+                    msg = error_text.decode("utf-8", errors="replace")[:200]
+                yield {"type": "error", "error": f"Anthropic 调用失败: HTTP {resp.status_code} — {msg}"}
+                return
+
+            buffer = ""
+            async for raw_chunk in resp.aiter_text():
+                buffer += raw_chunk
+
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+
+                    data_str = line[len("data:"):].strip()
                     try:
-                        error_data = json.loads(error_text)
-                        msg = error_data.get("error", {}).get("message", error_text.decode()[:200])
-                    except Exception:
-                        msg = error_text.decode("utf-8", errors="replace")[:200]
-                    yield {"type": "error", "error": f"Anthropic 调用失败: HTTP {resp.status_code} — {msg}"}
-                    return
+                        event = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
 
-                buffer = ""
-                async for raw_chunk in resp.aiter_text():
-                    buffer += raw_chunk
+                    event_type = event.get("type", "")
 
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        line = line.strip()
-                        if not line or not line.startswith("data:"):
-                            continue
+                    if event_type == "content_block_delta":
+                        delta = event.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                full_text += text
+                                yield {"type": "text", "text": text}
+                        elif delta.get("type") == "input_json_delta":
+                            idx = event.get("index", 0)
+                            partial = delta.get("partial_json", "")
+                            if idx not in tool_calls_acc:
+                                tool_calls_acc[idx] = {"arguments_str": ""}
+                            tool_calls_acc[idx]["arguments_str"] += partial
 
-                        data_str = line[len("data:"):].strip()
-                        try:
-                            event = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            continue
+                    elif event_type == "content_block_start":
+                        cb = event.get("content_block", {})
+                        if cb.get("type") == "tool_use":
+                            idx = event.get("index", 0)
+                            tool_calls_acc[idx] = {
+                                "name": cb.get("name", ""),
+                                "id": cb.get("id", ""),
+                                "arguments_str": "",
+                            }
 
-                        event_type = event.get("type", "")
+                    elif event_type == "message_stop":
+                        for idx in sorted(tool_calls_acc.keys()):
+                            tc = tool_calls_acc[idx]
+                            yield _emit_tool_call(tc)
+                        if not full_text and not tool_calls_acc:
+                            yield {"type": "text", "text": ""}
+                        yield {"type": "done", "stop_reason": "end_turn"}
+                        return
 
-                        if event_type == "content_block_delta":
-                            delta = event.get("delta", {})
-                            if delta.get("type") == "text_delta":
-                                text = delta.get("text", "")
-                                if text:
-                                    full_text += text
-                                    yield {"type": "text", "text": text}
-                            elif delta.get("type") == "input_json_delta":
-                                idx = event.get("index", 0)
-                                partial = delta.get("partial_json", "")
-                                if idx not in tool_calls_acc:
-                                    tool_calls_acc[idx] = {"arguments_str": ""}
-                                tool_calls_acc[idx]["arguments_str"] += partial
-
-                        elif event_type == "content_block_start":
-                            cb = event.get("content_block", {})
-                            if cb.get("type") == "tool_use":
-                                idx = event.get("index", 0)
-                                tool_calls_acc[idx] = {
-                                    "name": cb.get("name", ""),
-                                    "id": cb.get("id", ""),
-                                    "arguments_str": "",
-                                }
-
-                        elif event_type == "message_stop":
-                            for idx in sorted(tool_calls_acc.keys()):
-                                tc = tool_calls_acc[idx]
-                                yield _emit_tool_call(tc)
-                            if not full_text and not tool_calls_acc:
-                                yield {"type": "text", "text": ""}
-                            yield {"type": "done", "stop_reason": "end_turn"}
-                            return
-
-                        elif event_type == "error":
-                            err_msg = event.get("error", {}).get("message", "未知错误")
-                            yield {"type": "error", "error": f"Anthropic 错误: {err_msg}"}
-                            return
+                    elif event_type == "error":
+                        err_msg = event.get("error", {}).get("message", "未知错误")
+                        yield {"type": "error", "error": f"Anthropic 错误: {err_msg}"}
+                        return
 
         if full_text or tool_calls_acc:
             for idx in sorted(tool_calls_acc.keys()):

@@ -52,15 +52,15 @@ class DBMemoryProvider(MemoryProvider):
         return self._frozen_snapshot or []
 
     async def prefetch_with_query(self, session_id: str, query: str) -> list[dict]:
-        """带查询关键词的预加载 — 用 query 做相关性排序，优先返回匹配的记忆"""
+        """带查询关键词的预加载 — 用 query 做 SQL 预过滤 + Python 精排"""
         if not self._db or not self._agent_id:
             return []
-        from agents.memory_store import list_memories
         try:
-            all_rows = list_memories(self._db, self._agent_id)
-            if not all_rows:
-                self._frozen_snapshot = []
-                return []
+            from db.tables import AgentMemory
+            base_q = (
+                self._db.query(AgentMemory)
+                .filter(AgentMemory.agent_id == self._agent_id)
+            )
 
             if query:
                 query_lower = query.lower()
@@ -73,15 +73,40 @@ class DBMemoryProvider(MemoryProvider):
                 for i in range(len(chinese) - 1):
                     query_segs.add(chinese[i:i + 2])
 
+                # SQL 层：用 LIKE 做初步过滤（任意 segment 匹配即保留）
+                from sqlalchemy import or_
+                like_filters = []
+                for seg in list(query_segs)[:10]:
+                    like_filters.append(AgentMemory.content.ilike(f"%{seg}%"))
+                    like_filters.append(AgentMemory.key.ilike(f"%{seg}%"))
+                if like_filters:
+                    filtered_rows = (
+                        base_q.filter(or_(*like_filters))
+                        .order_by(AgentMemory.last_used_at.desc())
+                        .limit(40)
+                        .all()
+                    )
+                else:
+                    filtered_rows = (
+                        base_q.order_by(AgentMemory.last_used_at.desc())
+                        .limit(40)
+                        .all()
+                    )
+
+                # Python 层：精确评分排序
+                from agents.memory_store import _to_dict
+                rows_dict = [_to_dict(r) for r in filtered_rows]
                 scored = []
-                for r in all_rows:
+                for r in rows_dict:
                     text = f"{r.get('key', '')} {r.get('content', '')}".lower()
                     score = sum(1 for seg in query_segs if seg in text)
                     scored.append((score, r))
                 scored.sort(key=lambda x: x[0], reverse=True)
                 self._frozen_snapshot = [r for _, r in scored[:20]]
             else:
-                self._frozen_snapshot = all_rows[:20]
+                from agents.memory_store import _to_dict
+                rows = base_q.order_by(AgentMemory.last_used_at.desc()).limit(20).all()
+                self._frozen_snapshot = [_to_dict(r) for r in rows]
         except Exception as e:
             logger.warning("Memory prefetch_with_query failed: %s", e)
             self._frozen_snapshot = []
