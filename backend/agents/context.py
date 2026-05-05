@@ -18,8 +18,23 @@ logger = logging.getLogger(__name__)
 
 # ── Token 估算 ───────────────────────────────────────────
 
+def _is_cjk(c: str) -> bool:
+    """判断字符是否为 CJK 统一汉字（含扩展区）或全角字符"""
+    cp = ord(c)
+    return (
+        (0x4E00 <= cp <= 0x9FFF) or     # CJK Unified Ideographs
+        (0x3400 <= cp <= 0x4DBF) or     # CJK Unified Ideographs Extension A
+        (0x20000 <= cp <= 0x2A6DF) or   # CJK Unified Ideographs Extension B
+        (0x2A700 <= cp <= 0x2B73F) or   # CJK Unified Ideographs Extension C
+        (0x2B740 <= cp <= 0x2B81F) or   # CJK Unified Ideographs Extension D
+        (0xF900 <= cp <= 0xFAFF) or     # CJK Compatibility Ideographs
+        (0xFF00 <= cp <= 0xFFEF) or     # Fullwidth Forms
+        (0x3000 <= cp <= 0x303F)        # CJK Symbols and Punctuation
+    )
+
+
 def estimate_tokens(messages: list[dict]) -> int:
-    """中英混合 token 估算：中文 1 字 ≈ 2 token，其他 ≈ 0.5 token"""
+    """中英混合 token 估算：CJK/全角 ≈ 2 token，其他 ≈ 0.5 token"""
     total = 0
     for msg in messages:
         content = msg.get("content", "")
@@ -29,9 +44,9 @@ def estimate_tokens(messages: list[dict]) -> int:
             raw = json.dumps(msg, ensure_ascii=False)
             total += len(raw) // 3
             continue
-        chinese = sum(1 for c in content if '一' <= c <= '鿿')
-        other = len(content) - chinese
-        total += chinese * 2 + int(other * 0.5)
+        cjk = sum(1 for c in content if _is_cjk(c))
+        other = len(content) - cjk
+        total += cjk * 2 + int(other * 0.5)
     return total
 
 
@@ -57,7 +72,7 @@ def _extract_key_facts(messages: list[dict]) -> str:
 
     当 LLM 摘要不可用时使用。
     """
-    markers = ["总结", "结论", "确定", "注意", "关键", "规则", "发现", "结果"]
+    markers = ["总结", "结论", "规则", "偏好", "业务规则", "注意事项", "结果", "决定"]
     insights = []
     for msg in messages:
         if msg.get("role") != "assistant":

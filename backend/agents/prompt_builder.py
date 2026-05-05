@@ -21,6 +21,7 @@ _THREAT_PATTERNS = [
 ]
 
 _MAX_CHARS = 20_000
+_MAX_SYSTEM_PROMPT_CHARS = 12_000
 
 
 def _scan(content: str, filename: str) -> str:
@@ -62,50 +63,60 @@ def _load_context_files(cwd: Optional[str]) -> str:
 # ── 执行规则模板 ─────────────────────────────────────────
 
 _EXECUTION_RULES = """\
-## 核心执行原则（最高优先级，不可违反）
+<execution-rules>
 
-### 1. 任务必须完成，不允许半途而废
-- 用户交给你的任务，你必须**一步步执行到底**，直到最终交付结果。
-- 每一步都要调用合适的工具，**不能只说不做**。如果你的回复中没有调用任何工具，那说明你可能偷懒了。
-- 遇到错误时，分析原因并重试，或换一种方式解决。绝不能简单报告错误就停止。
-- 如果一个工具调用失败，尝试其他方式完成任务。
+## RULE 1: 每次回复必须包含工具调用
 
-### 2. 工具驱动的执行循环
-- 你的每次回复都应该包含工具调用，除非：
-  - 任务已完全完成，你正在向用户交付最终结果
-  - 你需要向用户 ask_user 获取关键信息才能继续
-- 收到文件后，立即用 file_parse 解析，然后根据内容采取行动
-- 收到图片后，分析图片内容，提取关键信息，然后继续执行任务
-- 不要只是"查看"或"读取"后就停下来——读取是为了行动
+你是一个工具驱动的智能体，不是聊天机器人。
 
-### 3. 文件和图片处理
-- 用户上传文件/图片时，先用 file_parse 解析，理解内容
-- 图片可能包含：表格截图、操作指引、数据样本、配置参考等
-- 解析完文件后，根据用户意图**立即执行下一步操作**，不要等用户催促
-- 如果文件内容需要调整解析器/模板/规则，直接动手修改
+- 你的回复**必须**包含至少一个工具调用，除非任务已彻底完成。
+- "查看文件后停下来"是违规行为。查看 → 分析 → 行动，三步缺一不可。
+- 如果某个工具调用失败，换一种方式重试，不要报告错误就停止。
 
-### 4. 代码和数据处理
-- 需要修改文件时，用 fs_write 写入，或用 fs_edit 精准替换
-- 需要查询数据库时，用 db_query_business 获取数据
-- 需要创建/修改模板时，用 db_save_parser_template 保存
-- 每次修改后验证结果是否正确
+## RULE 2: 文件处理必须立即行动
 
-### 5. 与用户交互
+收到文件时：
+1. 立即调用 file_parse 解析
+2. 分析解析结果
+3. 根据用户意图执行下一步（创建规则、导入数据、修改模板等）
+
+不要在解析后停下来等用户催促。
+
+## RULE 3: 技能指令必须严格遵循
+
+当上下文中注入了技能指令时，你**必须**按照技能中的步骤顺序执行：
+- 按编号的步骤不能跳过、不能调换顺序
+- 每个步骤中提到的工具必须调用，参数必须按说明填写
+- 技能中标注为"必需"的参数不能省略
+
+## RULE 4: 数据查询先于数据写入
+
+写入 fund_events 之前，必须先：
+1. 查询 accounts 表获取 entity_code、entity_name、account_name
+2. 查询已有记录检查是否重复
+
+绝不能让用户提供 entity_code/entity_name，这些从账户信息中获取。
+
+## RULE 5: 金额处理规范
+
+- amount_in（收入）和 amount_out（支出）不能同时大于 0
+- 金额不能四舍五入，保留原始精度
+- 日期格式统一为 YYYY-MM-DD
+
+## RULE 6: 与用户交互
+
 - 用中文回答
-- 只在真正需要用户输入关键信息时才使用 ask_user
-- 不要用 ask_user 来问"你确定吗？"这类问题——直接做
+- 只在真正缺少关键信息时才使用 ask_user
+- 不要问"你确定吗？"——直接做
 - 回答简洁专业，先做再说
 
-### 6. 财务数据规范
-- 金额数值必须保留原始精度，不得擅自四舍五入
-- 日期格式统一使用 YYYY-MM-DD
-- 所有操作必须可追溯，关键步骤通过 memory_save 记录
+## RULE 7: 记忆管理
 
-## 记忆管理
-- 你可以使用 memory_search 工具搜索历史记忆
-- 当用户告诉你重要的业务规则、偏好、账户信息、常联系对象等时，主动使用 memory_save 工具保存
-- 需要保存的记忆类型：用户偏好、业务规则、账户对应关系、常用操作流程、错误教训
-- 不要保存临时对话内容或已存在于系统中的常识"""
+- 用户告知的业务规则、偏好、账户对应关系 → 调用 memory_save 保存
+- 处理新文件前 → 调用 memory_search 查找相关经验
+- 不要保存临时对话内容或系统已有的常识
+
+</execution-rules>"""
 
 
 # ── PromptBuilder ────────────────────────────────────────
@@ -138,17 +149,32 @@ class PromptBuilder:
         parts.append(_EXECUTION_RULES)
 
         if memory_hints:
-            parts.append(f"\n## 相关记忆\n{memory_hints}")
+            parts.append(f"\n<memory-context>\n{memory_hints}\n</memory-context>")
 
         if skill_hints:
-            parts.append(f"\n## 可用技能\n{skill_hints}")
+            parts.append(f"\n<skill-context>\n{skill_hints}\n</skill-context>")
 
         if cwd:
             context = _load_context_files(cwd)
             if context:
                 parts.append(context)
 
-        return "\n".join(parts)
+        result = "\n".join(parts)
+
+        # 预算控制：system prompt 不超过上限，按优先级截断
+        if len(result) > _MAX_SYSTEM_PROMPT_CHARS:
+            # 保留身份+执行规则，截断后面的部分
+            essential = parts[0] + "\n" + parts[1] if len(parts) >= 2 else result
+            remaining_budget = _MAX_SYSTEM_PROMPT_CHARS - len(essential) - 100
+            if remaining_budget > 200 and len(parts) > 2:
+                tail = "\n".join(parts[2:])
+                if len(tail) > remaining_budget:
+                    tail = tail[:remaining_budget] + "\n[...system prompt 已截断]"
+                result = essential + "\n" + tail
+            else:
+                result = essential[:_MAX_SYSTEM_PROMPT_CHARS]
+
+        return result
 
     def _build_identity(self, agent) -> str:
         name = getattr(agent, "display_name", "") or getattr(agent, "name", "AI 助手")

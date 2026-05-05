@@ -37,7 +37,7 @@ class DBMemoryProvider(MemoryProvider):
             key = item.get("key", "")
             content = item.get("content", "")[:150]
             lines.append(f"- [{key}]: {content}")
-        return "<memory-context>\n" + "\n".join(lines) + "\n</memory-context>"
+        return "\n".join(lines)
 
     async def prefetch(self, session_id: str) -> list[dict]:
         if not self._db or not self._agent_id:

@@ -122,9 +122,30 @@ async def execute_tool(name: str, args: dict, ctx: "ToolContext") -> dict:
     if not td:
         return {"ok": False, "error": f"未知工具: {name}"}
     try:
+        # 必需参数验证
+        schema = td.input_schema
+        required = schema.get("required", [])
+        props = schema.get("properties", {})
+        missing = [r for r in required if r not in args]
+        if missing:
+            return {"ok": False, "error": f"缺少必需参数: {', '.join(missing)}"}
+
+        # 类型强制转换（LLM 有时传 string 而非 int/float）
+        for key, prop in props.items():
+            if key in args and key != "ctx":
+                expected = prop.get("type", "string")
+                val = args[key]
+                try:
+                    if expected == "integer" and isinstance(val, str):
+                        args[key] = int(val)
+                    elif expected == "number" and isinstance(val, str):
+                        args[key] = float(val)
+                    elif expected == "boolean" and isinstance(val, str):
+                        args[key] = val.lower() in ("true", "1", "yes")
+                except (ValueError, TypeError):
+                    pass
+
         result = td.func(ctx=ctx, **args)
-        if inspect.isawaitable(result):
-            result = await result
         result = _trim_tool_result(result, name)
         return {"ok": True, "result": result}
     except Exception as e:
