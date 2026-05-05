@@ -25,6 +25,9 @@ class SkillMeta:
     allowed_tools: list[str] = field(default_factory=list)
     arguments: dict = field(default_factory=dict)
     triggers: list[str] = field(default_factory=list)
+    version: str = ""
+    source: str = ""
+    dependencies: dict = field(default_factory=dict)
     skill_dir: str = ""
     _body_loaded: bool = False
     _body: str = ""
@@ -38,6 +41,10 @@ class SkillMeta:
             parts.append(f"  {self.description}")
         if self.when_to_use:
             parts.append(f"  触发: {self.when_to_use}")
+        if self.version:
+            parts.append(f"  版本: {self.version}")
+        if self.dependencies.get("pip"):
+            parts.append(f"  依赖: {', '.join(self.dependencies['pip'])}")
         return "\n".join(parts)
 
     def load_l2(self) -> str:
@@ -117,6 +124,10 @@ def load_skill_l1(skill_dir: str) -> Optional[SkillMeta]:
     if isinstance(triggers, str):
         triggers = [t.strip() for t in triggers.split(",")]
 
+    deps = meta.get("dependencies", {})
+    if not isinstance(deps, dict):
+        deps = {}
+
     return SkillMeta(
         code=meta.get("name", dir_name).replace("-", "_"),
         name=meta.get("name", dir_name),
@@ -125,8 +136,11 @@ def load_skill_l1(skill_dir: str) -> Optional[SkillMeta]:
         allowed_tools=meta.get("allowed-tools", []) if isinstance(meta.get("allowed-tools"), list) else [],
         arguments=meta.get("arguments", {}),
         triggers=triggers,
+        version=meta.get("version", ""),
+        source=meta.get("source", ""),
+        dependencies=deps,
         skill_dir=skill_dir,
-        _body_loaded=False,
+        _body_loaded=True,
         _body=body,
         _mtime=os.path.getmtime(skill_md),
     )
@@ -150,19 +164,6 @@ def _load_legacy_manifest(skill_dir: str) -> Optional[SkillMeta]:
         arguments=data.get("arguments", {}),
         skill_dir=skill_dir,
     )
-
-
-def load_skill_l2(skill: SkillMeta) -> str:
-    """L2: 加载完整 SKILL.md body（兼容接口）"""
-    return skill.load_l2()
-
-
-def _extract_ngrams(text: str, n: int = 2) -> set[str]:
-    """从文本中提取 n-gram"""
-    cleaned = re.sub(r'[\s\W]+', '', text)
-    if len(cleaned) < n:
-        return {cleaned} if cleaned else set()
-    return {cleaned[i:i + n] for i in range(len(cleaned) - n + 1)}
 
 
 class SkillRegistry:
@@ -222,10 +223,11 @@ class SkillRegistry:
     def trigger(self, user_input: str) -> list[SkillMeta]:
         """根据用户输入匹配触发技能
 
-        三级匹配策略：
-        1. 精确子串匹配 triggers 字段（最高优先级）
-        2. n-gram 重叠匹配 triggers（次优先）
-        3. 名称/描述回退匹配（最低优先级）
+        两级匹配策略（去掉了过于宽松的第三级回退）：
+        1. 精确子串匹配 triggers 字段
+        2. 名称精确匹配（技能名完整出现在用户输入中）
+
+        不再使用 n-gram 和随机子串回退匹配，避免中文输入误触发所有技能。
         """
         if not self._loaded:
             return []
@@ -234,7 +236,7 @@ class SkillRegistry:
         text_lower = user_input.lower()
 
         for skill in self._skills.values():
-            # 1. 精确子串匹配 triggers（最高优先级）
+            # 1. 精确子串匹配 triggers
             if skill.triggers:
                 exact_hit = False
                 for trigger in skill.triggers:
@@ -245,38 +247,9 @@ class SkillRegistry:
                     matched.append(skill)
                     continue
 
-                # 2. n-gram 重叠匹配（阈值 0.7，比之前的 0.5 更严格）
-                user_ngrams = _extract_ngrams(text_lower, n=2)
-                ngram_hit = False
-                for trigger in skill.triggers:
-                    trigger_ngrams = _extract_ngrams(trigger.lower(), n=2)
-                    if not trigger_ngrams:
-                        continue
-                    overlap = user_ngrams & trigger_ngrams
-                    if len(overlap) >= max(1, len(trigger_ngrams) * 0.7):
-                        ngram_hit = True
-                        break
-                if ngram_hit:
-                    matched.append(skill)
-                    continue
-
-            # 3. 回退：名称 + 描述匹配
-            skill_text = f"{skill.name} {skill.description} {skill.when_to_use}".lower()
-
-            if skill.name.lower() in text_lower:
-                matched.append(skill)
-                continue
-
-            user_segs = set()
-            for word in text_lower.split():
-                if len(word) >= 2:
-                    user_segs.add(word)
-            chinese = re.sub(r"[a-z0-9\s]", "", text_lower)
-            for n in (2, 3, 4):
-                for i in range(len(chinese) - n + 1):
-                    user_segs.add(chinese[i:i + n])
-
-            if any(seg in skill_text for seg in user_segs if len(seg) >= 2):
+            # 2. 名称精确匹配（技能名完整出现在用户输入中，名称至少 3 个字符）
+            skill_name_lower = skill.name.lower()
+            if len(skill_name_lower) >= 3 and skill_name_lower in text_lower:
                 matched.append(skill)
 
         return matched

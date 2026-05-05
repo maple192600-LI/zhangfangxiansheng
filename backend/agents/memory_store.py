@@ -133,6 +133,7 @@ def flush_from_context(db: Session, agent_id: int, messages: list[dict]) -> int:
     """从上下文消息中提取重要信息保存为记忆（压缩前调用）
 
     保存条件：assistant 消息中包含明确的结论、决策或数据总结。
+    使用内容 hash 做 key 后缀，避免不同内容因前 30 字相同而互相覆盖。
     返回保存的记忆条数。
     """
     saved = 0
@@ -143,14 +144,13 @@ def flush_from_context(db: Session, agent_id: int, messages: list[dict]) -> int:
         if not content or len(content) < 50:
             continue
 
-        # 检测是否包含重要结论标记
         conclusion_markers = ["总结", "结论", "结果", "注意", "关键", "规则", "发现", "确定"]
         has_conclusion = any(m in content for m in conclusion_markers)
         if not has_conclusion:
             continue
 
-        # 用前 50 字符作为 key
-        key = f"auto_{content[:30].replace(' ', '_')}"
+        content_hash = hash(content[:500]) & 0xFFFF
+        key = f"auto_{content[:20].replace(' ', '_')}_{content_hash}"
         save_memory(db, agent_id, key, content[:500], scope="auto", source="context_flush")
         saved += 1
 

@@ -4,6 +4,7 @@
 封装 memory_store.py 的 CRUD 操作，增加冻结快照和注入检测。
 """
 import logging
+import re
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -12,7 +13,7 @@ from agents.memory_provider import MemoryProvider, scan_memory_value
 
 logger = logging.getLogger(__name__)
 
-_MEMORY_MARKERS = ["总结", "结论", "确定", "注意", "关键", "规则", "发现", "偏好"]
+_MEMORY_MARKERS = ["总结", "结论", "规则", "偏好", "业务规则", "注意事项"]
 
 
 class DBMemoryProvider(MemoryProvider):
@@ -51,25 +52,32 @@ class DBMemoryProvider(MemoryProvider):
         return self._frozen_snapshot or []
 
     async def prefetch_with_query(self, session_id: str, query: str) -> list[dict]:
-        """带查询关键词的预加载 — 无条件加载全部，用 query 做相关性排序"""
+        """带查询关键词的预加载 — 用 query 做相关性排序，优先返回匹配的记忆"""
         if not self._db or not self._agent_id:
             return []
         from agents.memory_store import list_memories
         try:
             all_rows = list_memories(self._db, self._agent_id)
+            if not all_rows:
+                self._frozen_snapshot = []
+                return []
+
             if query:
-                scored = []
                 query_lower = query.lower()
+                # 构建查询关键词集合：原始词 + 中文 2-gram
+                query_segs = set()
+                for word in query_lower.split():
+                    if len(word) >= 2:
+                        query_segs.add(word)
+                chinese = re.sub(r"[a-z0-9\s]", "", query_lower)
+                for i in range(len(chinese) - 1):
+                    query_segs.add(chinese[i:i + 2])
+
+                scored = []
                 for r in all_rows:
                     text = f"{r.get('key', '')} {r.get('content', '')}".lower()
-                    score = 0
-                    for word in query_lower.split():
-                        if word in text:
-                            score += 1
-                    if score > 0:
-                        scored.append((score, r))
-                    else:
-                        scored.append((0, r))
+                    score = sum(1 for seg in query_segs if seg in text)
+                    scored.append((score, r))
                 scored.sort(key=lambda x: x[0], reverse=True)
                 self._frozen_snapshot = [r for _, r in scored[:20]]
             else:
@@ -80,6 +88,13 @@ class DBMemoryProvider(MemoryProvider):
         return self._frozen_snapshot or []
 
     async def sync_turn(self, session_id: str, messages: list[dict]) -> None:
+        """自动保存回合记忆 — 只在明确有业务价值时保存
+
+        条件（全部满足）：
+        1. 有 assistant 回复且内容 >= 100 字
+        2. 内容包含强标记词（规则、偏好、业务规则等）
+        3. 内容有明确的结构化信息（有冒号或列表）
+        """
         if len(messages) < 2 or not self._db:
             return
         last_assistant = ""
@@ -87,11 +102,16 @@ class DBMemoryProvider(MemoryProvider):
             if msg.get("role") == "assistant":
                 last_assistant = msg.get("content", "") or ""
                 break
-        if not last_assistant or len(last_assistant) < 50:
+        if not last_assistant or len(last_assistant) < 100:
             return
         if not any(m in last_assistant for m in _MEMORY_MARKERS):
             return
-        key = f"auto_{last_assistant[:30].replace(' ', '_')}"
+        # 要求有结构化信息（冒号、列表标记等）
+        has_structure = any(c in last_assistant for c in [":", "：", "\n-", "1.", "•"])
+        if not has_structure:
+            return
+        content_hash = hash(last_assistant[:500]) & 0xFFFF
+        key = f"auto_{last_assistant[:20].replace(' ', '_')}_{content_hash}"
         await safe_write(self._db, self._agent_id, key, last_assistant[:500])
 
     async def search(self, query: str, limit: int = 10) -> list[dict]:

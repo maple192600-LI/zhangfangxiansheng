@@ -25,7 +25,7 @@ from agents.provider import stream_chat
 from core.security import decrypt_key
 from agents.tool_registry import ToolContext, execute_tool, get_tools_for_llm
 from agents.permission import get_permission, is_tool_allowed, needs_confirm, get_confirm_message
-from agents.session_store import load_recent_messages, save_message
+from agents.session_store import load_recent_messages, save_message, update_session_summary
 from agents.context import context_engine
 from agents.session_lock import get_session_lock
 from agents.skill_registry import skill_registry
@@ -82,6 +82,7 @@ async def run_turn(
 ) -> AsyncGenerator[str, None]:
     """运行一轮对话，yield SSE 格式的事件字符串"""
     lock = get_session_lock(session_id)
+    # asyncio 协作式调度，locked() 和 async with 之间不会被中断，无竞态条件
     if lock.locked():
         yield sse.sse_error("该会话正在处理中，请等待完成后再发送消息")
         return
@@ -152,21 +153,29 @@ async def _run_turn_inner(
     messages = _format_messages(system_prompt, history)
     messages = _validate_message_sequence(messages)
 
+    api_key_plain = decrypt_key(ai_config.api_key_local)
+
     # 检查点 1：循环前压缩
     if context_engine.needs_compaction(messages):
         await memory_mgr.on_pre_compress_all(messages)
-        llm_summary = await _generate_llm_summary(ai_config, messages, api_key_plain)
+        try:
+            llm_summary = await asyncio.wait_for(
+                _generate_llm_summary(ai_config, messages, api_key_plain),
+                timeout=20,
+            )
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning("LLM summary timed out or failed: %s, using keyword fallback", e)
+            llm_summary = None
         result = context_engine.compact(session_id, messages, llm_summary=llm_summary)
         if result.removed_count > 0:
             messages = _validate_message_sequence(list(result.messages))
 
     # 创建 Scrubber
     scrubber = memory_mgr.create_scrubber()
-
-    api_key_plain = decrypt_key(ai_config.api_key_local)
     turn = 0
     started_at = time.time()
     accumulated_text = ""
+    _last_tool_signatures: list[str] = []  # 循环检测：记录最近工具调用签名
 
     while turn < MAX_TURNS:
         turn += 1
@@ -308,6 +317,26 @@ async def _run_turn_inner(
                         db=db,
                     )
                     result = await execute_tool(tool_name, tool_args, ctx)
+
+                    # ask_user 特殊处理：暂停等待用户回复
+                    if tool_name == "ask_user" and result.get("ok") and result.get("_ask_user"):
+                        question = result.get("question", "")
+                        yield sse.sse_ask_user(question, tc_id)
+                        ask_evt = register_confirm_wait(tc_id)
+                        try:
+                            await asyncio.wait_for(ask_evt.wait(), timeout=300)
+                        except asyncio.TimeoutError:
+                            result = {"ok": False, "error": "用户回复超时，请重新提问"}
+                        else:
+                            cr = _confirm_results.get(tc_id, {})
+                            user_reply = cr.get("reason", "") or cr.get("reply", "")
+                            if user_reply:
+                                result = {"ok": True, "reply": user_reply}
+                            else:
+                                result = {"ok": False, "error": "用户未提供回复"}
+                        finally:
+                            _cleanup_confirm(tc_id)
+
                     yield sse.sse_tool_end(tool_name, result)
 
                 result_json = json.dumps(result, ensure_ascii=False)
@@ -324,10 +353,30 @@ async def _run_turn_inner(
                     "content": tool_msg_content,
                 })
 
+            # 循环检测：相同工具调用签名连续出现 3 次 → 强制终止
+            sig = "+".join(f"{tc.get('name','')}({json.dumps(tc.get('arguments',{}), sort_keys=True)})" for tc in tool_calls)
+            _last_tool_signatures.append(sig)
+            if len(_last_tool_signatures) >= 4:
+                recent = _last_tool_signatures[-4:]
+                if recent[0] == recent[1] == recent[2] == recent[3]:
+                    logger.warning("Loop detected: same tool calls repeated 4 times: %s", sig[:200])
+                    accumulated_text += "\n\n[检测到重复操作，已自动停止。请尝试换个方式描述需求。]"
+                    duration = int((time.time() - started_at) * 1000)
+                    save_message(db, session_id, "assistant", content=accumulated_text, duration_ms=duration)
+                    yield sse.sse_done("loop_detected")
+                    return
+
             # 检查点 2：工具执行后压缩
             if context_engine.needs_compaction(messages):
                 await memory_mgr.on_pre_compress_all(messages)
-                llm_summary2 = await _generate_llm_summary(ai_config, messages, api_key_plain)
+                try:
+                    llm_summary2 = await asyncio.wait_for(
+                        _generate_llm_summary(ai_config, messages, api_key_plain),
+                        timeout=20,
+                    )
+                except (asyncio.TimeoutError, Exception) as e:
+                    logger.warning("Checkpoint 2 LLM summary failed: %s, using fallback", e)
+                    llm_summary2 = None
                 compact_result = context_engine.compact(session_id, messages, llm_summary=llm_summary2)
                 if compact_result.removed_count > 0:
                     messages = _validate_message_sequence(list(compact_result.messages))
@@ -346,7 +395,7 @@ async def _run_turn_inner(
         # 持久化摘要到 session
         summary = context_engine.get_summary(session_id)
         if summary:
-            session_store.update_session_summary(db, session_id, summary)
+            update_session_summary(db, session_id, summary)
         yield sse.sse_done("end_turn")
         return
 
@@ -537,11 +586,6 @@ def _validate_message_sequence(messages: list[dict]) -> list[dict]:
                 tc_id = tc.get("id", "")
                 if tc_id:
                     call_ids.append(tc_id)
-
-            # 确保有 content（某些 provider 不接受 content=None 无 tool_calls）
-            if not msg.get("content") and not tool_calls:
-                i += 1
-                continue
 
             result.append(msg)
 

@@ -11,7 +11,7 @@ DEFAULT_PERMISSION = {
         "fs_list", "fs_read",
         "file_parse",
         "memory_save", "memory_search",
-        "skill_list", "skill_run",
+        "skill_list", "skill_run", "skill_check_deps",
         "ask_user",
         "openpyxl_read",
         "db_query_business",
@@ -20,9 +20,11 @@ DEFAULT_PERMISSION = {
     "needs_user_confirm": [
         "fs_write", "fs_edit",
         "python_exec",
-        "skill_create", "skill_test",
+        "skill_create", "skill_test", "skill_install",
         "db_insert_fund_event",
         "db_save_parser_template",
+        "db_delete_parser_template",
+        "openpyxl_write", "openpyxl_edit",
     ],
     "disabled_toolsets": [],
     "allowed_paths": [
@@ -38,19 +40,36 @@ _CONFIRM_MESSAGES = {
     "python_exec": "确认允许执行 Python 代码？",
     "skill_create": "确认允许创建新技能？",
     "skill_test": "确认允许测试技能？",
+    "skill_install": "确认允许安装技能？",
     "db_insert_fund_event": "确认允许插入资金流水记录？",
     "db_save_parser_template": "确认允许保存解析模板？",
+    "db_delete_parser_template": "确认允许删除解析模板？",
+    "openpyxl_write": "确认允许创建 Excel 文件？",
+    "openpyxl_edit": "确认允许修改 Excel 文件？",
 }
 
 
 def get_permission(permission_json_str: str) -> dict:
-    """解析 agent 的权限配置"""
+    """解析 agent 的权限配置
+
+    list 类型字段（allowed_tools, needs_user_confirm, disabled_toolsets, allowed_paths, allowed_shell）
+    使用并集合并，避免用户配置意外覆盖默认列表。
+    """
     if not permission_json_str or permission_json_str == "{}":
         return DEFAULT_PERMISSION.copy()
     try:
         user_perm = json.loads(permission_json_str)
         merged = DEFAULT_PERMISSION.copy()
-        merged.update(user_perm)
+        # list 字段做并集，其他字段直接覆盖
+        for key in ("allowed_tools", "needs_user_confirm", "disabled_toolsets", "allowed_paths", "allowed_shell"):
+            if key in user_perm:
+                default_set = set(merged.get(key, []))
+                user_set = set(user_perm[key]) if isinstance(user_perm[key], list) else set()
+                merged[key] = list(default_set | user_set)
+        # 非 list 字段直接覆盖
+        for key, value in user_perm.items():
+            if key not in ("allowed_tools", "needs_user_confirm", "disabled_toolsets", "allowed_paths", "allowed_shell"):
+                merged[key] = value
         return merged
     except (json.JSONDecodeError, TypeError):
         return DEFAULT_PERMISSION.copy()
