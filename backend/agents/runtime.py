@@ -135,17 +135,22 @@ async def _run_turn_inner(
     skill_registry.hot_reload()
     matched_skills = skill_registry.trigger(user_text)
 
-    # 对于 code 模式且有 run.py 的技能，可以预执行
+    # 对于 code 模式且有 run.py 的技能，预执行
     pre_exec_results = {}
     for skill in matched_skills:
-        if skill.execution_mode == "code":
-            from agents.skill_executor import get_skill_run_path
+        if skill.execution_mode == "code" and not skill.code_entry:
+            from agents.skill_executor import get_skill_run_path, execute_skill_code
             if get_skill_run_path(skill.skill_dir):
-                pre_exec_results[skill.code] = True
+                try:
+                    params = {"_agent_root": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", agent.agent_code)}
+                    exec_result = execute_skill_code(skill, params, ctx=None)
+                    pre_exec_results[skill.code] = exec_result
+                except Exception as e:
+                    pre_exec_results[skill.code] = {"ok": False, "error": str(e)}
 
     # 构建 skill_hints
     if matched_skills:
-        skill_hints = _build_skill_hints(matched_skills)
+        skill_hints = _build_skill_hints(matched_skills, pre_exec_results)
     else:
         skill_hints = skill_registry.l1_summary_text()
 
@@ -463,21 +468,59 @@ def _build_tool_result_content(result: dict, tool_name: str):
     return json.dumps(result, ensure_ascii=False)
 
 
-def _build_skill_hints(skills: list) -> str:
+def _build_skill_hints(skills: list, pre_exec_results: dict = None) -> str:
     """构建技能提示文本
 
     根据技能的 execution_mode 决定注入策略：
     - instruction: 注入完整工作流指令
-    - code: 注入简短指令引导调用 fund_skill_run
+    - code (有 code_entry): 注入简短指令引导调用 fund_skill_run
+    - code (无 code_entry, 预执行成功): 注入执行结果摘要
+    - code (无 code_entry, 预执行失败): 注入简短指令引导调用 skill_run
     - hybrid: 同时注入代码指令和工作流补充
     """
     if not skills:
         return skill_registry.l1_summary_text()
+    pre_exec = pre_exec_results or {}
     parts = ["以下技能已激活，你必须严格按照其中的步骤执行："]
     for skill in skills:
-        instruction = format_skill_instruction(skill)
-        parts.append(instruction)
+        # 无 code_entry 且预执行有结果的：直接注入结果摘要
+        if skill.execution_mode == "code" and not skill.code_entry and skill.code in pre_exec:
+            result = pre_exec[skill.code]
+            parts.append(_format_pre_exec_result(skill, result))
+        else:
+            instruction = format_skill_instruction(skill)
+            parts.append(instruction)
     return "\n".join(parts)
+
+
+def _format_pre_exec_result(skill, result: dict) -> str:
+    """格式化预执行结果，注入到上下文中"""
+    status = "成功" if result.get("ok") else "失败"
+    lines = [
+        f'<active-skill id="{skill.code}" mode="code">',
+        f"## 技能已自动执行（代码模式）：{skill.name or skill.code}",
+        "",
+        f"**目标**: {skill.description}",
+        f"**执行状态**: {status}",
+        "",
+    ]
+    if result.get("ok"):
+        payload = result.get("result", {})
+        if isinstance(payload, dict):
+            summary = json.dumps(payload, ensure_ascii=False)
+            if len(summary) > 3000:
+                summary = summary[:3000] + "\n[...结果已截断]"
+            lines.append(f"**执行结果**:\n```json\n{summary}\n```")
+        else:
+            lines.append(f"**执行结果**: {payload}")
+        lines.append("")
+        lines.append("请根据以上执行结果向用户汇报。如果结果不完整，可以调用 `skill_run` 重新执行。")
+    else:
+        lines.append(f"**错误信息**: {result.get('error', '未知错误')}")
+        lines.append("")
+        lines.append(f"自动执行失败，请尝试通过 `skill_run(skill_code=\"{skill.code}\")` 手动调用。")
+    lines.append("</active-skill>")
+    return "\n".join(lines)
 
 
 def _format_messages(system_prompt: str, history: list[dict]) -> list[dict]:

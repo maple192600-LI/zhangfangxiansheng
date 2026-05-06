@@ -113,6 +113,15 @@ def format_skill_instruction(skill: SkillMeta) -> str:
             enhanced_body = enhanced_body[:max_body] + "\n\n[...技能指令已截断，请按已显示的步骤执行]"
         parts.append(enhanced_body)
 
+    # L3 资源引用
+    refs_index = _list_references(skill.skill_dir)
+    if refs_index:
+        parts.append("")
+        parts.append("### 按需参考资料")
+        for ref_name, ref_desc in refs_index.items():
+            parts.append(f"- `{ref_name}`: {ref_desc}")
+        parts.append("（需要时使用 `fs_read` 读取 references/ 中的文件）")
+
     parts.append("</active-skill>")
 
     return "\n".join(parts)
@@ -290,3 +299,37 @@ def get_skill_run_path(skill_dir: str) -> Optional[str]:
     """检查 skill 目录是否有 run.py"""
     run_file = os.path.join(skill_dir, "run.py")
     return run_file if os.path.isfile(run_file) else None
+
+
+def _list_references(skill_dir: str) -> dict[str, str]:
+    """扫描 references/ 目录，返回 {相对路径: 前100字符摘要}"""
+    refs_dir = os.path.join(skill_dir, "references")
+    if not os.path.isdir(refs_dir):
+        return {}
+    result = {}
+    for fname in sorted(os.listdir(refs_dir)):
+        fpath = os.path.join(refs_dir, fname)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                preview = f.read(100).strip().split("\n")[0]
+            result[f"references/{fname}"] = preview[:80] + ("..." if len(preview) > 80 else "")
+        except Exception:
+            result[f"references/{fname}"] = "(无法预览)"
+    return result
+
+
+def load_skill_reference(skill_dir: str, ref_path: str) -> Optional[str]:
+    """加载 references/ 或 scripts/ 下的指定文件"""
+    base = os.path.normpath(os.path.join(skill_dir, ref_path))
+    # 安全校验：防止路径遍历
+    if not base.startswith(os.path.normpath(skill_dir)):
+        return None
+    if not os.path.isfile(base):
+        return None
+    try:
+        with open(base, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return None

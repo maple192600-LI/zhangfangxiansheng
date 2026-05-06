@@ -56,12 +56,13 @@ class Curator:
         return counts
 
     def _apply_transitions(self) -> dict:
-        """纯时间判断的状态转换"""
+        """时间判断 + 经验分析的状态转换"""
         now = datetime.now()
         stale_cutoff = now - timedelta(days=STALE_AFTER_DAYS)
         archive_cutoff = now - timedelta(days=ARCHIVE_AFTER_DAYS)
 
-        counts = {"checked": 0, "stale": 0, "archived": 0, "reactivated": 0}
+        counts = {"checked": 0, "stale": 0, "archived": 0, "reactivated": 0,
+                  "needs_fix": 0, "suggest_upgrade": 0, "suggest_verified": 0}
 
         if not self.skills_dir.exists():
             return counts
@@ -106,11 +107,72 @@ class Curator:
                 meta["lifecycle"] = "active"
                 counts["reactivated"] += 1
 
+            # 经验分析
+            analysis = self._analyze_experience(skill_dir)
+            meta["experience_analysis"] = analysis
+
+            if analysis.get("needs_fix"):
+                counts["needs_fix"] += 1
+                meta["curator_flag"] = "needs_fix"
+            elif analysis.get("suggest_upgrade"):
+                counts["suggest_upgrade"] += 1
+                meta["curator_flag"] = "suggest_upgrade"
+            elif analysis.get("suggest_verified"):
+                counts["suggest_verified"] += 1
+                meta["curator_flag"] = "suggest_verified"
+            else:
+                meta.pop("curator_flag", None)
+
             meta_file.write_text(
                 json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
         return counts
+
+    def _analyze_experience(self, skill_dir: Path) -> dict:
+        """分析 experience.json，返回决策建议"""
+        exp_file = skill_dir / "experience.json"
+        if not exp_file.exists():
+            return {}
+
+        try:
+            exp = json.loads(exp_file.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+        stats = exp.get("stats", {})
+        total_runs = stats.get("total_runs", 0)
+        successes = stats.get("successes", 0)
+        corrections = exp.get("corrections", [])
+
+        result = {}
+
+        # 成功率 < 50% → 需要修复
+        if total_runs >= 3:
+            success_rate = successes / total_runs if total_runs > 0 else 0
+            if success_rate < 0.5:
+                result["needs_fix"] = True
+                result["success_rate"] = round(success_rate, 2)
+                result["total_runs"] = total_runs
+
+        # ≥3 次同类修正 → 建议升级
+        if corrections:
+            from collections import Counter
+            field_counts = Counter(c.get("field", "") for c in corrections)
+            for field, count in field_counts.items():
+                if count >= 3 and field:
+                    result["suggest_upgrade"] = True
+                    result["upgrade_reason"] = f"字段 '{field}' 累计修正 {count} 次"
+                    break
+
+        # >10 次执行且成功率 >90% → 建议标记为 verified
+        if total_runs > 10:
+            success_rate = successes / total_runs
+            if success_rate > 0.9:
+                result["suggest_verified"] = True
+                result["success_rate"] = round(success_rate, 2)
+
+        return result
 
     def _load_state(self) -> dict:
         if self.state_file.exists():

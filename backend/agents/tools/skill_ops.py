@@ -35,36 +35,53 @@ def skill_list(ctx: ToolContext = None) -> dict:
 
 @register_tool(read_only=True)
 def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
-    """运行一个技能。skill_code 为技能编码（如 "fund_parser_bank"），其他参数传给技能的 run(params)。
+    """运行一个技能。skill_code 为技能编码（如 "parse_boc"），其他参数传给技能的 run(params)。
 
-    注意：对于基于 SKILL.md 的技能，通常不需要调用此工具，技能的指令会直接注入到上下文中由 LLM 执行。
-    此工具主要用于兼容旧格式（有 run.py 的）技能。
+    对于 code 模式技能：直接执行 run.py（确定性）。
+    对于 instruction 模式技能：不应通过此工具调用，由 LLM 按上下文指令执行。
     """
-    from agents.skill_loader import get_skill_path, run_skill
+    from agents.skill_registry import skill_registry
+    from agents.skill_executor import execute_skill_code
 
-    # 查找 skill 路径
-    agent_code = ctx.agent_code
-    skill_path = get_skill_path(agent_code, skill_code)
+    # 先从 registry 查找
+    skill = skill_registry.get_skill(skill_code)
 
-    if not os.path.isdir(skill_path):
-        return {"ok": False, "error": f"技能不存在: {skill_code}"}
+    if not skill:
+        # fallback：尝试按路径查找
+        from agents.skill_registry import get_skill_path
+        agent_code = ctx.agent_code
+        skill_path = get_skill_path(agent_code, skill_code)
+        if not os.path.isdir(skill_path):
+            return {"ok": False, "error": f"技能不存在: {skill_code}"}
+        from agents.skill_registry import load_skill_l1
+        skill = load_skill_l1(skill_path)
+        if not skill:
+            return {"ok": False, "error": f"技能元数据加载失败: {skill_code}"}
 
-    # 构建参数
+    # instruction 模式：不应通过此工具调用
+    if skill.execution_mode == "instruction":
+        return {
+            "ok": False,
+            "error": f"技能 '{skill_code}' 是指令模式，应按上下文中的 <active-skill> 步骤执行，不要调用 skill_run",
+        }
+
+    # code / hybrid 模式：构建参数并执行
     params = dict(kwargs)
-
-    # 注入 agent 工作区路径
     from agents.workspace import get_agent_root
-    params["_agent_root"] = get_agent_root(agent_code)
+    params["_agent_root"] = get_agent_root(ctx.agent_code)
 
-    # 如果有 file_path，转为绝对路径
     if "file_path" in params:
-        abs_path = safe_path(agent_code, params["file_path"])
+        abs_path = safe_path(ctx.agent_code, params["file_path"])
         if abs_path:
             params["file_path"] = abs_path
         else:
             return {"ok": False, "error": f"文件路径越界: {params['file_path']}"}
 
-    result = run_skill(skill_path, params)
+    result = execute_skill_code(skill, params, ctx=None)
+
+    # 更新 .meta.json last_used_at
+    _update_meta_last_used(skill.skill_dir)
+
     return result
 
 
@@ -210,12 +227,16 @@ def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = Non
     if skill_name not in allowed:
         return {"ok": False, "error": f"未知的 Fund 技能: {skill_name}，可用: {', '.join(sorted(allowed))}"}
 
+    ok = False
     try:
         agent = FundAgent(ctx.db)
         result = agent.run_skill(skill_name, payload or {})
+        ok = True
         return {"ok": True, "result": result.payload}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+    finally:
+        _record_fund_skill_experience(skill_name, ok)
 
 
 @register_tool(read_only=True)
@@ -484,3 +505,42 @@ def skill_upgrade(
         "message": f"技能 {skill_code} 已升级，旧版本已备份为 {backup_name}",
     }
 
+
+def _update_meta_last_used(skill_dir: str) -> None:
+    """更新 .meta.json 的 last_used_at 时间戳"""
+    meta_file = os.path.join(skill_dir, ".meta.json")
+    if not os.path.isfile(meta_file):
+        return
+    try:
+        with open(meta_file, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        meta["last_used_at"] = datetime.now().isoformat()
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+# fund 技能名 → 系统 skill 目录名 的映射
+_FUND_SKILL_MAP = {
+    "parser.bank": "fund_parser_bank",
+    "parser.manual": "fund_parser_manual",
+    "rule.template_fill": "fund_rule_template_fill",
+    "rule.maintain": "fund_rule_maintain",
+    "template.inference": "fund_template_inference",
+}
+
+
+def _record_fund_skill_experience(skill_name: str, ok: bool) -> None:
+    """fund_skill_run 执行后，记录到对应系统技能的 experience.json"""
+    from agents.skill_executor import _record_execution
+    from config import AGENTS_ROOT
+
+    skill_dir_name = _FUND_SKILL_MAP.get(skill_name)
+    if not skill_dir_name:
+        return
+    skill_dir = os.path.join(AGENTS_ROOT, "system", "skills", skill_dir_name)
+    if os.path.isdir(skill_dir):
+        import time as _time
+        _record_execution(skill_dir, ok=ok, duration_ms=0)
+        _update_meta_last_used(skill_dir)
