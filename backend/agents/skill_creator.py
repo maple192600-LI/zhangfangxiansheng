@@ -148,7 +148,7 @@ def ensure_skill_creator_installed() -> bool:
             "fs_read", "fs_write", "fs_list",
             "openpyxl_read", "openpyxl_write",
             "ask_user", "skill_run", "skill_test",
-            "skill_step_report",
+            "skill_step_report", "skill_save",
         ],
         arguments={
             "intent": {"description": "用户想创建的技能意图描述", "required": True},
@@ -166,22 +166,28 @@ def ensure_skill_creator_installed() -> bool:
             "## 第二步：分析样本\n\n"
             "如果用户提供了样本文件，调用 `file_parse(path='<文件路径>')` 或 "
             "`openpyxl_read(path='<文件路径>')` 分析数据结构。\n\n"
-            "## 第三步：设计工作流程\n\n"
-            "按以下格式设计分步指令：\n"
-            "- 每一步必须明确调用哪个工具、参数怎么填\n"
-            "- 包含错误处理（工具调用失败时怎么办）\n"
-            "- 包含数据校验步骤\n\n"
-            "## 第四步：生成 SKILL.md\n\n"
-            "使用 `fs_write(path='skills/<skill-name>/SKILL.md', content='<SKILL.md内容>')` 写入文件。\n\n"
+            "## 第三步：确定执行模式\n\n"
+            "根据任务性质选择执行模式：\n"
+            "- 如果任务需要确定性数据处理（解析文件、转换格式），选择 code 模式\n"
+            "  → 需要编写 run.py 代码\n"
+            "- 如果任务需要多步工具编排（查询→分析→写入），选择 instruction 模式\n"
+            "  → 需要在 SKILL.md body 中编写步骤\n"
+            "- 如果两者都需要，选择 hybrid 模式\n\n"
+            "## 第四步：生成技能\n\n"
+            "调用 `skill_save` 工具保存技能：\n"
+            "- code 模式：提供 run_py 参数（Python 代码）\n"
+            "- instruction 模式：提供 workflow_md 参数（工作流程描述）\n"
+            "- hybrid 模式：同时提供两者\n\n"
             "## 第五步：验证\n\n"
-            "调用 `skill_test(skill_code='<skill-name>')` 测试新技能。如果测试失败，分析错误并修复 SKILL.md。"
+            "调用 `skill_test(skill_code='<skill-name>')` 测试新技能。如果测试失败，分析错误并修复。"
         ),
         rules=(
             "- 技能名称使用 kebab-case 格式（如 fund_parser_bank）\n"
             "- description 必须简洁准确（一句话说清楚技能做什么）\n"
+            "- code 模式技能的 run.py 必须有 run(params) 入口函数\n"
             "- 工作流程必须使用分步指令格式（## 第一步、## 第二步...）\n"
-            "- 每个步骤必须明确指定调用的工具和参数\n"
-            "- 包含关键规则（边界条件、错误处理、数据校验）"
+            "- 包含关键规则（边界条件、错误处理、数据校验）\n"
+            "- 优先使用 skill_save 而不是 fs_write 来创建技能"
         ),
     )
 

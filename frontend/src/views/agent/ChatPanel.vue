@@ -95,17 +95,33 @@
       </div>
     </div>
 
-    <!-- 工具确认对话框 -->
+    <!-- 工具确认 / Agent 提问对话框 -->
     <div v-if="confirmData" class="confirm-overlay">
       <div class="confirm-box">
-        <div class="confirm-icon">🔐</div>
-        <div class="confirm-title">工具执行确认</div>
-        <div class="confirm-msg">{{ confirmData.message }}</div>
-        <div class="confirm-tool">工具: {{ confirmData.name }}</div>
-        <div class="confirm-btns">
-          <button class="confirm-reject" @click="rejectConfirm">拒绝</button>
-          <button class="confirm-approve" @click="approveConfirm">允许执行</button>
-        </div>
+        <template v-if="confirmData.isAskUser">
+          <div class="confirm-icon">💬</div>
+          <div class="confirm-title">Agent 提问</div>
+          <div class="confirm-msg">{{ confirmData.message }}</div>
+          <div class="confirm-input-row">
+            <input
+              v-model="askUserReply"
+              class="confirm-input"
+              placeholder="请输入回复..."
+              @keydown.enter.prevent="submitAskUser"
+            />
+            <button class="confirm-approve" @click="submitAskUser">发送回复</button>
+          </div>
+        </template>
+        <template v-else>
+          <div class="confirm-icon">🔐</div>
+          <div class="confirm-title">工具执行确认</div>
+          <div class="confirm-msg">{{ confirmData.message }}</div>
+          <div class="confirm-tool">工具: {{ confirmData.name }}</div>
+          <div class="confirm-btns">
+            <button class="confirm-reject" @click="rejectConfirm">拒绝</button>
+            <button class="confirm-approve" @click="approveConfirm">允许执行</button>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -160,6 +176,7 @@ const attachFiles = ref([])
 const workspaceRefs = ref([])
 const dragOver = ref(false)
 const confirmData = ref(null)
+const askUserReply = ref('')
 let streamAbort = null
 let dragTimer = null
 
@@ -274,6 +291,17 @@ async function send() {
       }
       scrollEnd()
     },
+    onAskUser(d) {
+      // Agent 向用户提问 — 复用 confirm 机制，将用户回复作为 reason 传回
+      confirmData.value = {
+        tool_call_id: d.tool_call_id || '',
+        name: 'ask_user',
+        message: d.question || 'Agent 正在提问...',
+        args: {},
+        isAskUser: true,
+      }
+      scrollEnd()
+    },
     onDone() {
       if (streamingText.value) {
         messages.value.push({ id: Date.now() + 2, role: 'assistant', content: streamingText.value })
@@ -342,6 +370,18 @@ async function rejectConfirm() {
   streamAbort = null
   messages.value.push({ id: Date.now(), role: 'assistant', content: '操作已取消。' })
   scrollEnd()
+}
+
+async function submitAskUser() {
+  if (!confirmData.value) return
+  const reply = askUserReply.value.trim()
+  if (!reply) return
+  const { tool_call_id } = confirmData.value
+  confirmData.value = null
+  askUserReply.value = ''
+  try {
+    await toolConfirm(props.sessionId, tool_call_id, true, reply)
+  } catch {}
 }
 
 async function regenerate(msg) {

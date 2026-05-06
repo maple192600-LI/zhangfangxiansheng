@@ -12,6 +12,7 @@ DEFAULT_PERMISSION = {
         "file_parse",
         "memory_save", "memory_search",
         "skill_list", "skill_run", "skill_check_deps", "skill_step_report",
+        "skill_save", "skill_learn", "skill_upgrade",
         "ask_user",
         "openpyxl_read",
         "db_query_business",
@@ -20,7 +21,7 @@ DEFAULT_PERMISSION = {
     "needs_user_confirm": [
         "fs_write", "fs_edit",
         "python_exec",
-        "skill_create", "skill_test", "skill_install",
+        "skill_create", "skill_test", "skill_install", "skill_upgrade",
         "db_insert_fund_event",
         "db_save_parser_template",
         "db_delete_parser_template",

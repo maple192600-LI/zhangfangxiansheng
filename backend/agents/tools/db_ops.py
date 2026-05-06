@@ -8,7 +8,30 @@ from agents.tool_registry import register_tool, ToolContext
 
 @register_tool(read_only=True)
 def db_query_business(table_name: str, filters: dict = None, limit: int = 50, ctx: ToolContext = None) -> dict:
-    """查询业务数据表。支持: entities(法人), accounts(账户), fund_events(资金流水), banks(银行)。filters 为筛选条件字典。"""
+    """查询业务数据表，返回匹配的记录列表。
+
+    支持的表：
+    - entities: 法人实体（entity_code, entity_name, ...）
+    - accounts: 银行/现金账户（account_code, account_name, account_type, entity_code, ...）
+    - banks: 银行信息（bank_code, bank_name, ...）
+    - fund_events: 资金流水记录（business_date, entity_code, account_code, amount_in, amount_out, balance, summary, counterparty, ...）
+    - divisions: 核算部门
+    - account_aliases: 账户别名
+    - parser_templates: 解析规则模板（id, template_name, template_type, mapping_json, ...）
+
+    参数说明：
+    - table_name: 必需，要查询的表名（必须是上面列出的之一）
+    - filters: 可选，筛选条件字典，键为列名，值为精确匹配值。示例：{"account_code": "ZH0008", "business_date": "2025-01-15"}
+    - limit: 可选，最大返回条数，默认 50，上限 200
+
+    使用场景：
+    - 查询账户信息：table_name="accounts", filters={"account_code": "ZH0008"}
+    - 查询资金流水：table_name="fund_events", filters={"account_code": "ZH0008"}, limit=100
+    - 查询解析规则：table_name="parser_templates", filters={"template_type": "bank"}
+    - 查询法人信息：table_name="entities"
+
+    返回格式：{"ok": true, "table": "表名", "count": N, "rows": [{...}, ...]}
+    """
     from database import SessionLocal
     from db import tables as tb
 
@@ -19,6 +42,7 @@ def db_query_business(table_name: str, filters: dict = None, limit: int = 50, ct
         "fund_events": tb.FundEvent,
         "divisions": tb.Division,
         "account_aliases": tb.AccountAlias,
+        "parser_templates": tb.ParserTemplate,
     }
 
     if table_name not in TABLE_MAP:
@@ -62,7 +86,25 @@ def db_insert_fund_event(
     counterparty: str = "",
     ctx: ToolContext = None,
 ) -> dict:
-    """向 fund_events 资金流水表插入一条记录。business_date 格式 YYYY-MM-DD。"""
+    """向 fund_events 资金流水表插入一条记录。
+
+    使用场景：解析银行流水或录入手工流水后，将每条流水记录写入数据库。
+
+    参数说明：
+    - business_date: 必需，交易日期，格式 YYYY-MM-DD（如 "2025-01-15"）
+    - entity_code: 必需，法人编码（如 "GS001"）。从 accounts 表查询获取，不要让用户提供
+    - entity_name: 必需，法人名称（如 "XX有限公司"）。从 accounts 表查询获取
+    - account_code: 必需，账户编码（如 "ZH0008"）
+    - account_name: 必需，账户名称（如 "中国银行基本户"）。从 accounts 表查询获取
+    - amount_in: 可选，收入金额，默认 0。正数表示收入
+    - amount_out: 可选，支出金额，默认 0。正数表示支出。注意：amount_in 和 amount_out 不能同时大于 0
+    - summary: 可选，交易摘要
+    - counterparty: 可选，对方户名
+
+    重要：写入前应先查询同日期+同金额+同摘要是否已存在，避免重复导入。
+
+    返回格式：{"ok": true, "id": 新记录ID} 或 {"ok": false, "error": "错误原因"}
+    """
     from db.tables import FundEvent
 
     if amount_in > 0 and amount_out > 0:
@@ -101,7 +143,39 @@ def db_save_parser_template(
     mapping_json: str = "{}",
     ctx: ToolContext = None,
 ) -> dict:
-    """保存银行流水解析规则模板到规则中心。template_name 规则名称（如"中国银行流水规则"），account_code 关联的账户编号（如"ZH0008"），file_format 文件格式(xlsx/xls/csv)，header_row 表头所在行号(0起)，skip_rows 数据跳过行数，sample_headers 样本表头JSON数组字符串，mapping_json 列映射JSON字符串（银行列名→标准字段）。标准字段包括: business_date(交易日期), business_time(交易时间), income_amount(收入金额), expense_amount(支出金额), balance(余额), counterparty_name(对方户名), summary_text(摘要), counterpart_account(对方账号), counterpart_bank(对方开户行), transaction_type(交易类型), voucher_no(凭证号)。"""
+    """保存解析规则模板到规则中心（银行流水解析规则或报表填充规则）。
+
+    使用场景：
+    - 分析完银行流水文件结构后，保存列映射规则
+    - 创建报表模板的数据映射规则
+
+    参数说明：
+    - template_name: 必需，规则名称（如"中国银行流水规则"、"XX日报填充规则"）
+    - account_code: 可选，关联的账户编号（如"ZH0008"），银行流水规则必须填写
+    - file_format: 文件格式，"xlsx"（默认）/"xls"/"csv"
+    - header_row: 表头所在行号，从 0 开始计数
+    - skip_rows: 数据区前需要跳过的行数
+    - sample_headers: 样本表头，JSON 数组字符串。如 '["交易日期","贷方发生额","余额","摘要"]'
+    - mapping_json: 列映射规则，JSON 对象字符串，键为银行原始列名，值为标准字段名。mapping_json 必须是非空字典。
+
+    标准字段名（mapping_json 的值只能用这些）：
+    - business_date: 交易日期
+    - business_time: 交易时间
+    - income_amount: 收入金额
+    - expense_amount: 支出金额
+    - balance: 余额
+    - counterparty_name: 对方户名
+    - summary_text: 摘要
+    - counterpart_account: 对方账号
+    - counterpart_bank: 对方开户行
+    - transaction_type: 交易类型
+    - voucher_no: 凭证号
+
+    mapping_json 示例：
+    '{"交易日期": "business_date", "贷方发生额": "income_amount", "余额": "balance", "摘要": "summary_text"}'
+
+    返回格式：{"ok": true, "id": 模板ID, "template_name": "名称"} 或 {"ok": false, "error": "错误原因"}
+    """
     from db.tables import ParserTemplate
     import json as _json
 
@@ -141,6 +215,27 @@ def db_save_parser_template(
             "template_name": obj.template_name,
             "message": f"规则模板「{template_name}」已保存到规则中心",
         }
+    except Exception as e:
+        ctx.db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@register_tool(read_only=False)
+def db_delete_parser_template(
+    template_id: int,
+    ctx: ToolContext = None,
+) -> dict:
+    """删除规则中心的一条解析规则模板。template_id 为规则模板的 ID。"""
+    from db.tables import ParserTemplate
+
+    try:
+        obj = ctx.db.query(ParserTemplate).filter(ParserTemplate.id == template_id).first()
+        if not obj:
+            return {"ok": False, "error": f"未找到 ID 为 {template_id} 的规则模板"}
+        name = obj.template_name
+        ctx.db.delete(obj)
+        ctx.db.commit()
+        return {"ok": True, "message": f"规则模板「{name}」（ID={template_id}）已删除"}
     except Exception as e:
         ctx.db.rollback()
         return {"ok": False, "error": str(e)}

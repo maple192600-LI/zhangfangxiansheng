@@ -37,11 +37,9 @@ const routes = [
       { path: 'month-report', name: 'month-report', component: () => import('@/views/MonthReport.vue') },
       { path: 'year-report', name: 'year-report', component: () => import('@/views/YearReport.vue') },
 
-      // OCR识别
-      { path: 'invoice-ocr', name: 'invoice-ocr', component: Placeholder },
-      { path: 'contract-ocr', name: 'contract-ocr', component: Placeholder },
-      { path: 'receipt-ocr', name: 'receipt-ocr', component: Placeholder },
-      { path: 'payment-ocr', name: 'payment-ocr', component: Placeholder },
+      // 票据中心
+      { path: 'ocr/upload', name: 'ocr-upload', component: Placeholder },
+      { path: 'ocr/settings', name: 'ocr-settings', component: Placeholder },
       { path: 'invoice-ledger', name: 'invoice-ledger', component: Placeholder },
       { path: 'contract-ledger', name: 'contract-ledger', component: Placeholder },
 
@@ -69,9 +67,6 @@ const routes = [
       { path: 'account-manage', name: 'account-manage', component: () => import('@/views/AccountManage.vue') },
       { path: 'data/report-tpl', name: 'data-report-tpl', component: () => import('@/views/ReportTemplate.vue') },
       { path: 'data/department', name: 'data-department', component: Placeholder },
-      { path: 'data/contract', name: 'data-contract', component: Placeholder },
-      { path: 'data/invoice', name: 'data-invoice', component: Placeholder },
-      { path: 'data/voucher-tpl', name: 'data-voucher-tpl', component: Placeholder },
 
       // 系统设置 > 规则中心
       { path: 'rule/bank', name: 'rule-bank', component: () => import('@/views/BankRule.vue') },

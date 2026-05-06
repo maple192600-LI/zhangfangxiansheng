@@ -135,6 +135,14 @@ async def _run_turn_inner(
     skill_registry.hot_reload()
     matched_skills = skill_registry.trigger(user_text)
 
+    # 对于 code 模式且有 run.py 的技能，可以预执行
+    pre_exec_results = {}
+    for skill in matched_skills:
+        if skill.execution_mode == "code":
+            from agents.skill_executor import get_skill_run_path
+            if get_skill_run_path(skill.skill_dir):
+                pre_exec_results[skill.code] = True
+
     # 构建 skill_hints
     if matched_skills:
         skill_hints = _build_skill_hints(matched_skills)

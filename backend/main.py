@@ -188,6 +188,9 @@ async def lifespan(app: FastAPI):
     _init_db()
     from services.agent_init import init_agent_workspaces
     init_agent_workspaces()
+    # 启动时扫描技能目录
+    from agents.skill_registry import skill_registry
+    skill_registry.startup_scan()
     print(f"账房先生已启动 → http://{HOST}:{PORT}")
     _open_browser(f"http://{HOST}:{PORT}")
     yield

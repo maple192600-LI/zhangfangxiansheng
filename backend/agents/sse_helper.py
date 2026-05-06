@@ -44,3 +44,11 @@ def sse_confirm_request(name: str, args: dict, message: str, tool_call_id: str =
     if tool_call_id:
         payload["tool_call_id"] = tool_call_id
     return sse_event("confirm_request", payload)
+
+
+def sse_ask_user(question: str, tool_call_id: str = "") -> str:
+    """Agent 向用户提问事件 — 暂停执行等待用户回复"""
+    payload = {"question": question}
+    if tool_call_id:
+        payload["tool_call_id"] = tool_call_id
+    return sse_event("ask_user", payload)

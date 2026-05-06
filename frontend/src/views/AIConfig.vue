@@ -3,7 +3,7 @@
     <!-- 左侧：供应商列表 -->
     <div class="provider-sidebar">
       <div class="sidebar-head">
-        <h3>模型供应商</h3>
+        <h3>模型配置</h3>
         <button class="btn-add" @click="addProvider" title="添加供应商">+</button>
       </div>
 
@@ -404,10 +404,7 @@ onMounted(async () => {
   gap: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  background: #fff;
 }
 
 /* ── 左侧 ── */
@@ -416,7 +413,6 @@ onMounted(async () => {
   flex-direction: column;
   border-right: 1px solid var(--line-soft);
   background: #faf8f3;
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 }
 .sidebar-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -465,8 +461,7 @@ onMounted(async () => {
 
 /* ── 表单 ── */
 .detail-form { display: flex; flex-direction: column; height: 100%; }
-.form-scroll { flex: 1; overflow-y: auto; padding: 22px 28px 12px; }
-.form-section { max-width: 600px; }
+.form-scroll { flex: 1; overflow-y: auto; padding: 22px 32px 12px; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 2px; }
 .form-field { margin-bottom: 12px; }
@@ -521,7 +516,7 @@ onMounted(async () => {
 /* 底部操作栏 */
 .form-footer {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 28px; border-top: 1px solid var(--line-soft);
+  padding: 12px 32px; border-top: 1px solid var(--line-soft);
   background: #faf8f3;
 }
 .footer-left, .footer-right { display: flex; align-items: center; gap: 8px; }
@@ -559,8 +554,8 @@ onMounted(async () => {
 .log-table { font-size: var(--font-size-xs); }
 
 @media (max-width: 900px) {
-  .provider-layout { grid-template-columns: 1fr; }
-  .provider-sidebar { border-right: none; border-bottom: 1px solid var(--line-soft); border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 200px; }
+  .provider-layout { grid-template-columns: 1fr; margin: -12px; }
+  .provider-sidebar { border-right: none; border-bottom: 1px solid var(--line-soft); max-height: 200px; }
   .form-row { grid-template-columns: 1fr; }
   .model-grid { grid-template-columns: 1fr; }
 }

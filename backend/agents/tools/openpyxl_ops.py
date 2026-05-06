@@ -8,7 +8,20 @@ from agents.workspace import safe_path, get_agent_root
 
 @register_tool(read_only=True)
 def openpyxl_read(path: str, sheet_name: str = None, max_rows: int = 100, ctx: ToolContext = None) -> dict:
-    """读取工作区内的 Excel 文件（xlsx/xls），返回二维表格数据。path 为相对路径。"""
+    """读取工作区内的 Excel 文件，返回结构化的二维表格数据。
+
+    使用场景：
+    - 读取银行流水 Excel 文件（file_parse 适合纯文本提取，本工具适合结构化读取）
+    - 读取报表模板，获取精确的单元格数据
+    - 需要知道 sheet 名称、表头、行数据时
+
+    参数：
+    - path: 必需，相对路径
+    - sheet_name: 可选，指定读取哪个 sheet，不填读第一个
+    - max_rows: 可选，最大读取行数，默认 100
+
+    返回：{"ok": true, "sheet_name": "Sheet名", "sheets": ["Sheet1", ...], "headers": [...], "rows": [[...], ...]}
+    """
     abs_path = safe_path(ctx.agent_code, path)
     if not abs_path or not os.path.isfile(abs_path):
         return {"ok": False, "error": f"文件不存在: {path}"}
@@ -75,7 +88,16 @@ def _read_csv(filepath: str, max_rows: int) -> dict:
 
 @register_tool(read_only=False)
 def openpyxl_write(path: str, headers: list, rows: list, sheet_name: str = "Sheet1", ctx: ToolContext = None) -> dict:
-    """将二维数据写入工作区内的 Excel 文件（xlsx）。如文件已存在则覆盖。"""
+    """将二维数据写入 Excel 文件。如文件已存在则覆盖创建新文件。
+
+    使用场景：生成导出报表、创建数据汇总 Excel。
+
+    参数：
+    - path: 必需，输出文件相对路径
+    - headers: 必需，表头列表，如 ["日期", "摘要", "收入", "支出"]
+    - rows: 必需，数据行列表，如 [["2025-01-01", "测试", 100, 0]]
+    - sheet_name: 可选，Sheet 名称，默认 "Sheet1"
+    """
     import openpyxl
     abs_path = safe_path(ctx.agent_code, path)
     if not abs_path:
@@ -99,3 +121,42 @@ def openpyxl_write(path: str, headers: list, rows: list, sheet_name: str = "Shee
     wb.save(abs_path)
     wb.close()
     return {"ok": True, "path": path, "rows_written": len(rows), "columns": len(headers) if headers else 0}
+
+
+@register_tool(read_only=False)
+def openpyxl_edit(path: str, cells: dict, ctx: ToolContext = None) -> dict:
+    """编辑现有 Excel 文件中的指定单元格。用于填充报表模板中的占位符。
+
+    使用场景：
+    - 填充报表模板（将占位符替换为实际数据）
+    - 修改现有报表中的特定单元格
+
+    参数：
+    - path: 必需，Excel 文件相对路径
+    - cells: 必需，单元格修改字典，键为单元格坐标（如 "B3"），值为要写入的内容（字符串或数字）
+      示例：{"B3": "2025年1月", "C5": 10000.00, "D5": "=C5*0.13"}
+
+    返回：{"ok": true, "path": "路径", "cells_updated": 修改的单元格数量}
+    """
+    import openpyxl
+    abs_path = safe_path(ctx.agent_code, path)
+    if not abs_path or not os.path.isfile(abs_path):
+        return {"ok": False, "error": f"文件不存在: {path}"}
+
+    try:
+        wb = openpyxl.load_workbook(abs_path)
+        ws = wb.active
+
+        updated = 0
+        for cell_ref, value in cells.items():
+            try:
+                ws[cell_ref] = value
+                updated += 1
+            except Exception:
+                pass
+
+        wb.save(abs_path)
+        wb.close()
+        return {"ok": True, "path": path, "cells_updated": updated}
+    except Exception as e:
+        return {"ok": False, "error": f"编辑 Excel 失败: {e}"}

@@ -14,9 +14,24 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif"}
 
 @register_tool(read_only=True)
 def file_parse(path: str, max_pages: int = 50, max_rows: int = 200, ctx: ToolContext = None) -> dict:
-    """智能解析工作区内的文件，自动识别格式并提取文本内容。
-    支持 PDF、DOCX、XLSX、XLS、CSV、TXT、JSON、YAML、MD、图片等格式。
-    path 为工作区内相对路径。"""
+    """智能解析工作区内的文件，自动识别格式并提取文本和表格内容。
+
+    支持格式：PDF、DOCX、XLSX、XLS、CSV、TXT、JSON、YAML、MD、图片（PNG/JPG/GIF/BMP/WebP/TIFF）。
+    path 为工作区内相对路径（如 "inbox/流水.xlsx"），不是绝对路径。
+
+    使用场景：
+    - 用户上传了银行流水文件 → 解析后分析列结构、提取数据
+    - 用户上传了报表模板 → 解析后识别占位符和结构
+    - 用户上传了图片 → 返回图片元信息和 base64 数据
+
+    参数说明：
+    - path: 必需，文件在工作区中的相对路径
+    - max_pages: PDF 最大解析页数，默认 50
+    - max_rows: Excel/CSV 最大解析行数，默认 200
+
+    返回格式：{"ok": true, "format": "excel|pdf|csv|...", "file": "文件名", "content": "解析内容文本", "total_chars": 1234}
+    失败时返回：{"ok": false, "error": "错误原因", "format": "文件格式"}
+    """
     abs_path = safe_path(ctx.agent_code, path)
     if not abs_path or not os.path.isfile(abs_path):
         return {"ok": False, "error": f"文件不存在: {path}"}
@@ -114,10 +129,10 @@ def _parse_docx(filepath: str) -> dict:
 
 
 def _parse_excel(filepath: str, max_rows: int) -> dict:
-    import openpyxl
+    from core.excel_compat import load_workbook_compat
 
     try:
-        wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+        wb = load_workbook_compat(filepath, data_only=True)
         parts = []
 
         for sheet_name in wb.sheetnames:

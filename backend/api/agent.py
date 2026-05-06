@@ -616,3 +616,83 @@ def update_agent_permissions(agent_id: int, request: Request, db: Session = Depe
     agent.updated_at = datetime.now()
     db.commit()
     return success({"ok": True})
+
+
+# ──────────────────────────────────────────
+# 技能管理接口 — 安装/卸载/依赖检查
+# ──────────────────────────────────────────
+@router.get("/skills/available")
+def list_available_skills(agent_code: str = None, db: Session = Depends(get_db)):
+    """列出所有已安装技能及其依赖状态"""
+    from agents.skill_installer import list_available_skills as _list
+    return success(_list(agent_code))
+
+
+@router.get("/skills/{skill_code}/deps")
+def check_skill_deps(skill_code: str, db: Session = Depends(get_db)):
+    """检查指定技能的依赖是否已满足"""
+    from agents.skill_registry import skill_registry
+    from agents.skill_deps import check_dependencies
+
+    skill = skill_registry.get_skill(skill_code)
+    if not skill:
+        return error(2001, f"技能未注册: {skill_code}")
+
+    if not skill.dependencies:
+        return success({"all_met": True, "message": "该技能无依赖声明"})
+
+    result = check_dependencies(skill.dependencies, registry=skill_registry)
+    return success({
+        "all_met": result.all_met,
+        "summary": result.summary,
+        "missing": [
+            {"name": s.name, "type": s.dep_type, "required_spec": s.required_spec}
+            for s in result.missing
+        ],
+        "installed": [
+            {"name": s.name, "type": s.dep_type, "version": s.version}
+            for s in result.statuses if s.installed
+        ],
+    })
+
+
+@router.post("/skills/install")
+async def install_skill(request: Request, db: Session = Depends(get_db)):
+    """安装技能
+
+    Body: {"source_path": "目录或zip路径", "agent_code": "system", "auto_install_deps": true}
+    """
+    body = await request.json()
+    source_path = body.get("source_path", "")
+    agent_code = body.get("agent_code", "system")
+    auto_deps = body.get("auto_install_deps", True)
+
+    if not source_path:
+        return error(2002, "缺少 source_path")
+
+    from agents.skill_installer import install_from_dir, install_from_zip
+    import os
+
+    if source_path.endswith(".zip"):
+        if not os.path.isfile(source_path):
+            return error(2003, f"zip 文件不存在: {source_path}")
+        result = install_from_zip(source_path, agent_code, auto_deps)
+    else:
+        if not os.path.isdir(source_path):
+            return error(2003, f"目录不存在: {source_path}")
+        result = install_from_dir(source_path, agent_code, auto_deps)
+
+    if not result["ok"]:
+        return error(2004, result.get("error", "安装失败"), data=result)
+    return success(result)
+
+
+@router.delete("/skills/{skill_code}")
+def uninstall_skill(skill_code: str, agent_code: str = None, db: Session = Depends(get_db)):
+    """卸载技能"""
+    from agents.skill_installer import uninstall_skill as _uninstall
+
+    result = _uninstall(skill_code, agent_code, db=db)
+    if not result["ok"]:
+        return error(2005, result.get("error", "卸载失败"))
+    return success(result)

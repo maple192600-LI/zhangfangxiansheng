@@ -1,0 +1,228 @@
+"""技能安装编排器
+
+安装流程：
+  1. 来源验证（目录/zip/URL）
+  2. 安全扫描（skill_scanner）
+  3. manifest 验证（SKILL.md 格式）
+  4. 依赖检查 → 可选自动安装
+  5. 文件复制到目标目录
+  6. 注册到 SkillRegistry + DB
+  7. 依赖安装
+
+卸载流程：
+  1. 检查是否有其他技能依赖
+  2. 删除文件
+  3. 从 registry + DB 移除
+"""
+import json
+import logging
+import os
+import shutil
+import tempfile
+import zipfile
+from datetime import datetime
+from typing import Optional
+
+from config import AGENTS_ROOT
+
+logger = logging.getLogger(__name__)
+
+
+def install_from_dir(
+    source_dir: str,
+    agent_code: str = "system",
+    auto_install_deps: bool = True,
+    skip_scan: bool = False,
+) -> dict:
+    """从本地目录安装技能"""
+    # 1. 验证 SKILL.md 存在
+    skill_md = os.path.join(source_dir, "SKILL.md")
+    if not os.path.isfile(skill_md):
+        return {"ok": False, "error": f"SKILL.md 不存在: {source_dir}"}
+
+    # 2. 解析 manifest
+    from agents.skill_registry import load_skill_l1, parse_frontmatter
+    meta = load_skill_l1(source_dir)
+    if not meta:
+        return {"ok": False, "error": "SKILL.md 解析失败"}
+
+    # 3. 安全扫描
+    scan_result = None
+    if not skip_scan:
+        from agents.skill_scanner import scan_skill_dir, format_report
+        scan_result = scan_skill_dir(source_dir)
+        if not scan_result.safe:
+            return {
+                "ok": False,
+                "error": "安全扫描未通过",
+                "scan_report": format_report(scan_result),
+            }
+
+    # 4. 确定目标目录
+    skill_dirname = meta.name or meta.code
+    target_dir = os.path.join(AGENTS_ROOT, agent_code, "skills", skill_dirname)
+
+    if os.path.isdir(target_dir):
+        # 已存在 — 覆盖更新
+        logger.info(f"技能已存在，覆盖更新: {target_dir}")
+
+    # 5. 复制文件
+    os.makedirs(target_dir, exist_ok=True)
+    for item in os.listdir(source_dir):
+        s = os.path.join(source_dir, item)
+        d = os.path.join(target_dir, item)
+        if os.path.isdir(s):
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+            shutil.copytree(s, d)
+        else:
+            shutil.copy2(s, d)
+
+    # 6. 依赖检查
+    from agents.skill_deps import check_dependencies, install_dependencies
+    dep_result = check_dependencies(meta.dependencies)
+
+    dep_install_result = None
+    if not dep_result.all_met and auto_install_deps:
+        pip_missing = [s.name for s in dep_result.missing if s.dep_type == "pip"]
+        if pip_missing:
+            dep_install_result = install_dependencies(meta.dependencies)
+
+    # 7. 重新加载 registry
+    from agents.skill_registry import skill_registry
+    skill_registry.startup_scan(agent_code=agent_code if agent_code != "system" else None)
+
+    return {
+        "ok": True,
+        "skill_code": meta.code,
+        "name": meta.name,
+        "version": meta.version,
+        "target_dir": target_dir,
+        "scan_passed": scan_result.safe if scan_result else True,
+        "deps": {
+            "all_met": dep_result.all_met,
+            "missing": [s.name for s in dep_result.missing],
+        },
+        "deps_installed": dep_install_result,
+    }
+
+
+def install_from_zip(
+    zip_path: str,
+    agent_code: str = "system",
+    auto_install_deps: bool = True,
+) -> dict:
+    """从 zip 文件安装技能"""
+    if not os.path.isfile(zip_path):
+        return {"ok": False, "error": f"文件不存在: {zip_path}"}
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            # 查找 zip 内包含 SKILL.md 的目录
+            skill_dirs = set()
+            for name in zf.namelist():
+                if name.endswith("SKILL.md"):
+                    parts = name.rsplit("/", 1)
+                    if len(parts) == 2:
+                        skill_dirs.add(parts[0])
+                    else:
+                        skill_dirs.add(".")
+
+            if not skill_dirs:
+                return {"ok": False, "error": "zip 中未找到 SKILL.md"}
+
+            # 解压到临时目录
+            tmp_dir = tempfile.mkdtemp(prefix="zf_skill_")
+            zf.extractall(tmp_dir)
+
+            # 安装第一个找到的技能
+            source = os.path.join(tmp_dir, skill_dirs.pop()) if skill_dirs else tmp_dir
+            result = install_from_dir(source, agent_code, auto_install_deps)
+
+            # 清理临时目录
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return result
+
+    except zipfile.BadZipFile:
+        return {"ok": False, "error": "无效的 zip 文件"}
+    except Exception as e:
+        return {"ok": False, "error": f"安装失败: {e}"}
+
+
+def uninstall_skill(
+    skill_code: str,
+    agent_code: str = None,
+    registry=None,
+    db=None,
+) -> dict:
+    """卸载技能
+
+    检查是否被其他技能依赖，删除文件，从 registry 移除。
+    """
+    from agents.skill_registry import skill_registry as _reg
+    reg = registry or _reg
+
+    skill = reg.get_skill(skill_code)
+    if not skill:
+        return {"ok": False, "error": f"技能未注册: {skill_code}"}
+
+    # 检查是否有其他技能依赖它
+    for other in reg.list_skills():
+        if other.code == skill_code:
+            continue
+        dep_skills = other.dependencies.get("skills", [])
+        if skill_code in dep_skills or skill.name in dep_skills:
+            return {
+                "ok": False,
+                "error": f"技能 {other.name} 依赖 {skill_code}，请先卸载 {other.name}",
+            }
+
+    # 删除文件
+    if os.path.isdir(skill.skill_dir):
+        shutil.rmtree(skill.skill_dir)
+
+    # 从 registry 移除
+    if skill_code in reg._skills:
+        del reg._skills[skill_code]
+
+    # 从 DB 移除
+    if db:
+        try:
+            from db.tables import Skill
+            row = db.query(Skill).filter(Skill.skill_code == skill_code).first()
+            if row:
+                db.delete(row)
+                db.commit()
+        except Exception as e:
+            logger.warning(f"DB 删除技能记录失败: {e}")
+
+    return {
+        "ok": True,
+        "skill_code": skill_code,
+        "message": f"技能 {skill.name or skill_code} 已卸载",
+    }
+
+
+def list_available_skills(agent_code: str = None) -> list[dict]:
+    """列出所有已安装技能及其依赖状态"""
+    from agents.skill_registry import skill_registry
+    from agents.skill_deps import check_dependencies
+
+    reg = skill_registry
+    if not reg._loaded:
+        reg.startup_scan(agent_code=agent_code)
+
+    results = []
+    for skill in reg.list_skills():
+        dep_result = check_dependencies(skill.dependencies, registry=reg)
+        results.append({
+            "code": skill.code,
+            "name": skill.name,
+            "description": skill.description,
+            "version": skill.version,
+            "status": "active",
+            "deps_all_met": dep_result.all_met,
+            "deps_missing": [s.name for s in dep_result.missing],
+            "skill_dir": skill.skill_dir,
+        })
+    return results

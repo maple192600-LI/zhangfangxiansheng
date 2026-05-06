@@ -125,13 +125,34 @@
     />
 
     <!-- 右侧内容区 -->
-    <main class="main-area" :class="{ 'main-area--full': isAgentPage }">
+    <main class="main-area" :class="{ 'main-area--full': isAgentPage || isFullPage }">
       <!-- Agent 页面：无 shell 包裹，直接全屏 -->
       <div v-if="isAgentPage" class="agent-page-wrap">
         <router-view v-slot="{ Component }">
           <component :is="Component" />
         </router-view>
       </div>
+      <!-- 全屏页面：有 tabs 无 shell -->
+      <template v-else-if="isFullPage">
+        <div class="right-tabs" v-if="currentTabs.length">
+          <button
+            v-for="(tab, idx) in currentTabs"
+            :key="idx"
+            class="right-tab"
+            :class="{ active: nav.currentTab === idx }"
+            @click="selectTab(idx)"
+          >
+            {{ tab.name }}
+          </button>
+        </div>
+        <div class="content-full">
+          <router-view v-slot="{ Component }">
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
+          </router-view>
+        </div>
+      </template>
       <!-- 普通 页面：有 shell + tabs -->
       <div v-else class="shell">
         <div class="right-tabs" v-if="currentTabs.length">
@@ -248,7 +269,8 @@ const navData = {
           { name: '网银导入', explain: '工作台中的网银导入页。用于上传银行流水文件。', route: 'bank-import' },
           { name: '手工流水', explain: '工作台中的手工流水页。用于录入或导入手工流水。', route: 'manual-flow' },
           { name: '手动维护', explain: '工作台中的手动维护页。用于修正记录、补录信息和维护。', route: 'manual-maintenance' },
-          { name: '上传结果预览', explain: '工作台中的上传结果预览页。查看处理状态、未处理项和异常数据。', route: 'upload-preview' }
+          { name: '上传结果预览', explain: '工作台中的上传结果预览页。查看处理状态、未处理项和异常数据。', route: 'upload-preview' },
+          { name: '异常处理', explain: '集中处理待确认和异常流水，修正或作废。', route: 'exception-receipt' }
         ]
       },
       '资金日报表': {
@@ -271,24 +293,14 @@ const navData = {
       }
     }
   },
-  'OCR识别': {
+  '票据中心': {
     icon: '📷',
-    secondary: {
-      '识别': {
-        tabs: [
-          { name: '发票识别', explain: 'OCR 识别中的发票识别页。', route: 'invoice-ocr' },
-          { name: '合同识别', explain: 'OCR 识别中的合同识别页。', route: 'contract-ocr' },
-          { name: '回单识别', explain: 'OCR 识别中的回单识别页。', route: 'receipt-ocr' },
-          { name: '付款凭证识别', explain: 'OCR 识别中的付款凭证识别页。', route: 'payment-ocr' }
-        ]
-      },
-      '台账': {
-        tabs: [
-          { name: '发票台账', explain: 'OCR 下的发票台账页。', route: 'invoice-ledger' },
-          { name: '合同台账', explain: 'OCR 下的合同台账页。', route: 'contract-ledger' }
-        ]
-      }
-    }
+    tabs: [
+      { name: '票据上传', explain: '上传发票、合同、回单等票据，自动识别类型和内容。', route: 'ocr-upload' },
+      { name: '发票管理', explain: '发票台账管理，查看识别结果和历史记录。', route: 'invoice-ledger' },
+      { name: '合同管理', explain: '合同台账管理，查看识别结果和历史记录。', route: 'contract-ledger' },
+      { name: '识别设置', explain: '配置识别模板、分类规则和识别参数。', route: 'ocr-settings' }
+    ]
   },
   '贷款管理': {
     icon: '🏦',
@@ -316,10 +328,7 @@ const navData = {
         tabs: [
           { name: '主数据管理', explain: '管理核算组织、单位、银行账户等基础数据', route: 'account-manage' },
           { name: '报表模板管理', explain: '数据中心下的报表模板管理页。', route: 'data-report-tpl' },
-          { name: '部门信息管理', explain: '数据中心下的部门信息管理页。', route: 'data-department' },
-          { name: '合同台账管理', explain: '数据中心下的合同台账管理页。', route: 'data-contract' },
-          { name: '发票台账管理', explain: '数据中心下的发票台账管理页。', route: 'data-invoice' },
-          { name: '凭证模板管理', explain: '数据中心下的凭证模板管理页。', route: 'data-voucher-tpl' }
+          { name: '部门信息管理', explain: '数据中心下的部门信息管理页。', route: 'data-department' }
         ]
       },
       '规则中心': {
@@ -329,12 +338,6 @@ const navData = {
           { name: '原始凭证规则', explain: '规则中心下的原始凭证规则页。', route: 'rule-origin' },
           { name: '凭证生成规则', explain: '规则中心下的凭证生成规则页。', route: 'rule-voucher' },
           { name: '其他待拓展规则', explain: '规则中心下的其他待拓展规则页。', route: 'rule-other' }
-        ]
-      },
-      '异常中心': {
-        tabs: [
-          { name: '收付款凭证缺失及补录信息', explain: '异常中心下的收付款凭证缺失及补录信息页。', route: 'exception-receipt' },
-          { name: '其他可能出现的异常', explain: '异常中心下的其他异常页。', route: 'exception-other' }
         ]
       },
       '模型配置': {
@@ -365,13 +368,14 @@ const navData = {
 
 const openState = ref({
   '资金板块': true,
-  'OCR识别': true,
+  '票据中心': true,
   'AI智能体': true,
   '系统设置': true
 })
 
 // Agent 页面检测 — 不套 shell，全屏渲染
 const isAgentPage = computed(() => route.name === 'agent-detail')
+const isFullPage = computed(() => route.name === 'ai-config')
 
 // Agent 相关
 const showCreateAgentModal = ref(false)
@@ -596,6 +600,7 @@ watch(() => router.currentRoute.value, (route) => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
 .main-area--full {
@@ -610,6 +615,10 @@ watch(() => router.currentRoute.value, (route) => {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .right-tabs {
@@ -644,6 +653,18 @@ watch(() => router.currentRoute.value, (route) => {
 
 .content {
   padding: var(--space-xl);
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.content-full {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 1200px) {

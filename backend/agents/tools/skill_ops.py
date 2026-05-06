@@ -244,3 +244,243 @@ def skill_step_report(
         "result": result[:500],
         "message": f"步骤 {step_number}（{step_name}）已确认完成",
     }
+
+
+@register_tool(read_only=False)
+def skill_save(
+    skill_code: str,
+    display_name: str,
+    description: str,
+    run_py: str = "",
+    workflow_md: str = "",
+    execution_mode: str = "code",
+    triggers: list = None,
+    ctx: ToolContext = None,
+    **kwargs,
+) -> dict:
+    """将当前工作代码保存为可复用技能。
+
+    这是技能创建的核心方式：Agent 在对话中开发了可用的代码或流程后，
+    调用此工具将其固化为技能，后续可自动触发复用。
+
+    参数：
+    - skill_code: 技能编码（kebab-case，如 parse_boc）
+    - display_name: 显示名称（如 "中国银行流水解析"）
+    - description: 一句话描述
+    - run_py: Python 代码内容（code/hybrid 模式必需）
+    - workflow_md: 工作流程描述（instruction/hybrid 模式必需）
+    - execution_mode: code（纯代码）/ instruction（纯指令）/ hybrid（两者都有）
+    - triggers: 触发关键词列表
+    - 其他 kwargs 将作为 skill 的 arguments 定义
+    """
+    from agents.workspace import get_agent_root
+    from agents.skill_creator import generate_skill_md
+
+    skill_dir = os.path.join(get_agent_root(ctx.agent_code), "skills", skill_code)
+    if os.path.isdir(skill_dir):
+        # 已存在 — 创建新版本
+        import shutil
+        backup_dir = skill_dir + "_bak"
+        if os.path.isdir(backup_dir):
+            shutil.rmtree(backup_dir)
+        shutil.copytree(skill_dir, backup_dir)
+
+    os.makedirs(os.path.join(skill_dir, "tests"), exist_ok=True)
+
+    # 确定 allowed_tools
+    allowed_tools = ["file_parse", "db_query_business", "memory_save", "memory_search", "skill_step_report"]
+    if run_py:
+        allowed_tools.append("skill_run")
+
+    # 确定 arguments
+    arguments = {}
+    for key, value in kwargs.items():
+        if isinstance(value, str):
+            arguments[key] = {"description": value, "required": True}
+
+    # 生成 SKILL.md
+    skill_md = generate_skill_md(
+        name=skill_code,
+        display_name=display_name,
+        description=description,
+        when_to_use=f"当用户需要{description}时",
+        version="1.0.0",
+        execution_mode=execution_mode,
+        allowed_tools=allowed_tools,
+        arguments=arguments,
+        workflow=workflow_md or f"## 工作流程\n\n此技能通过确定性代码执行，参见 run.py。",
+        rules="- 遵循 run.py 中的逻辑",
+        triggers=triggers or [display_name],
+    )
+
+    with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+        f.write(skill_md)
+
+    # 写 run.py（如果有）
+    if run_py:
+        with open(os.path.join(skill_dir, "run.py"), "w", encoding="utf-8") as f:
+            f.write(run_py)
+
+    # 初始化 experience.json
+    exp_file = os.path.join(skill_dir, "experience.json")
+    if not os.path.isfile(exp_file):
+        import json as _json
+        with open(exp_file, "w", encoding="utf-8") as f:
+            _json.dump({
+                "stats": {"total_runs": 0, "successes": 0, "total_ms": 0},
+                "learned_aliases": {},
+                "corrections": [],
+            }, f, ensure_ascii=False, indent=2)
+
+    # 初始化 .meta.json
+    meta_file = os.path.join(skill_dir, ".meta.json")
+    import json as _json
+    with open(meta_file, "w", encoding="utf-8") as f:
+        _json.dump({
+            "source": "agent_created",
+            "lifecycle": "active",
+            "created_at": datetime.now().isoformat(),
+            "last_used_at": datetime.now().isoformat(),
+        }, f, ensure_ascii=False, indent=2)
+
+    # 入库
+    from db.tables import Skill
+    existing = ctx.db.query(Skill).filter(Skill.skill_code == skill_code).first()
+    if existing:
+        existing.display_name = display_name
+        existing.description = description
+        existing.source_path = skill_dir
+        existing.updated_at = datetime.now()
+    else:
+        ctx.db.add(Skill(
+            skill_code=skill_code,
+            display_name=display_name,
+            description=description,
+            owner_agent_id=ctx.agent_id,
+            source_path=skill_dir,
+            status="draft",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        ))
+    ctx.db.commit()
+
+    # 重新加载 registry
+    from agents.skill_registry import skill_registry
+    skill_registry.startup_scan(agent_code=ctx.agent_code)
+
+    return {
+        "ok": True,
+        "skill_code": skill_code,
+        "path": skill_dir,
+        "mode": execution_mode,
+        "has_run_py": bool(run_py),
+        "message": f"技能 '{display_name}' 已保存（{execution_mode}模式）",
+    }
+
+
+@register_tool(read_only=False)
+def skill_learn(
+    skill_code: str,
+    correction_type: str,
+    wrong_value: str,
+    correct_value: str,
+    ctx: ToolContext = None,
+) -> dict:
+    """将用户修正反馈记录到技能经验中，实现技能自进化。
+
+    当用户说"这个不对，应该是..."时调用此工具。
+
+    correction_type:
+    - "alias": 列名/字段别名映射修正
+    - "summary": 摘要生成规则修正
+    - "direction": 收支方向修正
+    - "mapping": 字段映射修正
+    """
+    from agents.skill_registry import skill_registry
+    from agents.skill_executor import record_correction, record_alias
+
+    skill = skill_registry.get_skill(skill_code)
+    if not skill:
+        return {"ok": False, "error": f"技能未注册: {skill_code}"}
+
+    if correction_type == "alias":
+        record_alias(skill.skill_dir, wrong_value, correct_value)
+    else:
+        record_correction(skill.skill_dir, correction_type, wrong_value, correct_value)
+
+    return {
+        "ok": True,
+        "skill": skill_code,
+        "type": correction_type,
+        "message": f"已记录修正: {wrong_value} → {correct_value}",
+    }
+
+
+@register_tool(read_only=False)
+def skill_upgrade(
+    skill_code: str,
+    run_py: str = None,
+    workflow_md: str = None,
+    new_triggers: list = None,
+    ctx: ToolContext = None,
+) -> dict:
+    """升级现有技能的代码或指令（保留旧版本到 .archive/）。
+
+    用于技能迭代：修复 bug、增加功能、适应新格式等。
+    """
+    from agents.skill_registry import skill_registry
+
+    skill = skill_registry.get_skill(skill_code)
+    if not skill:
+        return {"ok": False, "error": f"技能未注册: {skill_code}"}
+
+    skill_dir = skill.skill_dir
+
+    # 备份当前版本
+    import shutil
+    from datetime import datetime as _dt
+    archive_dir = os.path.join(os.path.dirname(skill_dir), ".archive")
+    os.makedirs(archive_dir, exist_ok=True)
+    timestamp = _dt.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"{os.path.basename(skill_dir)}_v{skill.version}_{timestamp}"
+    shutil.copytree(skill_dir, os.path.join(archive_dir, backup_name))
+
+    # 更新 run.py
+    if run_py:
+        with open(os.path.join(skill_dir, "run.py"), "w", encoding="utf-8") as f:
+            f.write(run_py)
+
+    # 更新 SKILL.md body
+    if workflow_md:
+        from agents.skill_registry import parse_frontmatter
+        skill_md_path = os.path.join(skill_dir, "SKILL.md")
+        with open(skill_md_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        meta, _ = parse_frontmatter(content)
+        # 更新版本号
+        old_ver = meta.get("version", "1.0.0")
+        parts = old_ver.split(".")
+        parts[-1] = str(int(parts[-1]) + 1)
+        new_ver = ".".join(parts)
+        meta["version"] = new_ver
+
+        if new_triggers:
+            meta["triggers"] = new_triggers
+
+        # 重建 SKILL.md
+        import yaml
+        frontmatter = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
+        new_content = f"---\n{frontmatter}\n---\n\n{workflow_md}"
+        with open(skill_md_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+    # 重新加载
+    skill_registry.hot_reload(force=True)
+
+    return {
+        "ok": True,
+        "skill_code": skill_code,
+        "backup": backup_name,
+        "message": f"技能 {skill_code} 已升级，旧版本已备份为 {backup_name}",
+    }
+

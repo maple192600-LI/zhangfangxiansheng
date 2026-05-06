@@ -5,7 +5,7 @@ const BASE_URL = '/api/agent'
  * 发送消息并通过 SSE 接收流式回复
  * 使用 XMLHttpRequest 代替 fetch，避免 ReadableStream 兼容问题
  */
-export function sendMessageStream(sessionId, content, { onText, onToolStart, onToolEnd, onConfirmRequest, onDone, onError }) {
+export function sendMessageStream(sessionId, content, { onText, onToolStart, onToolEnd, onConfirmRequest, onAskUser, onDone, onError }) {
   const token = localStorage.getItem('zf_token')
   const xhr = new XMLHttpRequest()
 
@@ -44,6 +44,7 @@ export function sendMessageStream(sessionId, content, { onText, onToolStart, onT
           case 'tool_start': onToolStart?.(data); break
           case 'tool_end': onToolEnd?.(data); break
           case 'confirm_request': onConfirmRequest?.(data); break
+          case 'ask_user': onAskUser?.(data); break
           case 'done': onDone?.(data); break
           case 'error': onError?.(data.message || '未知错误'); break
         }

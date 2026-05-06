@@ -214,14 +214,15 @@ class SkillRegistry:
 
         self._loaded = True
 
-    def hot_reload(self, min_interval: float = 60.0) -> list[str]:
+    def hot_reload(self, min_interval: float = 60.0, force: bool = False) -> list[str]:
         """热更新：检查 mtime 变化
 
         受 min_interval 门控，避免每次消息都检查文件系统。
+        force=True 时跳过门控直接检查。
         """
         import time as _time
         now = _time.time()
-        if now - self._last_hot_reload < min_interval:
+        if not force and now - self._last_hot_reload < min_interval:
             return []
         self._last_hot_reload = now
 

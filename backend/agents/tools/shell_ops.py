@@ -35,7 +35,22 @@ _DENIED_MODULES = frozenset({
 
 @register_tool(read_only=False, concurrent_safe=False)
 def python_exec(code: str, ctx: ToolContext = None) -> dict:
-    """执行一段 Python 代码并返回输出。code 为 Python 代码字符串。注意：在受限沙箱环境中运行，无法访问文件系统或外部网络。"""
+    """在受限沙箱中执行 Python 代码并返回输出。
+
+    使用场景：
+    - 数据计算和转换（金额汇总、日期计算等）
+    - 验证数据一致性（余额校验等）
+    - 复杂的数据处理逻辑
+
+    限制：
+    - 无法访问文件系统（无 open、os、sys）
+    - 无法访问网络（无 requests、urllib）
+    - 可用标准库：math、json、datetime、re、collections 等
+    - 可用第三方库：polars（如已安装）
+
+    参数：code 必需，Python 代码字符串。
+    返回：{"ok": true, "output": "标准输出", "variables": {"变量名": "值"}} 或 {"ok": false, "error": "错误信息"}
+    """
     # 安全检查：拦截危险关键字
     _DANGEROUS_PATTERNS = [
         "__import__", "import os", "import sys", "import subprocess",
