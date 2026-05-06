@@ -541,23 +541,23 @@ draft → active → stale → archived
 - [x] fund_skill_run 经验记录：执行后记录到对应系统技能的 experience.json
 - [x] Curator 经验分析：成功率 <50% 标记需修复，≥3 次同类修正建议升级，>10 次且 >90% 建议标记 verified
 
-### Phase 3: 创建管道（待实现）
-- [ ] skill-creator SKILL.md 更新：引导 LLM 正确使用 skill_save + 自由度概念
-- [ ] 从工作代码创建技能的完整流程
-- [ ] 自动测试：创建时如果有样本文件，自动运行 skill_test
-- [ ] content_hash 记录：首次创建时记录内容哈希
+### Phase 3: 创建管道（已完成 ✓）
+- [x] skill-creator SKILL.md 更新：引导 LLM 正确使用 skill_save + 自由度概念（v3.0）
+- [x] 从工作代码创建技能的完整流程（skill_save 工具）
+- [x] 自动测试增强：skill_test 支持 test_params.json + 新执行路径
+- [x] content_hash 记录：首次创建时记录 MD5 哈希到 .meta.json
 
-### Phase 4: 自进化增强（待实现）
-- [ ] Curator 增强：基于 experience stats 做智能决策
-- [ ] 修正累积规则：≥3 次同类修正 → 建议升级
-- [ ] 经验数据注入到 instruction 模式的 prompt 中
+### Phase 4: 自进化增强（已完成 ✓）
+- [x] Curator 增强：基于 experience stats 做智能决策（成功率/修正/verified）
+- [x] 修正累积规则：≥3 次同类修正 → 建议升级
+- [x] 经验数据注入到 instruction 模式的 prompt 中（_format_experience_summary）
 
-### Phase 5: 安全与导入（待实现）
-- [ ] 安全扫描增强：实现 Hermes 风格的威胁模式库
-- [ ] 信任级别：builtin/trusted/community/agent-created
-- [ ] 格式自动检测 + 转换
-- [ ] 用户定制保护：content_hash 对比
-- [ ] 裸 Python 文件包装
+### Phase 5: 安全与导入（已完成 ✓）
+- [x] 安全扫描增强：20+ 威胁模式（正则 + AST）+ 信任级别门控
+- [x] 信任级别：builtin/trusted/community/agent_created，不同级别不同扫描策略
+- [x] 格式自动检测 + 转换：manifest.yaml→SKILL.md、裸 run.py→SKILL.md
+- [x] 用户定制保护：content_hash 对比，用户修改过的技能永不覆盖
+- [x] 裸 Python 文件包装：自动生成 SKILL.md + 从 docstring 提取描述
 
 ---
 
@@ -568,10 +568,10 @@ draft → active → stale → archived
 | `backend/agents/skill_registry.py` | 技能发现 + 加载 + 触发匹配 | ✓ 已改 |
 | `backend/agents/skill_executor.py` | 统一执行器 + experience 管理 | ✓ 已改 |
 | `backend/agents/skill_creator.py` | SKILL.md 模板 + 创建器 | ✓ 已改 |
-| `backend/agents/skill_installer.py` | 安装/卸载/格式转换 | Phase 5 |
+| `backend/agents/skill_installer.py` | 安装/卸载/格式转换/定制保护 | ✓ Phase 5 |
 | `backend/agents/skill_deps.py` | 依赖管理 | ✓ 已有 |
-| `backend/agents/skill_scanner.py` | 安全扫描（对标 skills_guard） | Phase 5 新建 |
-| `backend/agents/curator.py` | 生命周期 + 智能决策 | Phase 4 |
+| `backend/agents/skill_scanner.py` | 安全扫描（20+ 威胁模式 + 信任级别 + AST） | ✓ Phase 5 |
+| `backend/agents/curator.py` | 生命周期 + 经验分析 | ✓ Phase 4 |
 | `backend/agents/tools/skill_ops.py` | 技能工具定义 | ✓ 已改 |
 | `backend/agents/runtime.py` | 核心循环 + 技能集成 + code 自动执行 | ✓ Phase 2 |
 | `backend/agents/prompt_builder.py` | system prompt 组装 | ✓ 已改 |

@@ -142,13 +142,15 @@ def ensure_skill_creator_installed() -> bool:
         display_name="技能创建器",
         description="帮助用户创建新的技能。分析样本文件，生成标准 SKILL.md 格式的技能定义。",
         when_to_use="当用户要求创建新技能、学习新能力、或需要自动化某个重复性任务时",
-        version="2.0.0",
+        version="3.0.0",
         execution_mode="instruction",
         allowed_tools=[
             "fs_read", "fs_write", "fs_list",
             "openpyxl_read", "openpyxl_write",
+            "file_parse",
             "ask_user", "skill_run", "skill_test",
             "skill_step_report", "skill_save",
+            "memory_save", "memory_search",
         ],
         arguments={
             "intent": {"description": "用户想创建的技能意图描述", "required": True},
@@ -160,24 +162,30 @@ def ensure_skill_creator_installed() -> bool:
             "与用户确认要创建什么技能，明确：\n"
             "- 技能的目标（解决什么问题）\n"
             "- 触发条件（什么情况下使用）\n"
-            "- 需要哪些工具\n"
             "- 输入参数是什么\n\n"
             "如果用户提供的信息不足，使用 ask_user 提问。\n\n"
             "## 第二步：分析样本\n\n"
             "如果用户提供了样本文件，调用 `file_parse(path='<文件路径>')` 或 "
-            "`openpyxl_read(path='<文件路径>')` 分析数据结构。\n\n"
-            "## 第三步：确定执行模式\n\n"
-            "根据任务性质选择执行模式：\n"
-            "- 如果任务需要确定性数据处理（解析文件、转换格式），选择 code 模式\n"
-            "  → 需要编写 run.py 代码\n"
-            "- 如果任务需要多步工具编排（查询→分析→写入），选择 instruction 模式\n"
-            "  → 需要在 SKILL.md body 中编写步骤\n"
-            "- 如果两者都需要，选择 hybrid 模式\n\n"
+            "`openpyxl_read(path='<文件路径>')` 分析数据结构。\n"
+            "重点关注：列名、数据类型、特殊格式、边界情况。\n\n"
+            "## 第三步：确定执行模式和自由度\n\n"
+            "根据任务性质选择执行模式 **和自由度级别**：\n\n"
+            "| 自由度 | 适用场景 | 技能结构 |\n"
+            "|--------|---------|----------|\n"
+            "| **高自由度** | 任务灵活、需 LLM 判断 | instruction 模式，SKILL.md 写指导原则 |\n"
+            "| **中自由度** | 半结构化任务 | instruction/hybrid，SKILL.md 写伪代码+参数说明 |\n"
+            "| **低自由度** | 确定性数据处理 | code 模式，run.py 写完整逻辑 |\n\n"
+            "选择标准：\n"
+            "- 如果任务需要确定性数据处理（解析文件、转换格式、计算统计）→ **code 模式（低自由度）**\n"
+            "- 如果任务需要多步工具编排（查询→分析→写入）→ **instruction 模式（中/高自由度）**\n"
+            "- 如果两者都需要 → **hybrid 模式**\n\n"
             "## 第四步：生成技能\n\n"
             "调用 `skill_save` 工具保存技能：\n"
-            "- code 模式：提供 run_py 参数（Python 代码）\n"
-            "- instruction 模式：提供 workflow_md 参数（工作流程描述）\n"
-            "- hybrid 模式：同时提供两者\n\n"
+            "- `execution_mode` 设为 code / instruction / hybrid\n"
+            "- code 模式：提供 `run_py` 参数（Python 代码，必须有 `run(params)` 入口函数）\n"
+            "- instruction 模式：提供 `workflow_md` 参数（分步工作流程描述）\n"
+            "- hybrid 模式：同时提供两者\n"
+            "- `triggers` 设为触发关键词（如 ['解析中行流水', '中国银行流水']）\n\n"
             "## 第五步：验证\n\n"
             "调用 `skill_test(skill_code='<skill-name>')` 测试新技能。如果测试失败，分析错误并修复。"
         ),
@@ -187,7 +195,9 @@ def ensure_skill_creator_installed() -> bool:
             "- code 模式技能的 run.py 必须有 run(params) 入口函数\n"
             "- 工作流程必须使用分步指令格式（## 第一步、## 第二步...）\n"
             "- 包含关键规则（边界条件、错误处理、数据校验）\n"
-            "- 优先使用 skill_save 而不是 fs_write 来创建技能"
+            "- 优先使用 skill_save 而不是 fs_write 来创建技能\n"
+            "- SKILL.md body 只写 Claude 不知道的信息（上下文窗口是公共资源）\n"
+            "- 触发词 triggers 应包含用户最可能使用的自然表达"
         ),
     )
 

@@ -87,15 +87,49 @@ def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
 
 @register_tool(read_only=False)
 def skill_test(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
-    """测试一个技能。运行技能并比对 expected.json。"""
-    from agents.skill_loader import get_skill_path, test_skill
+    """测试一个技能。运行技能并比对 expected.json。
+    如果技能目录下有 test_params.json，自动使用其中的参数。
+    """
+    from agents.skill_registry import skill_registry, get_skill_path, load_skill_l1
+    from agents.skill_executor import execute_skill_code, get_skill_run_path
 
-    skill_path = get_skill_path(ctx.agent_code, skill_code)
-    if not os.path.isdir(skill_path):
-        return {"ok": False, "error": f"技能不存在: {skill_code}"}
+    # 先从 registry 查找
+    skill = skill_registry.get_skill(skill_code)
+    if not skill:
+        skill_path = get_skill_path(ctx.agent_code, skill_code)
+        if not os.path.isdir(skill_path):
+            return {"ok": False, "error": f"技能不存在: {skill_code}"}
+        skill = load_skill_l1(skill_path)
+        if not skill:
+            return {"ok": False, "error": f"技能元数据加载失败: {skill_code}"}
 
+    # 确定测试参数：优先用 test_params.json，否则用 kwargs
     params = dict(kwargs)
-    return test_skill(skill_path, params)
+    test_params_file = os.path.join(skill.skill_dir, "tests", "test_params.json")
+    if os.path.isfile(test_params_file):
+        with open(test_params_file, "r", encoding="utf-8") as f:
+            saved_params = json.load(f)
+        saved_params.update(params)
+        params = saved_params
+
+    if not params:
+        return {"ok": False, "error": "无测试参数。请在 tests/test_params.json 中定义参数，或通过 kwargs 传入。"}
+
+    # 执行
+    if skill.execution_mode in ("code", "hybrid") and get_skill_run_path(skill.skill_dir):
+        result = execute_skill_code(skill, params)
+    else:
+        return {"ok": False, "error": f"指令模式技能 '{skill_code}' 不支持 skill_test，请通过对话手动验证"}
+
+    # 比对 expected.json
+    expected_file = os.path.join(skill.skill_dir, "tests", "expected.json")
+    if os.path.isfile(expected_file):
+        with open(expected_file, "r", encoding="utf-8") as f:
+            expected = json.load(f)
+        result["expected"] = expected
+        result["match"] = (result.get("result") == expected)
+
+    return result
 
 
 @register_tool(read_only=False)
@@ -353,13 +387,18 @@ def skill_save(
                 "corrections": [],
             }, f, ensure_ascii=False, indent=2)
 
-    # 初始化 .meta.json
+    # 初始化 .meta.json（含 content_hash）
+    import hashlib
+    content_hash = hashlib.md5(skill_md.encode("utf-8")).hexdigest()
+    if run_py:
+        content_hash += "_" + hashlib.md5(run_py.encode("utf-8")).hexdigest()
     meta_file = os.path.join(skill_dir, ".meta.json")
     import json as _json
     with open(meta_file, "w", encoding="utf-8") as f:
         _json.dump({
             "source": "agent_created",
             "lifecycle": "active",
+            "content_hash": content_hash,
             "created_at": datetime.now().isoformat(),
             "last_used_at": datetime.now().isoformat(),
         }, f, ensure_ascii=False, indent=2)
