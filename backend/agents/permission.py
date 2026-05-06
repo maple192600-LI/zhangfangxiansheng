@@ -11,7 +11,7 @@ DEFAULT_PERMISSION = {
         "fs_list", "fs_read",
         "file_parse",
         "memory_save", "memory_search",
-        "skill_list", "skill_run", "skill_check_deps",
+        "skill_list", "skill_run", "skill_check_deps", "skill_step_report",
         "ask_user",
         "openpyxl_read",
         "db_query_business",

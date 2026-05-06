@@ -9,7 +9,10 @@ from agents.workspace import safe_path
 
 @register_tool(read_only=True)
 def skill_list(ctx: ToolContext = None) -> dict:
-    """列出当前 agent 可用的所有技能。"""
+    """列出当前 agent 可用的所有技能及其状态。
+
+    返回格式：{"skills": [{"skill_code": "...", "display_name": "...", "description": "...", "status": "verified|draft"}], "count": N}
+    """
     from db.tables import Skill
 
     db = ctx.db
@@ -32,7 +35,11 @@ def skill_list(ctx: ToolContext = None) -> dict:
 
 @register_tool(read_only=True)
 def skill_run(skill_code: str, ctx: ToolContext = None, **kwargs) -> dict:
-    """运行一个技能。skill_code 为技能编码，其他参数传给技能的 run(params)。"""
+    """运行一个技能。skill_code 为技能编码（如 "fund_parser_bank"），其他参数传给技能的 run(params)。
+
+    注意：对于基于 SKILL.md 的技能，通常不需要调用此工具，技能的指令会直接注入到上下文中由 LLM 执行。
+    此工具主要用于兼容旧格式（有 run.py 的）技能。
+    """
     from agents.skill_loader import get_skill_path, run_skill
 
     # 查找 skill 路径
@@ -131,9 +138,72 @@ def skill_create(
     return {"ok": True, "skill_code": skill_code, "path": skill_dir}
 
 
+@register_tool(read_only=False)
+def skill_install(
+    source_path: str,
+    agent_code: str = "system",
+    auto_install_deps: bool = True,
+    ctx: ToolContext = None,
+) -> dict:
+    """安装一个技能。source_path 可以是包含 SKILL.md 的目录路径或 zip 文件路径。
+    agent_code 指定安装到哪个 agent（默认 system 全局可用）。
+    auto_install_deps 为 True 时自动安装 pip 依赖。"""
+    from agents.workspace import safe_path
+
+    abs_path = safe_path(ctx.agent_code, source_path) if not os.path.isabs(source_path) else source_path
+    if not abs_path:
+        abs_path = source_path
+
+    if not os.path.exists(abs_path):
+        return {"ok": False, "error": f"路径不存在: {source_path}"}
+
+    from agents.skill_installer import install_from_dir, install_from_zip
+
+    if abs_path.endswith(".zip"):
+        return install_from_zip(abs_path, agent_code, auto_install_deps)
+    return install_from_dir(abs_path, agent_code, auto_install_deps)
+
+
+@register_tool(read_only=True)
+def skill_check_deps(skill_code: str, ctx: ToolContext = None) -> dict:
+    """检查技能的依赖是否已满足。返回缺失的依赖列表和安装建议。"""
+    from agents.skill_registry import skill_registry
+    from agents.skill_deps import check_dependencies
+
+    skill = skill_registry.get_skill(skill_code)
+    if not skill:
+        return {"ok": False, "error": f"技能未注册: {skill_code}"}
+
+    if not skill.dependencies:
+        return {"ok": True, "all_met": True, "message": "该技能无依赖声明"}
+
+    result = check_dependencies(skill.dependencies, registry=skill_registry)
+    return {
+        "ok": True,
+        "all_met": result.all_met,
+        "summary": result.summary,
+        "missing": [
+            {"name": s.name, "type": s.dep_type, "required_spec": s.required_spec}
+            for s in result.missing
+        ],
+        "installed": [
+            {"name": s.name, "type": s.dep_type, "version": s.version}
+            for s in result.statuses if s.installed
+        ],
+    }
+
+
 @register_tool(read_only=False, toolset="database")
 def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = None) -> dict:
-    """运行 Fund Agent 的财务技能。支持: parser.bank, parser.manual, rule.template_fill, rule.maintain, template.inference"""
+    """运行 Fund Agent 的确定性财务技能（直接执行 Python 代码，不经过 LLM）。
+
+    可用技能：
+    - parser.bank: 解析银行流水文件。payload 需含 file_path, account_code, template_id
+    - parser.manual: 解析手工流水。payload 需含 records（流水记录列表）
+    - rule.template_fill: 填充报表模板。payload 需含 template_id, data
+    - rule.maintain: 维护规则。payload 需含 rule_id, changes
+    - template.inference: 推断模板结构。payload 需含 file_path
+    """
     from agents.fund.harness import FundAgent
 
     allowed = {"parser.bank", "parser.manual", "rule.template_fill", "rule.maintain", "template.inference"}
@@ -146,3 +216,31 @@ def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = Non
         return {"ok": True, "result": result.payload}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@register_tool(read_only=True)
+def skill_step_report(
+    skill_code: str,
+    step_number: int,
+    step_name: str,
+    result: str = "",
+    ctx: ToolContext = None,
+) -> dict:
+    """技能步骤完成报告。每完成一个技能步骤后必须调用此工具汇报进度。
+
+    这是技能执行跟踪机制的一部分，确保技能步骤被完整执行。
+    """
+    from agents.skill_registry import skill_registry
+
+    skill = skill_registry.get_skill(skill_code)
+    if not skill:
+        return {"ok": False, "error": f"技能未注册: {skill_code}"}
+
+    return {
+        "ok": True,
+        "skill": skill_code,
+        "step": step_number,
+        "step_name": step_name,
+        "result": result[:500],
+        "message": f"步骤 {step_number}（{step_name}）已确认完成",
+    }

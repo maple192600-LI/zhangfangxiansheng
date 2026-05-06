@@ -456,10 +456,16 @@ def _build_tool_result_content(result: dict, tool_name: str):
 
 
 def _build_skill_hints(skills: list) -> str:
-    """构建技能提示文本"""
+    """构建技能提示文本
+
+    根据技能的 execution_mode 决定注入策略：
+    - instruction: 注入完整工作流指令
+    - code: 注入简短指令引导调用 fund_skill_run
+    - hybrid: 同时注入代码指令和工作流补充
+    """
     if not skills:
         return skill_registry.l1_summary_text()
-    parts = ["以下技能已激活："]
+    parts = ["以下技能已激活，你必须严格按照其中的步骤执行："]
     for skill in skills:
         instruction = format_skill_instruction(skill)
         parts.append(instruction)

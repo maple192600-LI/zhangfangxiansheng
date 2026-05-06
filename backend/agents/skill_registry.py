@@ -29,6 +29,8 @@ class SkillMeta:
     source: str = ""
     dependencies: dict = field(default_factory=dict)
     skill_dir: str = ""
+    execution_mode: str = "instruction"  # instruction | code | hybrid
+    code_entry: str = ""  # code 模式下的入口名称（如 parser.bank）
     _body_loaded: bool = False
     _body: str = ""
     _l3_assets: Optional[dict] = None
@@ -140,6 +142,8 @@ def load_skill_l1(skill_dir: str) -> Optional[SkillMeta]:
         source=meta.get("source", ""),
         dependencies=deps,
         skill_dir=skill_dir,
+        execution_mode=meta.get("execution_mode", "instruction"),
+        code_entry=meta.get("code_entry", ""),
         _body_loaded=True,
         _body=body,
         _mtime=os.path.getmtime(skill_md),
@@ -239,11 +243,10 @@ class SkillRegistry:
     def trigger(self, user_input: str) -> list[SkillMeta]:
         """根据用户输入匹配触发技能
 
-        两级匹配策略（去掉了过于宽松的第三级回退）：
+        三级匹配策略：
         1. 精确子串匹配 triggers 字段
         2. 名称精确匹配（技能名完整出现在用户输入中）
-
-        不再使用 n-gram 和随机子串回退匹配，避免中文输入误触发所有技能。
+        3. 描述关键词匹配（从 description 和 when_to_use 中提取关键词）
         """
         if not self._loaded:
             return []
@@ -267,8 +270,26 @@ class SkillRegistry:
             skill_name_lower = skill.name.lower()
             if len(skill_name_lower) >= 3 and skill_name_lower in text_lower:
                 matched.append(skill)
+                continue
+
+            # 3. 描述关键词匹配（从 description/when_to_use 中提取 2+ 字关键词）
+            if self._keyword_match(text_lower, skill):
+                matched.append(skill)
 
         return matched
+
+    @staticmethod
+    def _keyword_match(text_lower: str, skill: SkillMeta) -> bool:
+        """从 description 和 when_to_use 中提取 2-4 字关键词进行匹配"""
+        import re as _re
+        candidates = f"{skill.description} {skill.when_to_use}"
+        # 提取 2~4 字的中文片段（bigram~4-gram）和英文词
+        segments = _re.findall(r'[一-鿿]{2,4}', candidates)
+        # 去重
+        keywords = list(dict.fromkeys(segments))
+        # 至少命中 2 个不同关键词
+        hit_count = sum(1 for kw in keywords if kw in text_lower)
+        return hit_count >= 2
 
     def get_skill(self, code: str) -> Optional[SkillMeta]:
         return self._skills.get(code)
