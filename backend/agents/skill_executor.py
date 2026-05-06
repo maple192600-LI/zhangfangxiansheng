@@ -38,7 +38,7 @@ def execute_skill_code(
 
     started = time.time()
     try:
-        spec = importlib.util.spec_from_file_location("skill_run", run_file)
+        spec = importlib.util.spec_from_file_location(f"skill_run_{skill.code}", run_file)
         mod = importlib.util.module_from_spec(spec)
         mod.SKILL_PARAMS = params
         mod.SKILL_DIR = skill.skill_dir
@@ -234,7 +234,7 @@ def _save_experience(skill_dir: str, data: dict) -> None:
         with open(exp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logger.warning(f"保存经验失败: {e}")
+        logger.warning("保存经验失败: %s", e)
 
 
 def _record_execution(skill_dir: str, ok: bool, duration_ms: int, error: str = "") -> None:

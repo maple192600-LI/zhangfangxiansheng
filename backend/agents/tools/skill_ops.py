@@ -270,7 +270,10 @@ def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = Non
     except Exception as e:
         return {"ok": False, "error": str(e)}
     finally:
-        _record_fund_skill_experience(skill_name, ok)
+        try:
+            _record_fund_skill_experience(skill_name, ok)
+        except Exception:
+            pass
 
 
 @register_tool(read_only=True)
@@ -560,26 +563,36 @@ def _update_meta_last_used(skill_dir: str) -> None:
         pass
 
 
-# fund 技能名 → 系统 skill 目录名 的映射
-_FUND_SKILL_MAP = {
-    "parser.bank": "fund_parser_bank",
-    "parser.manual": "fund_parser_manual",
-    "rule.template_fill": "fund_rule_template_fill",
-    "rule.maintain": "fund_rule_maintain",
-    "template.inference": "fund_template_inference",
-}
+def _find_fund_skill_dir(skill_name: str) -> str | None:
+    """根据 code_entry 自动查找对应的系统技能目录"""
+    from config import AGENTS_ROOT
+    from agents.skill_registry import skill_registry, load_skill_l1
+
+    system_dir = os.path.join(AGENTS_ROOT, "system", "skills")
+    if not os.path.isdir(system_dir):
+        return None
+
+    # 优先从已加载的 registry 查找
+    for skill in skill_registry.list_skills():
+        if getattr(skill, "code_entry", "") == skill_name:
+            return skill.skill_dir
+
+    # fallback：扫描 system skills 目录
+    for name in os.listdir(system_dir):
+        path = os.path.join(system_dir, name)
+        if not os.path.isdir(path):
+            continue
+        meta = load_skill_l1(path)
+        if meta and getattr(meta, "code_entry", "") == skill_name:
+            return path
+    return None
 
 
 def _record_fund_skill_experience(skill_name: str, ok: bool) -> None:
     """fund_skill_run 执行后，记录到对应系统技能的 experience.json"""
     from agents.skill_executor import _record_execution
-    from config import AGENTS_ROOT
 
-    skill_dir_name = _FUND_SKILL_MAP.get(skill_name)
-    if not skill_dir_name:
-        return
-    skill_dir = os.path.join(AGENTS_ROOT, "system", "skills", skill_dir_name)
-    if os.path.isdir(skill_dir):
-        import time as _time
+    skill_dir = _find_fund_skill_dir(skill_name)
+    if skill_dir and os.path.isdir(skill_dir):
         _record_execution(skill_dir, ok=ok, duration_ms=0)
         _update_meta_last_used(skill_dir)

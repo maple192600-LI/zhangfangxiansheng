@@ -8,6 +8,7 @@
 """
 import json
 import logging
+from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -157,7 +158,6 @@ class Curator:
 
         # ≥3 次同类修正 → 建议升级
         if corrections:
-            from collections import Counter
             field_counts = Counter(c.get("field", "") for c in corrections)
             for field, count in field_counts.items():
                 if count >= 3 and field:

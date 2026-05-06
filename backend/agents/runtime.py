@@ -135,14 +135,21 @@ async def _run_turn_inner(
     skill_registry.hot_reload()
     matched_skills = skill_registry.trigger(user_text)
 
-    # 对于 code 模式且有 run.py 的技能，预执行
+    # 对于 code 模式且有 run.py 的技能，预执行（仅无必需参数的技能）
     pre_exec_results = {}
     for skill in matched_skills:
         if skill.execution_mode == "code" and not skill.code_entry:
             from agents.skill_executor import get_skill_run_path, execute_skill_code
             if get_skill_run_path(skill.skill_dir):
+                # 有必需参数的技能不预执行（需要用户提供文件路径等）
+                if skill.arguments:
+                    required_args = {k for k, v in skill.arguments.items()
+                                     if isinstance(v, dict) and v.get("required")}
+                    if required_args:
+                        continue
                 try:
-                    params = {"_agent_root": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", agent.agent_code)}
+                    from config import AGENTS_ROOT
+                    params = {"_agent_root": os.path.join(AGENTS_ROOT, agent.agent_code)}
                     exec_result = execute_skill_code(skill, params, ctx=None)
                     pre_exec_results[skill.code] = exec_result
                 except Exception as e:

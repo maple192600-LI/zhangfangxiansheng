@@ -21,7 +21,7 @@ import shutil
 import tempfile
 import zipfile
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from config import AGENTS_ROOT
 
@@ -141,7 +141,7 @@ def install_from_dir(
     }
 
 
-def _ensure_skill_md(source_dir: str) -> str | dict:
+def _ensure_skill_md(source_dir: str) -> Union[str, dict]:
     """格式自动检测：确保源目录有 SKILL.md
 
     返回：source_dir（成功）或 error dict（失败）

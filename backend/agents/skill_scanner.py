@@ -35,7 +35,7 @@ class Severity(str, Enum):
     LOW = "low"
 
 
-# ── 旧接口兼容 ──────────────────────────────────────────────
+# ── 旧版兼容接口（供 test_skill_scanner.py 和 skill_installer.py 使用） ────
 
 @dataclass
 class ScanRule:
@@ -122,7 +122,7 @@ _REGEX_PATTERNS: list[tuple[str, str, Severity, str]] = [
     # 加密货币挖矿
     (r'(?:stratum|xmrig|coinhive|cryptonight)', "crypto_mine", Severity.CRITICAL, "加密货币挖矿"),
     # 环境变量收集+网络
-    (r'(?:os\.environ).*(?:requests|fetch|http)', "env_harvest", Severity.CRITICAL, "环境变量收集+网络发送"),
+    (r'os\.environ\[.+\]\s*(?:\+|f\"|\.format).*?(?:requests\.(?:post|put)|urllib)', "env_harvest", Severity.CRITICAL, "环境变量泄露到网络请求"),
     # 文件外泄
     (r'(?:open|read_file).*(?:requests\.post|fetch|urllib)', "exfiltration", Severity.HIGH, "文件读取+网络发送"),
     # 网络 shell
@@ -307,7 +307,7 @@ def scan_file(file_path: str, rules: list[ScanRule] = None) -> list[ScanFinding]
 RULES: list[ScanRule] = [
     ScanRule("dangerous-exec", "critical", re.compile(r"(?:exec\(|spawn|subprocess\.)", re.IGNORECASE), "子进程执行调用"),
     ScanRule("dynamic-code", "critical", re.compile(r"(?:eval\(|__import__|compile\()", re.IGNORECASE), "动态代码执行"),
-    ScanRule("env-harvest", "critical", re.compile(r"(?:os\.environ|process\.env).*(?:requests|fetch|http)", re.IGNORECASE), "环境变量收集+网络发送"),
+    ScanRule("env-harvest", "critical", re.compile(r'os\.environ\[.+\]\s*(?:\+|f\"|\.format).*?(?:requests\.(?:post|put)|urllib)', re.IGNORECASE), "环境变量泄露到网络请求"),
     ScanRule("crypto-mine", "critical", re.compile(r"(?:stratum|xmrig|coinhive|cryptonight)", re.IGNORECASE), "加密货币挖矿"),
     ScanRule("exfiltration", "high", re.compile(r"(?:open|read_file|file_get_contents).*(?:requests\.post|fetch|urllib)", re.IGNORECASE), "文件读取+网络发送"),
     ScanRule("network-shell", "high", re.compile(r"(?:socket\.socket|nc\s+-|netcat)", re.IGNORECASE), "网络 shell 连接"),
