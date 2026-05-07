@@ -20,8 +20,7 @@
           <button class="btn btn-primary" @click="page = 1; loadData()">生成报表</button>
         </div>
       </div>
-      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <table v-else-if="displayColumns.length">
+      <table v-if="displayColumns.length">
         <thead>
           <tr>
             <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
@@ -49,10 +48,11 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { todayLocalDate } from '@/utils/date'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
-const today = new Date().toISOString().slice(0, 10)
+const today = todayLocalDate()
 const startDate = ref(today)
 const endDate = ref(today)
 const entityId = ref(null)
@@ -61,7 +61,7 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const totalPages = ref(1)
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('income_list')
+const { templateColumns, loadTemplate } = useTemplateColumns('income_list')
 
 const DEFAULT_COLUMNS = [
   { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },

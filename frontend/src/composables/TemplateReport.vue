@@ -36,36 +36,32 @@
         </div>
       </div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载...</p></div>
-      <div v-else-if="templateLoaded && !templateColumns" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h4>未配置报表模板</h4>
-        <p>请先在「系统设置 → 报表模板管理」中上传{{ title }}模板</p>
-      </div>
-      <table v-else-if="templateColumns">
+      <table v-else-if="displayColumns.length">
         <thead>
           <tr>
-            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
+            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(r, idx) in rows" :key="idx">
             <tr v-if="r.is_subtotal" class="subtotal-row">
-              <td v-for="(col, ci) in templateColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">
+              <td v-for="(col, ci) in displayColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">
                 <strong>{{ ci === 0 ? r.entity_name : cellVal(r, col.field_key) }}</strong>
               </td>
             </tr>
             <tr v-else>
-              <td v-for="col in templateColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
+              <td v-for="col in displayColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
             </tr>
           </template>
           <tr v-if="!rows.length">
-            <td :colspan="templateColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
+            <td :colspan="displayColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
           </tr>
         </tbody>
       </table>
-      <div v-else class="empty-state">
+      <div v-else-if="!loading" class="empty-state">
         <div class="empty-icon">📊</div>
-        <h4>正在加载模板...</h4>
+        <h4>暂无数据</h4>
+        <p>选择查询条件后点击"生成报表"</p>
       </div>
     </div>
   </div>
@@ -76,6 +72,7 @@ import { ref, computed, onMounted } from 'vue'
 import * as reportApi from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { todayLocalDate } from '@/utils/date'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
@@ -90,8 +87,8 @@ const props = defineProps({
 })
 
 const today = new Date()
-const startDate = ref(today.toISOString().slice(0, 10))
-const endDate = ref(today.toISOString().slice(0, 10))
+const startDate = ref(todayLocalDate())
+const endDate = ref(todayLocalDate())
 const selYear = ref(today.getFullYear())
 const selMonth = ref(today.getMonth() + 1)
 const entityId = ref(null)
@@ -105,6 +102,53 @@ const yearOptions = computed(() => {
 })
 
 const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
+
+const DEFAULT_COLUMNS_MAP = {
+  week_report: [
+    { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+    { field_key: 'week_start', header_name: '周开始日期', width: 120, align: 'center' },
+    { field_key: 'week_end', header_name: '周结束日期', width: 120, align: 'center' },
+    { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+    { field_key: 'total_income', header_name: '收入合计', width: 140, align: 'right' },
+    { field_key: 'total_expense', header_name: '支出合计', width: 140, align: 'right' },
+    { field_key: 'net_change', header_name: '净变动', width: 140, align: 'right' },
+    { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+  ],
+  month_report: [
+    { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+    { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+    { field_key: 'total_income', header_name: '收入合计', width: 140, align: 'right' },
+    { field_key: 'total_expense', header_name: '支出合计', width: 140, align: 'right' },
+    { field_key: 'net_change', header_name: '净变动', width: 140, align: 'right' },
+    { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+  ],
+  year_report: [
+    { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+    { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+    { field_key: 'total_income', header_name: '收入合计', width: 140, align: 'right' },
+    { field_key: 'total_expense', header_name: '支出合计', width: 140, align: 'right' },
+    { field_key: 'net_change', header_name: '净变动', width: 140, align: 'right' },
+    { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+  ],
+  major_balance: [
+    { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+    { field_key: 'account_name', header_name: '账户名称', width: 180, align: 'left' },
+    { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+    { field_key: 'period_income', header_name: '本期收入', width: 140, align: 'right' },
+    { field_key: 'period_expense', header_name: '本期支出', width: 140, align: 'right' },
+    { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+  ],
+  month_check: [
+    { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
+    { field_key: 'account_name', header_name: '账户名称', width: 180, align: 'left' },
+    { field_key: 'opening_balance', header_name: '期初余额', width: 140, align: 'right' },
+    { field_key: 'period_income', header_name: '本期收入', width: 140, align: 'right' },
+    { field_key: 'period_expense', header_name: '本期支出', width: 140, align: 'right' },
+    { field_key: 'ending_balance', header_name: '期末余额', width: 140, align: 'right' },
+  ],
+}
+
+const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS_MAP[props.reportType] || [])
 
 const MONEY_KEYS = new Set(['opening_balance', 'total_income', 'total_expense', 'net_change', 'ending_balance', 'period_income', 'period_expense', 'amount', 'rolling_balance'])
 

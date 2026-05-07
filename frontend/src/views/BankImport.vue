@@ -2,13 +2,13 @@
   <div class="section">
     <div class="section-title">
       <h3>银行流水导入</h3>
-      <span>上传银行流水文件，AI 自动识别列映射，确认后直接入库</span>
+      <span>上传银行流水文件，匹配已审核解析规则，预览确认后入库</span>
     </div>
 
     <div class="flow-steps">
       <div class="flow-step" :class="{ active: step >= 1, done: step > 1 }" @click="step > 1 && goToStep(1)">上传</div>
       <div class="flow-line"></div>
-      <div class="flow-step" :class="{ active: step >= 2, done: step > 2 }" @click="step > 2 && goToStep(2)">解析</div>
+      <div class="flow-step" :class="{ active: step >= 2, done: step > 2 }" @click="step > 2 && goToStep(2)">匹配规则</div>
       <div class="flow-line"></div>
       <div class="flow-step" :class="{ active: step >= 3, done: step > 3 }" @click="step > 3 && goToStep(3)">确认</div>
       <div class="flow-line"></div>
@@ -17,7 +17,8 @@
 
     <!-- 无匹配规则提示 -->
     <div v-if="noRuleHint" class="hint-panel" style="margin-bottom:14px">
-      该银行尚未配置解析规则，请前往 <strong style="cursor:pointer;color:var(--green)" @click="$router.push('/agent')">AI 智能体</strong> 创建规则后再导入
+      未匹配到可用解析规则。请先由 Agent 创建并审核 Parser，再回到这里导入。
+      <strong style="cursor:pointer;color:var(--green);margin-left:6px" @click="$router.push('/agent')">去创建规则</strong>
       <button class="btn btn-secondary btn-sm" style="margin-left:10px" @click="noRuleHint = false">关闭</button>
     </div>
 
@@ -41,7 +42,7 @@
       <div v-if="ruleMatch" class="match-banner">
         <span class="tag tag-green">匹配规则：{{ ruleMatch.template_name }}</span>
         <span style="margin-left:8px;color:var(--muted);font-size:12px">
-          已有 {{ Object.keys(displayMapping).length }} 个字段映射，无需 AI 解析
+          已有 {{ Object.keys(displayMapping).length }} 个字段规则，直接进入确定性预览
         </span>
       </div>
     </div>
@@ -125,23 +126,17 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import * as bank from '@/api/bank'
-import http from '@/api/index'
-
-const router = useRouter()
+import { computed, ref } from 'vue'
 const fileInput = ref(null)
 const uploadResult = ref({})
 const hint = ref('')
 const step = ref(1)
-const aiParsing = ref(false)
 const aiResult = ref({})
 const ruleMatch = ref(null)
 const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
-const savingRule = ref(false)
 const noRuleHint = ref(false)
 
 const displayMapping = computed(() => {
@@ -171,8 +166,6 @@ function fieldLabel(code) { return FIELD_LABELS[code] || code }
 function triggerFileInput() { fileInput.value?.click() }
 
 function goToStep(n) { step.value = n }
-
-function cancelParse() { aiParsing.value = false; step.value = 1 }
 
 function onFileChange(event) {
   const file = event.target.files?.[0]
@@ -235,7 +228,7 @@ async function doCommit() {
   committing.value = true
   hint.value = ''
   try {
-    commitResult.value = await http.post('/bank-import/commit-by-mapping', {
+    commitResult.value = await bank.commitBankImportByRule({
       batch_code: uploadResult.value.batch_code,
       mapping: aiResult.value.mapping,
       template_id: ruleMatch.value?.template_id || null,

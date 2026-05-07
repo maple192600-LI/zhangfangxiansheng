@@ -31,9 +31,6 @@
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载数据...</p></div>
 
-      <!-- 优先：Excel 原表完整渲染 -->
-      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-
       <!-- 有模板列时的渲染 -->
       <table v-else-if="templateColumns && templateColumns.length">
         <thead>
@@ -51,31 +48,39 @@
         </tbody>
       </table>
 
-      <!-- 兜底：无模板时有数据也显示基础表 -->
+      <!-- 无模板列时用兜底列 -->
       <template v-else-if="rows.length">
         <table>
           <thead>
             <tr>
               <th style="width:36px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
               <th>日期</th>
-              <th>方向</th>
+              <th>单位编码</th>
+              <th>单位名称</th>
+              <th>账户名称</th>
               <th>摘要</th>
               <th>对方</th>
               <th class="money">收入金额</th>
               <th class="money">支出金额</th>
               <th class="money">余额</th>
+              <th>状态</th>
+              <th>来源</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in rows" :key="r.id" :class="{ selected: selectedIds.includes(r.id) }">
               <td><input type="checkbox" :value="r.id" v-model="selectedIds" /></td>
               <td>{{ r.business_date }}</td>
-              <td>{{ r.direction === 'income' ? '收入' : '支出' }}</td>
+              <td>{{ r.entity_code }}</td>
+              <td>{{ r.entity_name }}</td>
+              <td>{{ r.account_name }}</td>
               <td>{{ r.summary_text }}</td>
               <td>{{ r.counterparty_name }}</td>
               <td class="money">{{ fmtAmt(r.income_amount) }}</td>
               <td class="money">{{ fmtAmt(r.expense_amount) }}</td>
               <td class="money">{{ fmtAmt(r.rolling_balance) }}</td>
+              <td>{{ r.abnormal_code || '正常' }}</td>
+              <td>{{ r.source }}</td>
             </tr>
           </tbody>
         </table>
@@ -114,7 +119,7 @@ const rebuilding = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
 const selectedIds = ref([])
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('base_data')
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('base_data')
 
 const allSelected = computed(() => rows.value.length > 0 && selectedIds.value.length === rows.value.length)
 function toggleAll(e) {

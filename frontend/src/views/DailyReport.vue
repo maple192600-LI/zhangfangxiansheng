@@ -22,7 +22,6 @@
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成日报...</p></div>
-      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
       <table v-else-if="displayColumns.length">
         <thead>
           <tr>
@@ -41,7 +40,7 @@
           </tr>
         </tbody>
       </table>
-      <div v-else-if="!loading" class="empty-state">
+      <div v-else-if="!loading && templateLoaded" class="empty-state">
         <div class="empty-icon">📊</div>
         <h4>暂无日报数据</h4>
         <p>选择日期范围后点击"生成报表"</p>
@@ -55,10 +54,11 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { todayLocalDate } from '@/utils/date'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
-const today = new Date().toISOString().slice(0, 10)
+const today = todayLocalDate()
 const startDate = ref(today)
 const endDate = ref(today)
 const entityId = ref(null)
@@ -66,7 +66,7 @@ const entities = ref([])
 const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('daily_report')
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('daily_report')
 
 const DEFAULT_COLUMNS = [
   { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
@@ -97,11 +97,12 @@ const totalMap = computed(() => ({
   ending_balance: totalEnding.value,
 }))
 
-const totalOpening = computed(() => rows.value.reduce((s, r) => s + r.opening_balance, 0))
-const totalIncome = computed(() => rows.value.reduce((s, r) => s + r.total_income, 0))
-const totalExpense = computed(() => rows.value.reduce((s, r) => s + r.total_expense, 0))
-const totalNet = computed(() => rows.value.reduce((s, r) => s + r.net_change, 0))
-const totalEnding = computed(() => rows.value.reduce((s, r) => s + r.ending_balance, 0))
+const amount = (value) => Number(value) || 0
+const totalOpening = computed(() => rows.value.reduce((s, r) => s + amount(r.opening_balance), 0))
+const totalIncome = computed(() => rows.value.reduce((s, r) => s + amount(r.total_income), 0))
+const totalExpense = computed(() => rows.value.reduce((s, r) => s + amount(r.total_expense), 0))
+const totalNet = computed(() => rows.value.reduce((s, r) => s + amount(r.net_change), 0))
+const totalEnding = computed(() => rows.value.reduce((s, r) => s + amount(r.ending_balance), 0))
 
 async function loadReport() {
   loading.value = true

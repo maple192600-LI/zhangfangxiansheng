@@ -88,6 +88,7 @@ import { useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import * as fund from '@/api/fund'
 import * as master from '@/api/master'
+import { todayLocalDate } from '@/utils/date'
 
 const router = useRouter()
 
@@ -118,7 +119,7 @@ function addRow(count = 1) {
       if (col.field_code === 'entity_match_key') {
         row[col.field_code] = ''
       } else if (col.field_code === 'business_date') {
-        row[col.field_code] = new Date().toISOString().slice(0, 10)
+        row[col.field_code] = todayLocalDate()
       } else {
         row[col.field_code] = ''
       }

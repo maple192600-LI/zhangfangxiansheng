@@ -598,6 +598,7 @@
 import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { todayLocalDate } from '@/utils/date'
 
 // ── 公共数据 ──
 const divisions = ref([])
@@ -998,7 +999,7 @@ function openAccountForm(acc) {
     editingAccount.value = null
     accountForm.value = {
       ...makeAccountForm(),
-      balance_date: new Date().toISOString().slice(0, 10),
+      balance_date: todayLocalDate(),
     }
   }
   showAccountForm.value = true
@@ -1181,7 +1182,7 @@ function openBankForm(item) {
       account_number: '', account_last_four: '', account_type: '银行账户',
       instrument_type: '银行存款', has_online_banking: false, input_method: '手工填写',
       currency: 'CNY', include_in_daily_report: true, allow_manual_entry: true,
-      initial_balance: 0, balance_date: new Date().toISOString().slice(0, 10),
+      initial_balance: 0, balance_date: todayLocalDate(),
       status: 'enabled', notes: '',
     }
   }

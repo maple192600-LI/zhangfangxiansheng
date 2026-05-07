@@ -20,8 +20,7 @@
           <button class="btn btn-primary" @click="loadReport">生成报表</button>
         </div>
       </div>
-      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <table v-else-if="displayColumns.length">
+      <table v-if="displayColumns.length">
         <thead>
           <tr>
             <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
@@ -41,7 +40,7 @@
           </tr>
         </tbody>
       </table>
-      <div v-else-if="!loading" class="empty-state">
+      <div v-else-if="!loading && templateLoaded" class="empty-state">
         <div class="empty-icon">🏦</div>
         <h4>暂无余额数据</h4>
         <p>选择日期范围后点击"生成报表"</p>
@@ -55,17 +54,18 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { todayLocalDate } from '@/utils/date'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
-const today = new Date().toISOString().slice(0, 10)
+const today = todayLocalDate()
 const startDate = ref(today)
 const endDate = ref(today)
 const entityId = ref(null)
 const entities = ref([])
 const rows = ref([])
 const loading = ref(false)
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
 
 const DEFAULT_COLUMNS = [
   { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },

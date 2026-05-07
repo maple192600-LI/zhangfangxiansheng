@@ -25,9 +25,6 @@
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成报表...</p></div>
 
-      <!-- 优先：原 Excel 完整渲染（保留所有账户块、签字栏、合并单元格等） -->
-      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-
       <!-- 完整 Excel 布局渲染模式 -->
       <div v-else-if="hasFullLayout" class="excel-layout-wrapper">
         <table class="excel-layout-table" :style="tableStyle">
@@ -149,10 +146,11 @@ import { ref, computed, onMounted } from 'vue'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+import { todayLocalDate } from '@/utils/date'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 
-const today = new Date().toISOString().slice(0, 10)
+const today = todayLocalDate()
 const startDate = ref(today)
 const endDate = ref(today)
 const accountId = ref(null)
@@ -161,7 +159,7 @@ const blocks = ref([])
 const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
-const { templateColumns, templateLayout, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('cash_journal')
+const { templateColumns, templateLayout, loadTemplate } = useTemplateColumns('cash_journal')
 
 const DEFAULT_COLUMNS = [
   { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
@@ -199,7 +197,7 @@ const hasFullLayout = computed(() => {
   const layout = templateLayout.value
   if (!layout || !layout.rows) return false
   const types = new Set(layout.rows.map(r => r.type))
-  return types.has('header') && (types.has('data') || types.has('title'))
+  return types.has('header') && types.has('data') && types.has('title')
 })
 
 // 表格总宽度样式
