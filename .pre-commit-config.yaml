@@ -1,4 +1,4 @@
-# .pre-commit-config.yaml · v3 Layer-2 guards
+# .pre-commit-config.yaml · project guards
 # 详见 docs/00_governance/08_anti_drift.md §4。
 # 任一 guard exit ≠ 0 → 阻断提交。
 repos:
@@ -35,6 +35,27 @@ repos:
       - id: guard-api-inventory
         name: "§C7 · API ≤ 42 端点（check_api_inventory）"
         entry: python tools/guards/check_api_inventory.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-no-runtime-llm
+        name: "确定性执行路径不得调用 LLM（check_no_runtime_llm）"
+        entry: python tools/guards/check_no_runtime_llm.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-no-parallel-implementations
+        name: "禁止平行 Agent 实现和权威文档版本化命名（check_no_parallel_implementations）"
+        entry: python tools/guards/check_no_parallel_implementations.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: guard-product-purity
+        name: "禁止跟踪运行时/依赖/日志/临时产物（check_product_purity）"
+        entry: python tools/guards/check_product_purity.py
         language: system
         pass_filenames: false
         always_run: true

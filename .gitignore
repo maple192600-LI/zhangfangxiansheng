@@ -13,6 +13,7 @@ backend/data/zhangfang.db-wal
 backend/data/zhangfang.db-shm
 
 # Node
+node_modules/
 frontend/node_modules/
 frontend/dist/
 
@@ -37,8 +38,17 @@ htmlcov/
 
 # Upload temp files
 backend/data/uploads/
+backend/data/template_uploads/
+backend/data/generated_reports/
 backend/tmp_skill_content.txt
 
 # Backups & exports (runtime data)
 backups/*.zip
 exports/*.xlsx
+
+# Reference source drops copied for research; not project authority
+new/
+
+# Agent runtime learning data
+agents/**/experience.json
+backend/data/agents/

@@ -1,183 +1,68 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file gives Claude Code project-specific guidance for `账房先生`.
 
-## 强制：文档入口
+## Required Reading
 
-**每次会话开始，必须先读 [`docs/README.md`](docs/README.md)。** 该文件是所有开发文档的唯一入口，包含必读顺序和文件优先级。
+Read `AGENTS.md` first, then `docs/README.md`. These two files define the active project entrypoint and the document priority chain.
 
-## Skill Policy
+Do not treat `new/` as authority. It is reference material only.
 
-Skills auto-load via forced-eval hook. When the hook triggers a YES for a skill, read its SKILL.md before proceeding.
+## Current Product Shape
 
-| Task Type | Skill |
-|-----------|-------|
-| Python backend | `python-patterns` |
-| API/architecture | `backend-patterns`, `api-design` |
-| Frontend | `frontend-patterns` |
-| Testing | `python-testing`, `tdd-workflow` |
-| Verification | `verification-loop` |
-| Browser testing | `web-access` |
-| Debugging | `systematic-debugging` |
-| Code review | `requesting-code-review` |
-| Security | `security-review` |
-| Coding standards | `coding-standards` |
-| Complex planning | `blueprint` |
-| Codebase analysis | `codebase-onboarding` |
-| Architecture decisions | `architecture-decision-records` |
-| Research before coding | `search-first` |
-| Library docs lookup | `documentation-lookup` |
-| Product → engineering | `product-capability` |
-| Context management | `strategic-compact` |
+`账房先生` is a local finance workbench. The user should work through uploads, previews, confirmations, and report exports, not through code, JSON, SQL, regular expressions, or manual field mapping.
 
-## Project Overview
+The target data flow is:
 
-**账房先生 (ZhangFang)** — 面向中国财务人员的本地部署财务工作台。Agent驱动的产品：Agent编写脚本/规则，脚本确定性处理数据，用户只需上传和确认。
-
-## Tech Stack (Fixed)
-
-| Layer | Tech |
-|-------|------|
-| Backend | Python 3.11+ / FastAPI / SQLAlchemy |
-| Database | SQLite |
-| Data Processing | Polars / openpyxl |
-| Frontend | Vue 3 / Vite / Ant Design Vue / ECharts |
-| OCR | PaddleOCR (后续) |
-| Packaging | 前端静态编译 + 后端挂载 + PyInstaller |
-
-**未经批准不得更换上述主技术栈。**
-
-## Document Architecture
-
-所有文档在 `docs/` 目录下，入口为 [`docs/README.md`](docs/README.md)。
-
-```
-docs/
-├── README.md                        ← 文档主入口（必读）
-├── 00_governance/                   ← 核心契约层（最高优先级）
-│   ├── 00_project_constitution.md   ← 项目宪法（冻结）
-│   ├── 01_v1_scope_and_order.md     ← 范围与顺序
-│   ├── 02_user_constraints.md       ← 用户约束
-│   ├── 03_tech_constraints.md       ← 技术约束
-│   ├── 08_anti_drift.md             ← 防跑偏机制
-│   └── 09_ai_capability_v3.md       ← Agent能力配置
-├── 10_product_design/               ← 产品设计
-├── 20_execution/                    ← 模块执行文档
-└── 30_contracts/                    ← 数据库/API/字段契约
+```text
+Upload -> rule match or Agent rule creation -> review -> accepted Parser/Rule
+       -> deterministic execution -> fund_events -> reports
 ```
 
-**冲突处理：** constitution > contracts > execution > product_design。先报告冲突，不擅自决定。
+Agent creates and improves rules. Deterministic code executes accepted rules.
 
-## Current Code Structure
+## Engineering Rules
 
-```
-backend/
-  main.py / config.py / database.py
-  api/         ← 路由层（23个路由文件）
-  services/    ← 业务逻辑（18个服务文件）
-  db/          ← ORM表定义（25个表）
-  core/        ← 安全、响应格式、运行时守卫
-  agents/      ← Agent引擎（运行时+工具+记忆）
-  data/        ← SQLite数据库 + 上传/导出/备份
-frontend/
-  src/
-    views/     ← 31个页面（含agent/子目录）
-    components/ / composables/ / stores/ / router/ / api/ / styles/
-agents/        ← Agent运行时数据（用户创建的实例）
-samples/       ← 样本文件
-templates/     ← 前端/手工模板
-references/    ← 截图、样式规范
-tools/guards/  ← 契约守卫脚本
-tests/         ← pytest测试
-```
+- Keep one implementation per capability.
+- Use GitHub Flow: branch from `main`, commit focused changes, open a PR, pass checks and review, then merge.
+- Prefer editing the existing path over creating a parallel replacement.
+- Preserve user/runtime data.
+- Do not edit frozen contracts without explicit user approval.
+- Do not add new version-suffixed names for Agent, Skill, Memory, Parser, or Rule concepts.
+- Backend routes should validate and delegate to services.
+- User-facing text and errors should be Chinese.
+- Use `core.response.success/error` for API responses.
 
-## Key Constraints
+## Verification
 
-- **核心逻辑确定性优先**，AI辅助其次；报表生成禁止调LLM（§C8）
-- **表格是主战场**，卡片和图表只做辅助
-- **全中文 UI**，错误信息中文可读
-- **用户无需命令行**，双击即可启动
-- 路由层不承载业务逻辑，业务逻辑放 `services/`
-- API 统一响应格式：`{ "code": 0, "message": "ok", "data": {} }`
-- **增强层不阻断核心功能** — 模板/主题缺失时降级到默认行为
+For every substantial change, run the relevant checks:
 
-## V1 Scope
-
-**包含：** 主数据中心、银行导入、手工流水双轨、日报生成、导出打印、基础看板、备份回滚、日志、Agent系统
-
-**禁止：** 发票OCR正式流程、费用审批、合同管理、多人协作、集中部署
-
-## Visual Style
-
-稳重复克制的暖色系：柔和浅暖中性背景 + 低饱和稳重绿色主强调色 + 砂金/暖棕辅助色。详细规范见 `references/style_and_interaction/style_theme_spec.md`。
-
-## Completion Requirements
-
-每步完成后必须：1) 输出文件清单 2) 实际验证通过 3) 检查是否破坏其他功能。未达标不得跳步。
-
-
-# CLAUDE.md
-
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+```powershell
+backend\venv\Scripts\python.exe tools\guards\check_canonical_schema.py
+backend\venv\Scripts\python.exe tools\guards\check_primitives_whitelist.py
+backend\venv\Scripts\python.exe tools\guards\check_placeholder_binding.py
+backend\venv\Scripts\python.exe tools\guards\check_api_inventory.py
+backend\venv\Scripts\python.exe tools\guards\check_no_runtime_llm.py
+backend\venv\Scripts\python.exe tools\guards\check_no_parallel_implementations.py
+backend\venv\Scripts\python.exe tools\guards\check_product_purity.py
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+If a guard fails because a frozen contract has drifted, stop and report the exact drift. Do not silently update `contracts.lock`.
 
----
+For frontend-visible changes, also run:
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+```powershell
+cd frontend
+npm run build
+```
+
+Then validate the affected browser flow.
+
+## GitHub Workflow
+
+- Do not work directly on `main`.
+- Use short-lived branches named by task type, such as `docs/git-flow`, `fix/parser-runtime`, or `feat/rule-center`.
+- Use Conventional Commits.
+- Every merge to `main` must go through a PR.
+- PR descriptions must include changed scope, verification commands, guard results, browser validation when relevant, and known gaps.
+- Do not push runtime data, logs, databases, dependency folders, local secrets, uploads, or generated reports.

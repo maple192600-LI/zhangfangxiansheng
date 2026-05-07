@@ -1,161 +1,124 @@
-# 04 · 编码规范
+# 04 · 编码与命名规范
 
-> 配合 [00_project_constitution.md](00_project_constitution.md)、[03_tech_constraints.md](03_tech_constraints.md) 使用。
+本文件定义当前项目的工程写法。冻结契约仍以 `00_project_constitution.md` 为准；普通开发不得直接修改冻结契约。
 
----
+## 命名原则
 
-## §1 · Python 后端规范
+使用稳定业务概念，不引入版本化分裂命名。
 
-### §1.1 · 命名
+允许使用：
 
-| 类型 | 规范 | 示例 |
-|------|------|------|
-| 文件名 | snake_case | `bank_import_service.py` |
-| 类名 | PascalCase | `BankImportService` |
-| 函数/方法 | snake_case | `parse_bank_statement()` |
-| 常量 | UPPER_SNAKE_CASE | `MAX_BATCH_SIZE = 1000` |
-| 私有方法 | _前缀 | `_validate_headers()` |
-| ORM 模型 | PascalCase，表名 snake_case | `class FundEvent` → `fund_events` |
+- Agent
+- Skill
+- Memory
+- Parser
+- Rule
+- Artifact
 
-### §1.2 · 分层调用规则
+不要新增带版本后缀的 Agent/Skill/Memory 命名，不要新增 `new_*`、`legacy_*` 这类为同一能力临时创建的平行替代名。
 
-```
-api/（路由层）→ 只做参数校验 + 调 service + 返回响应
-  ↓
-services/（业务层）→ 所有业务逻辑
-  ↓
-db/（数据层）→ ORM 模型定义
-  ↓
-database.py → 引擎与会话管理
-```
+历史遗留命名必须通过迁移任务逐步收敛，不得在新代码、新文档、新 UI 文案中继续扩散。
 
-- 路由层禁止：直接查数据库、调用 AI、写业务逻辑
-- Service 层禁止：直接操作 request/response 对象
-- ORM 层禁止：包含业务逻辑方法
+## 后端规范
 
-### §1.3 · 响应格式
-
-所有 API 响应统一走 `core/response.py`：
-
-```python
-from core.response import success, error
-
-# 成功
-return success(data={"items": items, "total": len(items)})
-
-# 失败
-return error(code=1001, message="参数缺失")
+```text
+api/      -> 参数校验、调用 service、返回响应
+services/ -> 业务流程和事务编排
+db/       -> ORM 模型和数据结构
+agents/   -> Agent、Skill、Memory、工具、规则创建流程
+fund/     -> Parser/Rule 确定性执行所需的基元和 artifact
 ```
 
-禁止在路由层直接构造 JSON 响应。
+要求：
 
-### §1.4 · 数据库访问
+- 路由层不写业务逻辑。
+- Service 层不直接操作 FastAPI request/response。
+- 确定性执行阶段不得调用 LLM。
+- 所有 API 响应走 `core.response.success/error`。
+- 用户可见错误信息使用中文。
+- Parser/Rule artifact 只能调用白名单基元。
 
-- 统一通过 `get_db()` 依赖注入获取会话
-- 禁止裸 SQL（Alembic 迁移脚本除外）
-- 使用 `try/finally` 确保会话关闭
-- 批量操作使用 `bulk_insert_mappings`
+## 前端规范
 
-### §1.5 · 错误处理
-
-- 路由层：捕获 Service 层异常，转为错误响应
-- Service 层：抛出有意义的异常（不要吞掉错误）
-- 全局：`main.py` 的 `_global_exception_handler` 兜底，返回中文提示
-
-### §1.6 · 类型注解
-
-所有函数签名必须有类型注解：
-
-```python
-def import_bank_statement(
-    file_path: str,
-    account_code: str,
-    batch_id: int | None = None,
-) -> dict[str, Any]:
+```text
+views/       -> 页面
+components/  -> 可复用组件
+api/         -> 接口封装
+stores/      -> 全局状态
+router/      -> 路由
+styles/      -> 全局样式
 ```
 
----
+要求：
 
-## §2 · Vue 前端规范
+- 页面组件不直接写底层请求细节，统一从 `src/api/` 调用。
+- 工作流页面必须围绕“上传、匹配/创建规则、预览、确认、结果”组织。
+- 不向用户暴露 JSON、正则、SQL 或字段映射编辑器。
+- Agent、Skill、Memory、Parser、Rule 在 UI 中使用同一套中文表达。
 
-### §2.1 · 文件组织
+## 单一实现规则
 
-```
-views/           ← 页面组件（按功能模块命名）
-  agent/         ← Agent 相关页面子目录
-components/      ← 通用可复用组件
-composables/     ← Vue 组合式函数（use 开头）
-stores/          ← Pinia 状态管理
-api/             ← 接口请求封装
-router/          ← 路由配置
-styles/          ← 全局样式
-```
+同一能力只能有一个当前实现入口。
 
-### §2.2 · 命名
+如果发现旧实现仍被调用：
 
-| 类型 | 规范 | 示例 |
-|------|------|------|
-| 页面组件 | PascalCase.vue | `BankImport.vue` |
-| 通用组件 | PascalCase.vue | `DataTable.vue` |
-| 组合式函数 | camelCase，use 前缀 | `useTableFilter.js` |
-| API 文件 | camelCase | `bankImport.js` |
-| CSS class | kebab-case | `page-header` |
+1. 标记旧入口。
+2. 找出所有调用方。
+3. 迁移到当前入口。
+4. 删除或归档旧入口。
+5. 增加回归测试。
 
-### §2.3 · API 调用
+不得通过新增平行文件绕过缺陷。
 
-统一通过 `src/api/` 封装，不直接在组件中写 axios 调用：
+## 提交与验证
 
-```javascript
-// src/api/bankImport.js
-import request from './request'
+每个任务结束必须提供：
 
-export function uploadBankFile(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  return request.post('/api/bank/import', formData)
-}
+- 文件清单。
+- 运行的测试或构建命令。
+- 守卫脚本结果。
+- 用户可见变更的浏览器验证结果。
+- 未完成项或冻结契约阻塞项。
 
-// 在组件中使用
-import { uploadBankFile } from '@/api/bankImport'
-```
+## Git 提交规范
 
-### §2.4 · 状态管理
+本项目使用 GitHub Flow 和 Conventional Commits。
 
-- 全局状态放 Pinia store（如用户信息、Agent 配置）
-- 页面局部状态用 `ref` / `reactive`
-- 不在组件间直接传递 props 超过 3 层
+分支规则：
 
----
+- `main` 只接收通过 PR 合并的代码。
+- 每个任务从最新 `main` 创建短分支。
+- 分支名使用小写短横线，格式建议为 `type/topic`。
+- 常用类型：`feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`ci`。
+- 一个分支只做一个明确目标，避免把文档治理、功能开发、格式化和重构混在一起。
 
-## §3 · 通用规范
+提交规则：
 
-### §3.1 · 全中文
-
-- 所有 UI 文案、错误提示、日志信息均为中文
-- API 响应的 `message` 字段为中文
-- 代码注释按需使用中文（非强制）
-
-### §3.2 · 文件大小
-
-| 类型 | 上限 | 超出处理 |
-|------|------|----------|
-| Python 文件 | 500 行 | 拆分模块 |
-| Vue 文件 | 400 行 | 抽取组件 |
-| 单个函数 | 50 行 | 拆分子函数 |
-
-### §3.3 · Git 提交
-
-格式：`<type>: <中文描述>`
-
-type: feat / fix / refactor / docs / test / chore / perf
-
-```
-feat: 银行导入支持多格式自动检测
-fix: 日报金额汇总精度丢失问题
-refactor: Agent 运行时核心循环简化
+```text
+<type>(<scope>): <summary>
 ```
 
----
+示例：
 
-**版本**
-- v1.0 · 2026-05-02 · 首次发布
+```text
+docs(governance): add GitHub Flow rules
+fix(bank-import): route preview through parser artifacts
+test(reports): cover rule-based report generation
+chore(guards): freeze API inventory baseline
+```
+
+提交要求：
+
+- 摘要用英文类型和简短说明。
+- 正文说明为什么改，不只说明改了什么。
+- 不提交 `WIP`、`update`、`fix stuff` 这类无信息提交。
+- 不把无关文件塞进同一个提交。
+- 已推送到共享分支后，不随意 rebase 或强推；确需强推只能用 `--force-with-lease`。
+
+PR 要求：
+
+- PR 标题使用 Conventional Commit 风格。
+- PR 描述必须包含变更摘要、验证命令、guard 结果、浏览器验证结果、风险和未完成项。
+- 检查失败不得合并。
+- review 意见必须处理或明确解释。
+- 小而聚焦的 PR 优先使用 squash merge。

@@ -1,133 +1,113 @@
-# 12 Bank Import Execution
+# 12 · 银行流水导入执行规范
 
-## 1. Module goal
+## 1. 模块目标
 
-Implement structured bank file upload, template matching, AI-assisted column mapping, preview, and formal write-in.
+银行流水导入模块负责把用户上传的网银流水文件转成可预览、可确认、可追溯的 `fund_events` 数据。
 
-## 2. Scope
+Agent 只参与规则创建、规则修正和规则解释。日常导入必须优先匹配已审核 Parser，并由确定性代码执行。
 
-Must build:
+## 2. 主链路
 
-- multi-file upload
-- read xlsx / xls / csv
-- parser template skeleton
-- template matching
-- **AI 智能解析列映射（通过用户选择的 AgentV2 智能体）**
-- preview grid
-- formal write-in to fund_events
-- batch id generation
-- raw row JSON retention
-- **提交后自动保存解析规则到规则中心（银行流水规则），以识别的银行名称命名模板**
+```text
+上传银行流水
+  -> 识别银行和文件格式
+  -> 匹配已审核 Parser
+  -> 未匹配时进入 Agent 规则创建
+  -> 用户审核 Parser 和样本结果
+  -> 保存到规则中心
+  -> 确定性解析
+  -> 预览
+  -> 用户确认
+  -> 写入 fund_events
+```
 
-### 智能体调用能力（Round 11 增强）
+## 3. Parser 规则
 
-用户上传银行流水文件后，可选择调用哪个 AI 智能体进行列映射解析。
+Parser 是银行流水解析的唯一长期资产。
 
-**核心流程：**
-1. 用户在"网银导入"页面选择「调用智能体」下拉框，选择要使用的 AgentV2 智能体
-2. 上传银行流水文件后，系统将表头和样本数据发送给选定的智能体
-3. 智能体使用其 `role_prompt`（出纳知识）和 `ai_config`（AI 模型配置）进行列映射分析
-4. 返回标准字段映射结果（`{银行列名: 标准字段code}`）和置信度
-5. 用户确认映射 → 预览 → 提交入库
-6. 提交成功后自动将映射保存为规则模板到规则中心，模板名称使用 AI 识别的银行名称（如"招商银行流水解析规则"）
+Parser 必须按银行和文件格式复用，不得绑定单个公司、单个账户或单次上传文件。比如中国银行网银流水 Parser 应能复用到不同公司、不同账户的中国银行网银流水。
 
-**标准字段列表（供 AI 映射）：**
+Parser 至少描述：
 
-| 字段 code | 中文名 |
-|---|---|
-| `business_date` | 交易日期 |
-| `income_amount` | 收入金额 |
-| `expense_amount` | 支出金额 |
-| `counterparty_name` | 对方户名/对方名称 |
-| `summary_text` | 摘要/用途 |
-| `balance` | 余额 |
-| `business_time` | 交易时间 |
-| `counterpart_account` | 对方账号 |
-| `counterpart_bank` | 对方开户行 |
-| `voucher_no` | 凭证号 |
-| `transaction_type` | 交易类型 |
+- 适用银行、文件类型、表头特征、关键列别名。
+- 日期、金额、方向、余额、摘要、对方户名、对方账号等字段提取方式。
+- 主数据匹配所需的账户识别字段。
+- 样本校验结果和用户确认记录。
+- 失败或低置信度时的异常路由规则。
 
-**规则自动保存：** `_auto_save_template()` 在 `commit_by_mapping` 时自动触发，将 AI 解析确认后的映射保存到 `ParserTemplate`（template_type='bank'）。同名模板自动更新，新模板自动创建。
+## 4. 页面职责
 
-Must not build now:
+页面：`frontend/src/views/BankImport.vue`
 
-- OCR parsing for bank files
-- free-form AI auto-fix
-- high-risk auto ownership decision without confirmation
+页面必须让用户完成：
 
-## 3. Pages
+- 上传一个或多个银行流水文件。
+- 查看系统匹配到的 Parser。
+- 在没有 Parser 时进入 Agent 创建规则流程。
+- 预览解析结果。
+- 确认或退回修正规则。
+- 确认后写入基础数据表。
 
-### page
-`frontend/src/views/BankImport.vue`
+页面不得要求用户直接写 JSON、正则、SQL 或字段映射。
 
-Required regions:
+## 5. 后端职责
 
-- **导入账户选择器** — 选择要导入的银行账户
-- **调用智能体选择器** — 选择用于 AI 解析的 AgentV2 智能体
-- upload area
-- AI parse result display (mapping table)
-- preview grid
-- template create / confirm dialog
-
-## 4. Backend files
+主要文件：
 
 - `backend/api/bank_import.py`
 - `backend/services/bank_import_service.py`
-- `backend/core/parser_engine.py`
-- `backend/core/ai_provider.py`
+- `backend/core/artifact_runtime.py`
+- `backend/agents/fund/harness.py`
 
-## 5. Workflow
+职责划分：
 
-1. user selects target account
-2. user selects AI agent for parsing
-3. user uploads files
-4. system reads structure
-5. system calls selected agent for AI column mapping (`POST /api/bank-import/ai-parse` with `agent_id`)
-6. system displays AI mapping result with confidence
-7. user reviews mapping, clicks preview
-8. system applies mapping and shows parsed preview
-9. user confirms write-in
-10. system writes records with `batch_id`
-11. **system auto-saves mapping as rule template** (named by bank name)
+- API 层只负责上传、参数校验、响应格式化。
+- Service 层负责规则匹配、批次、预览、确认、入库。
+- Artifact runtime 只执行已审核 Parser，不调用 LLM。
+- Agent harness 只创建或修正 Parser 草稿，不直接入库。
 
-## 6. Preview required columns
+## 6. 数据要求
 
-- file name
-- matched template
-- candidate entity / account
-- transaction date
-- summary
-- counterparty
-- income
-- expense
-- balance
-- parse status
+每条正式入库记录必须携带：
 
-## 7. Core rules
+- 来源文件。
+- 导入批次。
+- Parser 标识。
+- 原始行快照。
+- 用户确认记录。
+- 解析状态。
 
-- no silent formal write without preview
-- if ownership is not unique, force user confirmation
-- every imported row must carry `batch_id`
-- every imported row must carry `raw_data`
-- **AI 解析必须通过用户选择的 AgentV2 智能体，不允许使用独立 AI 配置**
-- **确认后的解析规则必须自动保存到规则中心**
+`fund_events` 是后续报表的唯一流水事实源。
 
-## 8. APIs
+## 7. 异常处理
 
-- `POST /api/bank-import/upload` — 上传文件
-- `POST /api/bank-import/preview` — 预览解析
-- `POST /api/bank-import/commit` — 提交（通过 parser artifact）
-- `POST /api/bank-import/commit-by-mapping` — 基于映射提交（含 `template_name`, `sample_headers` 自动保存规则）
-- `POST /api/bank-import/ai-parse` — AI 智能解析（参数：`headers`, `sample_rows`, `agent_id`）
-- `POST /api/bank-import/save-template` — 手动保存为规则模板
-- `GET /api/agent_v2/agents` — 获取可用智能体列表
+必须进入预览或异常维护，不允许静默入库：
 
-## 9. Done standard
+- 找不到 Parser。
+- 账户或主体无法唯一匹配。
+- 金额方向无法判定。
+- 日期或金额解析失败。
+- Parser 样本校验低于通过标准。
 
-Complete only if:
+## 8. API 方向
 
-- at least 2 different bank formats can be previewed
-- unmatched template can be saved then reused
-- committed rows can be traced by batch id
-- **AI 解析使用用户选择的智能体，映射结果可预览确认**
-- **确认后的解析规则自动保存到规则中心的银行流水规则下**
+目标 API 应围绕资源和工作流命名：
+
+- 上传文件。
+- 匹配 Parser。
+- 创建 Parser 草稿。
+- 审核 Parser。
+- 生成预览。
+- 确认入库。
+- 查询批次和追溯信息。
+
+旧的映射提交、手工保存模板、用户选择智能体解析表头等入口属于迁移对象，不得继续作为新功能开发依据。
+
+## 9. 完成标准
+
+- 同一银行同一格式的不同公司、不同账户流水可复用同一 Parser。
+- 未匹配文件能进入 Agent 规则创建流程。
+- 规则创建后必须先预览、再由用户确认、再入库。
+- 入库记录能追溯到文件、批次、Parser 和确认记录。
+- 日常导入执行阶段不调用 LLM。
+- 用户不需要写 JSON、正则、SQL 或字段映射。

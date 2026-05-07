@@ -1,4 +1,4 @@
-# 25 · 基元库白名单（v3 · §C5）
+# 25 · 基元库白名单
 
 > 本文件定义 Parser / Rule artifact **唯一允许调用**的函数白名单。
 > 任何调用白名单外的函数 = `tools/guards/check_primitives_whitelist.py` 拒绝。
@@ -253,7 +253,7 @@ Rule artifact 不是自由代码，而是**声明式 JSON + 受限 primitive 引
 
 ```json
 {
-  "name": "现金日记账_月账_v1",
+  "name": "现金日记账_月账",
   "template_file": "templates/cash_journal_blank.xlsx",
   "placeholder_bindings": {
     "报表标题":     { "primitive": "const",            "value": "现金日记账" },
@@ -299,8 +299,3 @@ Rule artifact 不是自由代码，而是**声明式 JSON + 受限 primitive 引
 4. 新基元生效后，用户重新触发 `parser.bank`
 
 **Agent 绝不可在 artifact 代码里"临时实现"缺失的基元**（= 违反 §C5）。
-
----
-
-**版本**
-- v3.0 · 2026-04-23 · 首次发布（37 函数冻结）

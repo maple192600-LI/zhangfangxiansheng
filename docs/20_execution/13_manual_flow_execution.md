@@ -1,130 +1,113 @@
-# 13 Manual Flow Execution
+# 13 · 手工流水执行规范
 
-## 1. Module goal
+## 1. 模块目标
 
-Build the confirmed dual-track manual flow mechanism.
+手工流水模块负责把用户在系统内录入或通过 Excel 上传的手工资金记录，统一转成可预览、可维护、可确认的 `fund_events` 数据。
 
-Track A:
-- in-system quick entry
+手工流水必须比原来的 Excel 工作方式更快，不能让用户承担技术配置。
 
-Track B:
-- Excel multi-subject workbook upload
-- **AI 智能解析列映射（通过用户选择的 AgentV2 智能体）**
+## 2. 两条输入路径
 
-Both tracks must end in the same preview -> maintenance -> base data pipeline.
+### 系统内快速录入
 
-## 2. Key product rule
+适合少量记录。页面应提供大表格录入、批量粘贴、上下文继承和快速保存，不应让用户反复打开弹窗。
 
-Manual flow must be faster than old Excel practice.
+### Excel 手工总表上传
 
-The system must support one workbook containing many entities and many manual fund carriers.
+适合多主体、多账户、多现金或其他资金载体集中录入。上传后必须进入统一预览链路，不得直接写入正式结果。
 
-The system must not force one account per file.
+## 3. 主链路
 
-## 3. Frontend pages
+```text
+快速录入或上传 Excel
+  -> 匹配手工 Parser 或模板规则
+  -> 未匹配时进入 Agent 规则创建
+  -> 用户审核规则和样本结果
+  -> 预览
+  -> 异常维护
+  -> 用户确认
+  -> 写入 fund_events
+```
+
+Agent 可以帮助识别新模板、创建手工 Parser、沉淀字段别名和纠错记录。确定性入库阶段不得调用 LLM。
+
+## 4. 页面职责
+
+主要页面：
 
 - `frontend/src/views/ManualFlow.vue`
 - `frontend/src/views/ManualMaintenance.vue`
 - `frontend/src/views/UploadPreview.vue`
 
-### 智能体调用（Round 11 增强）
+页面必须支持：
 
-手工流水页面的工具栏增加「调用智能体」下拉框，用于 Excel 上传时的 AI 智能列映射。用户可选择任意已创建的 AgentV2 智能体来解析手工流水表头。
+- 大表格快速录入。
+- 批量粘贴。
+- 上传一个包含多个主体和多个资金载体的 Excel。
+- 预览和异常维护。
+- 用户确认后入库。
+- 从已有规则中心匹配手工 Parser 或模板规则。
 
-**Excel 上传两种模式：**
-1. **上传预览** — 走原有 FundAgent `parser.manual` skill 流程
-2. **AI 智能解析** — 使用选定的 AgentV2 智能体，基于当前方案的 field_pool 进行列映射分析
+页面不得要求用户直接写 JSON、正则、SQL 或字段映射。
 
-## 4. Track A: quick entry
+## 5. 手工 Parser 和模板规则
 
-### UI requirements
+手工 Parser 用于把上传表格转成标准资金事件。
 
-- one large editable table
-- user may select template scheme before entry
-- user may paste multiple rows
-- common context fields may be inherited by batch
-- no repeated pop-up form per row
+模板规则用于说明某类手工表格的字段、列顺序、主体识别方式、账户识别方式和校验规则。
 
-### save targets
+规则必须沉淀：
 
-Quick-entry rows first enter manual batch staging, not final report directly.
+- 字段别名。
+- 主体别名。
+- 账户或资金载体别名。
+- 样本校验结果。
+- 用户确认或纠错意见。
 
-## 5. Track B: Excel multi-subject upload
+## 6. 后端职责
 
-### workbook rule
-
-One workbook may include:
-
-- multiple entities
-- multiple manual bank accounts
-- multiple cash accounts
-- multiple other manual fund carriers
-
-### required parsing principle
-
-A row must be converted to one standard fund event after:
-
-- entity/account matching
-- field mapping
-- validation
-- abnormal routing if needed
-
-### AI 智能解析流程
-
-1. 用户选择智能体 + 选择方案
-2. 上传 Excel 文件
-3. 系统检测表头
-4. 调用 `POST /api/manual-flow/ai-parse`（传入 `agent_id`, `scheme_code`, `headers`）
-5. AI 返回 `{Excel列名: field_code}` 映射和置信度
-6. 用户确认映射 → 提交入库
-
-### forbidden assumption
-
-Do not rely on merged-cell visual blocks as the only ownership marker.
-
-## 6. Field scheme support
-
-The manual page must support field scheme selection:
-
-- choose preset
-- choose enabled optional fields
-- order columns
-- save as scheme
-- export empty Excel template from the same scheme
-
-## 7. Backend files
+主要文件：
 
 - `backend/api/manual_flow.py`
 - `backend/services/manual_flow_service.py`
 - `backend/services/manual_scheme_service.py`
+- `backend/core/artifact_runtime.py`
 
-## 8. APIs
+职责划分：
 
-- `GET /api/manual-flow/field-pool` — 字段池
-- `GET /api/manual-flow/schemes`
-- `POST /api/manual-flow/schemes`
-- `PUT /api/manual-flow/schemes/{id}`
-- `POST /api/manual-flow/quick-entry/save`
-- `POST /api/manual-flow/upload`
-- `POST /api/manual-flow/preview`
-- `POST /api/manual-flow/commit`
-- `POST /api/manual-flow/export-template`
-- **`POST /api/manual-flow/ai-parse`** — AI 智能解析（参数：`headers`, `sample_rows`, `agent_id`, `scheme_code`）
+- API 层负责上传、参数校验和响应格式化。
+- Service 层负责批次、预览、异常、确认和入库。
+- Artifact runtime 执行已审核规则。
+- Agent 只负责创建和修正规则草稿。
 
-## 9. Validation rules
+## 7. 校验规则
 
-- core recognition fields cannot be disabled
-- if entity/account cannot be matched, row must go abnormal
-- end balance must not be a mandatory input field
-- user-entered ending balance may exist only as optional check value
-- one uploaded workbook can contain many accounts
+- 一行必须能转换为一条标准资金事件。
+- 主体或账户无法匹配时进入异常维护。
+- 结束余额不是必填字段，只能作为可选校验值。
+- 一个上传工作簿可以包含多个主体和多个账户。
+- 核心识别字段不能被关闭。
+- 所有正式入库记录必须有来源文件或录入批次。
 
-## 10. Done standard
+## 8. API 方向
 
-This module is complete only if:
+目标 API 应围绕以下动作收敛：
 
-- user can enter rows in-system without repetitive drawers
-- user can upload one workbook containing many manual subjects
-- all rows enter preview before formal inclusion
-- invalid rows route to manual maintenance
-- **Excel 上传支持通过选定智能体进行 AI 智能列映射**
+- 快速录入保存到批次。
+- 上传 Excel。
+- 匹配或创建手工 Parser。
+- 预览。
+- 异常维护。
+- 用户确认入库。
+- 导出空白模板。
+
+旧的用户选择智能体做列映射入口属于迁移对象，不得继续作为新功能开发依据。
+
+## 9. 完成标准
+
+- 用户能在系统内快速录入多行。
+- 用户能上传一个多主体、多账户手工工作簿。
+- 所有数据先预览，再确认入库。
+- 异常行能进入维护，不污染正式结果。
+- 规则创建和纠错能沉淀到规则中心和 Memory。
+- 确定性执行阶段不调用 LLM。

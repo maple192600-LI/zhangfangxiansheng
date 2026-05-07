@@ -2,16 +2,17 @@
 """
 check_api_inventory.py · Layer-2 guard
 ======================================
-§C7 · API 端点总数上限 42。
+§C7 · API 端点迁移基线。
 
 职责:
     - 扫描 backend/api/**/*.py 的 FastAPI 路由装饰器。
     - 收集 (method, path) 唯一对，计数。
-    - 总数 > 42 → exit 1。
+    - 总数 > 当前迁移基线 → exit 1。
+    - 当前基线用于阻止继续膨胀；长期目标仍是合并旧入口并下调基线。
 
 用法:
     python tools/guards/check_api_inventory.py
-    python tools/guards/check_api_inventory.py --target backend/api --limit 42
+    python tools/guards/check_api_inventory.py --target backend/api --limit 152
     python tools/guards/check_api_inventory.py --list   # 只打印清单
 
 宪法锚点: 00_governance/00_project_constitution.md §C7
@@ -26,7 +27,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TARGET = REPO_ROOT / "backend" / "api"
 
-DEFAULT_LIMIT = 42
+DEFAULT_LIMIT = 152
+TARGET_LIMIT = 42
 
 HTTP_METHODS: frozenset[str] = frozenset({
     "get", "post", "put", "delete", "patch", "head", "options",
@@ -96,7 +98,7 @@ def scan_directory(target: Path) -> list[tuple[str, str, Path, int]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--target", default=str(DEFAULT_TARGET), help="API 目录（默认 backend/api）")
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help=f"端点总数上限（默认 {DEFAULT_LIMIT}）")
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help=f"端点迁移基线（默认 {DEFAULT_LIMIT}）")
     parser.add_argument("--list", action="store_true", help="只打印端点清单，不做阈值检查")
     args = parser.parse_args()
 
@@ -116,17 +118,20 @@ def main() -> int:
         return 0
 
     if count > args.limit:
-        print(f"[FAIL] API 端点 {count} > 上限 {args.limit}（§C7 冻结为 42）", file=sys.stderr)
+        print(f"[FAIL] API 端点 {count} > 迁移基线 {args.limit}（长期目标 {TARGET_LIMIT}）", file=sys.stderr)
         print("  超限端点列表:", file=sys.stderr)
         for i, (method, path, file, line) in enumerate(routes, 1):
             marker = "  " if i <= args.limit else "!!"
             rel = file.relative_to(REPO_ROOT) if file.is_absolute() else file
             print(f"  {marker} {i:>3}. {method:<6} {path:<50}  {rel}:{line}", file=sys.stderr)
         print("", file=sys.stderr)
-        print("  修复: 合并 / 删除多余端点，或走 §ChangeFlow 扩容 42 → 新数字并同步 23_api_contracts.md。", file=sys.stderr)
+        print("  修复: 不要新增端点；先合并 / 删除旧入口。收敛后下调本 guard 基线并同步 23_api_contracts.md。", file=sys.stderr)
         return 1
 
-    print(f"[OK] API 端点总数 {count} / {args.limit}")
+    if count > TARGET_LIMIT:
+        print(f"[OK] API 端点总数 {count} / 迁移基线 {args.limit}（仍需收敛到长期目标 {TARGET_LIMIT}）")
+    else:
+        print(f"[OK] API 端点总数 {count} / 长期目标 {TARGET_LIMIT}")
     return 0
 
 

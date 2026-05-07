@@ -1,17 +1,32 @@
-# 账房先生 ZhangFang V1
+# 账房先生
 
-面向中国财务人员的本地部署财务工作台。当前版本聚焦 V1 最小可用闭环：主数据中心、银行流水导入、手工流水录入、基础数据表、资金日报、导出、备份、AI 配置与 Agent 预留骨架。
+账房先生是面向中国财务人员的本地财务 Agent 工作台。产品目标是让用户通过上传 Excel、预览结果、确认入库和生成报表完成日常资金工作。
+
+Agent 的职责是帮助创建、维护和校验规则。日常导入、入库、汇总和报表生成必须由已审核的 Parser 或 Rule 确定性执行。
+
+## 当前主链路
+
+```text
+上传流水或模板
+  -> 匹配已有规则
+  -> 无规则时由 Agent 创建 Parser 或 Rule
+  -> 用户审核接受
+  -> 规则中心保存
+  -> 确定性执行
+  -> 基础数据表 fund_events
+  -> 报表生成与导出
+```
 
 ## 技术栈
 
 | 层级 | 技术 |
 | --- | --- |
-| 后端 | Python 3.11+ / FastAPI / SQLAlchemy / SQLite / Alembic |
+| 后端 | Python / FastAPI / SQLAlchemy / SQLite / Alembic |
 | 数据处理 | openpyxl / Polars |
-| 前端 | Vue 3 / Vite / Ant Design Vue / ECharts |
-| 打包 | 前端静态编译 + 后端挂载 + PyInstaller |
+| 前端 | Vue / Vite / Ant Design Vue / ECharts |
+| 打包 | 前端静态构建 + 后端挂载 + PyInstaller |
 
-## 本地开发启动
+## 本地启动
 
 首次准备环境：
 
@@ -19,7 +34,13 @@
 .\setup.bat
 ```
 
-手工安装后端依赖：
+启动：
+
+```powershell
+.\start.bat
+```
+
+手动启动后端：
 
 ```powershell
 cd backend
@@ -28,13 +49,7 @@ python -m venv venv
 .\venv\Scripts\python.exe main.py
 ```
 
-默认后端地址：
-
-```text
-http://127.0.0.1:8000
-```
-
-## 前端开发
+手动启动前端：
 
 ```powershell
 cd frontend
@@ -42,89 +57,60 @@ npm install
 npm run dev
 ```
 
-前端生产构建：
+## 重要目录
 
-```powershell
-cd frontend
-npm run build
-```
+| 目录 | 用途 |
+| --- | --- |
+| `backend/` | FastAPI 后端、服务层、数据库模型、Agent 系统 |
+| `frontend/` | Vue 前端 |
+| `docs/` | 项目权威文档入口 |
+| `agents/` | Agent 运行时数据与技能 |
+| `samples/` | 测试样本 |
+| `templates/` | 模板文件 |
+| `references/` | 原始参考资料和视觉参考 |
+| `new/` | 第三方参考源码、研究资料、旧项目文档归档，不是项目权威 |
+| `tools/guards/` | 项目守卫脚本 |
+| `tests/` | 自动化测试 |
 
-构建完成后，后端会挂载 `frontend/dist`，可通过后端地址访问单页应用。
+## 验证
 
-## 一键启动
-
-完成 `setup.bat` 后：
-
-```powershell
-.\start.bat
-```
-
-`start.bat` 会清理端口 8000 上的旧进程、清理 Python 缓存，并启动后端服务。
-
-## 环境变量
-
-复制 `.env.example` 为 `.env` 后按需调整：
-
-```text
-ZF_SECRET_KEY=set_a_long_random_string_here
-ZF_DB_PATH=backend/data/zhangfang.db
-ZF_LOG_LEVEL=INFO
-```
-
-当前代码会读取 `ZF_SECRET_KEY` 和 `ZF_DB_PATH`。未设置 `ZF_SECRET_KEY` 时会基于数据库路径生成本地密钥，仅适合单机开发环境。
-
-## 测试
-
-后端测试：
+后端测试示例：
 
 ```powershell
 backend\venv\Scripts\pytest.exe tests\backend
 ```
 
-服务层覆盖率门槛：
+守卫检查示例：
 
 ```powershell
-backend\venv\Scripts\pytest.exe tests\backend --cov=backend/services --cov-report=term-missing --cov-fail-under=70
+backend\venv\Scripts\python.exe tools\guards\check_canonical_schema.py
+backend\venv\Scripts\python.exe tools\guards\check_primitives_whitelist.py
+backend\venv\Scripts\python.exe tools\guards\check_placeholder_binding.py
+backend\venv\Scripts\python.exe tools\guards\check_api_inventory.py
 ```
 
-端到端业务闭环脚本：
-
-```powershell
-backend\venv\Scripts\pytest.exe tests\e2e\test_full_flow.py
-```
-
-## 打包成 exe
-
-先构建前端：
+前端构建：
 
 ```powershell
 cd frontend
 npm run build
-cd ..
 ```
 
-安装 PyInstaller 并打包后端入口：
+## 开发流程
 
-```powershell
-backend\venv\Scripts\pip.exe install pyinstaller
-backend\venv\Scripts\pyinstaller.exe --onefile --name zhangfang --paths backend backend\main.py
-```
+项目按 GitHub Flow 开发：
 
-打包产物位于 `dist/zhangfang.exe`。正式交付前需补充静态资源、数据库初始文件、Alembic 迁移文件和启动脚本的完整打包校验。
+- `main` 保持可运行。
+- 每个任务新建短分支。
+- 提交使用 Conventional Commits。
+- 所有合并通过 Pull Request。
+- PR 必须写明变更、验证、风险和未完成项。
+- 合并前必须通过测试、guard，以及必要的浏览器验证。
 
-## 重要目录
+## 开发边界
 
-| 目录 | 用途 |
-| --- | --- |
-| `backend/` | FastAPI 后端、服务层、数据库模型、Agent 骨架 |
-| `frontend/` | Vue 前端 |
-| `alembic/` | SQLite schema 迁移 |
-| `tests/` | 后端、端到端、样本测试 |
-| `docs/` | 治理、契约、执行与交付文档 |
-| `backend/data/` | 本地 SQLite 数据与上传/导出/备份数据目录 |
-
-## 当前边界
-
-- V1 只交付本地单机财务工作台，不包含多人协作和集中部署。
-- AI 只做辅助识别与配置建议，不决定账户归属和汇总正确性。
-- `backend/data/zhangfang.db` 是本地业务数据核心文件，发送或备份前需要确认是否包含真实财务数据与本地明文 API Key。
+- 不在 `main` 上开发。
+- 不保留同一能力的平行实现。
+- 不让用户写 JSON、正则、SQL 或字段映射。
+- 不在确定性执行阶段调用 LLM。
+- 不提交运行时数据、日志、数据库、依赖目录或临时文件。
