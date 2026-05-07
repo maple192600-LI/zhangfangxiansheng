@@ -15,9 +15,12 @@ Every AI coding tool must read these files before planning or editing:
 7. `docs/00_governance/05_testing_strategy.md`
 8. `docs/00_governance/08_anti_drift.md`
 9. `docs/00_governance/09_agent_capability.md`
-10. `docs/20_execution/16_agent_system_execution.md`
-11. `docs/20_execution/17_skill_system_design.md`
-12. `docs/20_execution/18_code_migration_inventory.md`
+10. `docs/20_execution/12_bank_import_execution.md`
+11. `docs/20_execution/13_manual_flow_execution.md`
+12. `docs/20_execution/14_base_data_and_report_execution.md`
+13. `docs/20_execution/16_agent_system_execution.md`
+14. `docs/20_execution/17_skill_system_design.md`
+15. `docs/20_execution/18_code_migration_inventory.md`
 
 The file `docs/00_governance/00_project_constitution.md` contains frozen contracts. Do not edit it unless the user explicitly approves the contract-change flow.
 

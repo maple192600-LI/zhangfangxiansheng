@@ -1,178 +1,136 @@
-# 14 Base Data And Report Execution
+# 14 · 基础数据表与报表执行规范
 
-## 1. Module goal
+## 1. 模块目标
 
-Create the formal processing chain from valid imported or manual rows to base data and reports.
+基础数据表负责把已确认的银行流水和手工流水统一展示为 `fund_events`。报表模块负责从 `fund_events` 和已审核 Rule 生成日报、余额表、日记账和明细表。
 
-## 2. Required processing chain
+报表生成阶段不得读取原始上传文件，不得调用 LLM，不得绕过 `fund_events`。
 
-- bank import rows
-- manual quick-entry rows
-- manual Excel upload rows
+## 2. 输入来源
 
-All must converge to:
+允许进入基础数据表的来源只有：
 
-1. preview
-2. manual maintenance if needed
-3. validated base data rows
-4. report generation
+- 银行流水确认入库结果。
+- 手工快速录入确认入库结果。
+- 手工 Excel 上传确认入库结果。
 
-## 3. Pages
+所有来源必须先完成预览、异常维护和用户确认，再写入 `fund_events`。
 
-- `frontend/src/views/BaseDataTable.vue`
+## 3. 主链路
+
+```text
+已确认导入批次
+  -> fund_events
+  -> 基础数据表展示
+  -> 匹配已审核 Rule
+  -> 选择日期范围和报表类型
+  -> 确定性生成报表
+  -> 预览
+  -> 导出
+```
+
+## 4. 页面职责
+
+基础数据表页面：`frontend/src/views/BaseDataTable.vue`
+
+报表页面当前包括：
+
 - `frontend/src/views/DailyReport.vue`
 - `frontend/src/views/CashJournal.vue`
 - `frontend/src/views/AccountBalance.vue`
 - `frontend/src/views/IncomeList.vue`
 - `frontend/src/views/ExpenseList.vue`
 
-## 4. 报表预设模板
+后续前端收束时，报表页面可以合并为统一报表工作台，但不得改变报表只从 `fund_events` 和 Rule 取数的原则。
 
-每种报表都必须有预设的格式模板，用于：
-- 确定展示哪些列、列顺序、列宽
-- 确定分组/汇总方式
-- 导出 Excel 时的格式标准
-- 可供 AI Agent 在生成报表时参照
+页面必须支持：
 
-**预设模板清单：**
-1. **基础数据表** — 日期/法人/账户/收入/支出/余额/对方/摘要，按日期正序
-2. **现金日记账** — 按账户分组，日期正序，显示上日余额→本日收入→本日支出→本日余额
-3. **账户余额表** — 按法人→账户层级，显示期初余额/本期收入/本期支出/期末余额
-4. **收入明细表** — 仅收入方向，按日期+法人分组
-5. **支出明细表** — 仅支出方向，按日期+法人分组
-6. **资金日报** — 单日汇总，按法人分组，总收入/总支出/净变动/日终余额
+- 按日期、主体、账户、方向、来源批次筛选基础数据。
+- 查看来源文件、批次、Parser、用户确认记录。
+- 选择报表类型和日期范围。
+- 预览报表结果。
+- 导出 Excel。
 
-## 5. Base data table role
+页面不得要求用户写 SQL、公式、字段映射或 JSON。
 
-Base data table is the formal processing bottom layer for report generation.
+## 5. 报表 Rule
 
-It must show:
+Rule 是报表生成的唯一长期规则资产。
 
-- business date
-- direction
-- amount
-- entity
-- account
-- parse source
-- abnormal status
-- key business fields
+Rule 至少描述：
 
-## 5. Report generation rules
+- 适用报表类型。
+- 所需字段。
+- 筛选条件。
+- 分组和排序方式。
+- 汇总口径。
+- 模板填充位置或导出格式。
+- 样本校验结果和用户确认记录。
 
-### range support
-- by day
-- by week
-- by month
-- by year
-- by custom range
+模板首次上传时，Agent 可以帮助创建 Rule 草稿。Rule 经用户审核后进入规则中心。日常生成报表时，只执行已审核 Rule。
 
-### balance rule
-- previous valid balance is the start anchor
-- current rows are sorted by business date and time
-- system calculates rolling balances
-- report rows keep real transaction dates
+## 6. 报表类型
 
-### rolling balance algorithm (精确算法)
+当前范围内的报表类型：
 
-以下算法为系统唯一正确的滚动余额计算方式，所有日报和报表必须遵循：
+| 报表 | 取数口径 |
+| --- | --- |
+| 基础数据表 | 展示 `fund_events` 明细。 |
+| 现金日记账 | 按账户和日期展示收入、支出、余额变化。 |
+| 账户余额表 | 按主体和账户汇总期初、本期收入、本期支出、期末余额。 |
+| 收入明细表 | 仅展示收入方向明细。 |
+| 支出明细表 | 仅展示支出方向明细。 |
+| 资金日报 | 按日期和主体汇总收入、支出、净变动和日终余额。 |
 
-```
-输入：
-  - account_id: 要计算的目标账户
-  - start_date, end_date: 报告区间
-  - initial_balance: 该账户的 accounts.initial_balance
-  - balance_date: 该账户的 accounts.balance_date
+## 7. 滚动余额
 
-步骤 1：确定期初余额
-  IF start_date <= balance_date THEN
-    opening_balance = initial_balance
-  ELSE
-    -- 取 balance_date+1 到 start_date-1 之间该账户最后一条 fund_event 的 rolling_balance
-    last_event = SELECT rolling_balance FROM fund_events
-                 WHERE account_id = :account_id
-                   AND parse_status = 'valid'
-                   AND business_date < :start_date
-                 ORDER BY business_date DESC, id DESC
-                 LIMIT 1
-    IF last_event EXISTS THEN
-      opening_balance = last_event.rolling_balance
-    ELSE
-      opening_balance = initial_balance  -- 无历史记录，回退到期初
-    END IF
-  END IF
+滚动余额必须基于有效 `fund_events` 计算。
 
-步骤 2：取出区间内所有有效资金事件
-  events = SELECT * FROM fund_events
-           WHERE account_id = :account_id
-             AND parse_status = 'valid'
-             AND business_date >= :start_date
-             AND business_date <= :end_date
-           ORDER BY business_date ASC, id ASC
+计算原则：
 
-步骤 3：逐行计算滚动余额
-  current_balance = opening_balance
-  FOR each event IN events:
-    current_balance = current_balance + COALESCE(event.income_amount, 0)
-                                   - COALESCE(event.expense_amount, 0)
-    event.rolling_balance = current_balance
-  END FOR
+- 以账户期初余额和期初日期作为起点。
+- 只计算 `parse_status = 'valid'` 的资金事件。
+- 按业务日期和稳定行序排序。
+- 收入增加余额，支出减少余额。
+- 回滚、手工维护、重新提交批次后必须支持重新计算。
 
-步骤 4：输出
-  ending_balance = current_balance
-  -- 验证：如果 event.ending_balance_input 不为空
-  --   且 |rolling_balance - ending_balance_input| > 0.01
-  --   则标记 abnormal_code = 'BALANCE_MISMATCH'
-```
+如果导入文件提供期末余额，系统可以用它做校验。校验不一致时进入异常状态，不得静默覆盖。
 
-### 重叠区间处理
+## 8. 后端职责
 
-当用户在已有日报区间的基础上，生成一个更大或重叠的区间时：
+主要文件：
 
-1. **重新计算，不增量追加**：每次生成都基于 fund_events 重新计算，不依赖旧的日报缓存
-2. **日 pledge 的 rolling_balance 存储在 fund_events 表中**：report 的生成不修改 fund_events
-3. **daily_report_runs 表仅记录生成记录**，不存储计算结果行（结果行从 fund_events 实时查询）
-4. 多次生成同一区间：后一次覆盖 daily_report_runs 中的记录，fund_events 不受影响
+- `backend/api/base_data.py`
+- `backend/api/reports.py`
+- `backend/services/base_data_service.py`
+- `backend/services/report_service.py`
+- `backend/core/artifact_runtime.py`
 
-### rebuild 触发条件
+职责划分：
 
-当以下操作发生后，用户需要手动或自动触发 rebuild：
-- 回滚某个 batch（该 batch 的 fund_events.parse_status 被标记为 'rolled_back'）
-- 手动维护修改了归属或金额
-- 新 batch commit
+- API 层负责筛选参数、报表类型、导出请求和响应格式。
+- Service 层负责查询 `fund_events`、计算余额、生成报表数据。
+- Artifact runtime 执行已审核 Rule。
+- Agent 只负责创建、解释或修正 Rule 草稿。
 
-rebuild 操作：
-1. 重新扫描所有 parse_status='valid' 的 fund_events
-2. 按账户+日期重新计算所有 rolling_balance
-3. 不删除任何记录，只更新 rolling_balance 字段
+## 9. API 方向
 
-### range support
-- by day
-- by week
-- by month
-- by year
-- by custom range
+目标 API 应围绕以下动作收敛：
 
-### balance rule
-- previous valid balance is the start anchor
-- current rows are sorted by business date and time
-- system calculates rolling balances
-- report rows keep real transaction dates
+- 查询基础数据。
+- 重算账户滚动余额。
+- 查询可用报表类型和 Rule。
+- 生成报表预览。
+- 导出报表。
+- 查询报表生成记录。
 
-## 6. APIs
+旧的按页面分散取数、直接从原始上传行生成报表、绕开 Rule 的入口属于迁移对象。
 
-- `GET /api/base-data`
-- `POST /api/base-data/rebuild`
-- `GET /api/reports/daily`
-- `GET /api/reports/cash-journal`
-- `GET /api/reports/account-balance`
-- `GET /api/reports/income-list`
-- `GET /api/reports/expense-list`
+## 10. 完成标准
 
-## 7. Done standard
-
-Complete only if:
-
-- valid rows from both bank and manual sources can appear in the base data table
-- reports can be generated by date range
-- rolling balance logic is verifiable
-- reports do not read raw upload rows directly
+- 银行流水和手工流水确认后都能进入 `fund_events`。
+- 基础数据表能展示来源、批次、Parser、确认记录。
+- 报表只从 `fund_events` 和已审核 Rule 取数。
+- 报表支持日期范围筛选和 Excel 导出。
+- 滚动余额可重算、可校验、可追溯。
+- 确定性报表生成阶段不调用 LLM。

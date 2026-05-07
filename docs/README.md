@@ -17,9 +17,12 @@
 | 7 | `00_governance/05_testing_strategy.md` | 测试与验收策略 |
 | 8 | `00_governance/08_anti_drift.md` | 防跑偏与守卫机制 |
 | 9 | `00_governance/09_agent_capability.md` | Agent、Skill、Memory、Parser、Rule 能力契约 |
-| 10 | `20_execution/16_agent_system_execution.md` | Agent、Skill、Memory、Parser、Rule 工作流 |
-| 11 | `20_execution/17_skill_system_design.md` | Skill 和 Memory 标准格式 |
-| 12 | `20_execution/18_code_migration_inventory.md` | 代码旧入口迁移清单 |
+| 10 | `20_execution/12_bank_import_execution.md` | 银行流水导入执行规范 |
+| 11 | `20_execution/13_manual_flow_execution.md` | 手工流水执行规范 |
+| 12 | `20_execution/14_base_data_and_report_execution.md` | 基础数据表和报表执行规范 |
+| 13 | `20_execution/16_agent_system_execution.md` | Agent、Skill、Memory、Parser、Rule 工作流 |
+| 14 | `20_execution/17_skill_system_design.md` | Skill 和 Memory 标准格式 |
+| 15 | `20_execution/18_code_migration_inventory.md` | 代码旧入口迁移清单 |
 
 ## 冻结契约
 
