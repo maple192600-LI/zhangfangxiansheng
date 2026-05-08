@@ -14,12 +14,11 @@ def test_quick_entry_save_creates_valid_manual_event(db_session, chart_of_accoun
     }])
     event = db_session.query(FundEvent).one()
 
-    assert result["saved_count"] == 1
-    assert result["abnormal_count"] == 0
-    assert event.source_type == "manual"
-    assert event.parse_status == "valid"
-    assert event.entity_id == chart_of_accounts["entity"].id
-    assert event.account_id == chart_of_accounts["account"].id
+    assert result["inserted_rows"] == 1
+    assert event.source == "手工录入"
+    assert event.state == "正常"
+    assert event.entity_code == chart_of_accounts["entity"].entity_code
+    assert event.account_code == chart_of_accounts["account"].account_code
 
 
 def test_quick_entry_save_keeps_unmatched_rows_abnormal(db_session, chart_of_accounts):
@@ -33,13 +32,12 @@ def test_quick_entry_save_keeps_unmatched_rows_abnormal(db_session, chart_of_acc
     }])
     event = db_session.query(FundEvent).one()
 
-    assert result["saved_count"] == 0
-    assert result["abnormal_count"] == 1
-    assert event.parse_status == "abnormal"
-    assert "ENTITY_MATCH_FAILED" in event.abnormal_code
+    assert result["inserted_rows"] == 1
+    assert event.state == "待确认"
+    assert event.entity_code == "UNKNOWN"
 
 
-def test_commit_manual_confirms_quick_entry_batch(db_session, chart_of_accounts):
+def test_preview_manual_confirms_quick_entry_batch(db_session, chart_of_accounts):
     saved = manual_flow_service.quick_entry_save(db_session, [{
         "entity_match_key": "E001",
         "account_match_key": "A001",
@@ -50,10 +48,9 @@ def test_commit_manual_confirms_quick_entry_batch(db_session, chart_of_accounts)
         "expense_amount": "20.00",
     }])
 
-    result = manual_flow_service.commit_manual(db_session, saved["batch_code"])
+    result = manual_flow_service.preview_manual(db_session, saved["batch_code"])
     batch = db_session.query(ImportBatch).filter(ImportBatch.batch_code == saved["batch_code"]).one()
 
-    assert result["committed_count"] == 1
+    assert result["valid_count"] == 1
     assert result["abnormal_count"] == 0
-    assert result["batch_status"] == "committed"
-    assert batch.status == "committed"
+    assert batch.status == "previewed"

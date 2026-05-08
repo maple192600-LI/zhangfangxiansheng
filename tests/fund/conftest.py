@@ -91,6 +91,12 @@ def primitives_db(tmp_db_path):
 
     # 4) DROP v3，走 alembic 取得 CHECK + server_default
     v3_tables = [
+        "agent_memories",
+        "agent_runs",
+        "agent_messages",
+        "agent_sessions",
+        "skills_v2",
+        "agents_v2",
         "template_inference_job",
         "rule_artifacts",
         "parser_artifacts",

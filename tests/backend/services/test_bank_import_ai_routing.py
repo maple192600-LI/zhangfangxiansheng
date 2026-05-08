@@ -8,7 +8,8 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "backend"))
 
 from database import Base
-from db.tables import AgentConfig, AIConfig
+from db.tables import Agent, AIConfig
+from core import ai_parse_utils
 from services import bank_import_service
 
 
@@ -34,20 +35,30 @@ def _add_ai(db, provider, is_default=False):
     return cfg
 
 
+def _add_agent(db, ai_config_id, code="parser_assistant", name="解析助手", sort_order=100):
+    agent = Agent(
+        agent_code=code,
+        display_name=name,
+        role_prompt="",
+        ai_config_id=ai_config_id,
+        workspace_path=f"agents/{code}",
+        permission_json="{}",
+        status="active",
+        sort_order=sort_order,
+        created_by="test",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(agent)
+    db.flush()
+    return agent
+
+
 def test_ai_parse_headers_prefers_parser_assistant_bound_ai(monkeypatch):
     db = _session()
     default_ai = _add_ai(db, "default-ai", is_default=True)
     bound_ai = _add_ai(db, "bound-ai", is_default=False)
-    db.add(AgentConfig(
-        agent_code="parser_assistant",
-        agent_name="解析助手",
-        agent_type="parser",
-        workspace_dir="agents/parser-assistant",
-        ai_config_id=bound_ai.id,
-        status="active",
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
-    ))
+    _add_agent(db, bound_ai.id)
     db.commit()
 
     captured = {}
@@ -59,8 +70,8 @@ def test_ai_parse_headers_prefers_parser_assistant_bound_ai(monkeypatch):
             "content": '{"mapping": {"日期": "business_date", "收入": "income_amount", "摘要": "summary_text"}, "template_name": "测试模板"}',
         }
 
-    monkeypatch.setattr(bank_import_service, "chat", fake_chat)
-    monkeypatch.setattr(bank_import_service, "decrypt_key", lambda value: value)
+    monkeypatch.setattr(ai_parse_utils, "chat", fake_chat)
+    monkeypatch.setattr(ai_parse_utils, "decrypt_key", lambda value: value)
 
     result = bank_import_service.ai_parse_headers(db, ["日期", "收入", "摘要"], [["2026-04-24", "10", "收款"]])
 
@@ -71,9 +82,10 @@ def test_ai_parse_headers_prefers_parser_assistant_bound_ai(monkeypatch):
     assert captured["provider"] != default_ai.provider
 
 
-def test_ai_parse_headers_falls_back_to_default_ai_without_binding(monkeypatch):
+def test_ai_parse_headers_uses_active_agent_bound_to_default_ai(monkeypatch):
     db = _session()
-    _add_ai(db, "default-ai", is_default=True)
+    default_ai = _add_ai(db, "default-ai", is_default=True)
+    _add_agent(db, default_ai.id)
     db.commit()
 
     captured = {}
@@ -85,8 +97,8 @@ def test_ai_parse_headers_falls_back_to_default_ai_without_binding(monkeypatch):
             "content": '{"mapping": {"日期": "business_date", "收入": "income_amount", "摘要": "summary_text"}, "template_name": "测试模板"}',
         }
 
-    monkeypatch.setattr(bank_import_service, "chat", fake_chat)
-    monkeypatch.setattr(bank_import_service, "decrypt_key", lambda value: value)
+    monkeypatch.setattr(ai_parse_utils, "chat", fake_chat)
+    monkeypatch.setattr(ai_parse_utils, "decrypt_key", lambda value: value)
 
     result = bank_import_service.ai_parse_headers(db, ["日期", "收入", "摘要"], [])
 
@@ -96,11 +108,12 @@ def test_ai_parse_headers_falls_back_to_default_ai_without_binding(monkeypatch):
 
 def test_ai_parse_headers_extracts_json_from_wrapped_content(monkeypatch):
     db = _session()
-    _add_ai(db, "default-ai", is_default=True)
+    default_ai = _add_ai(db, "default-ai", is_default=True)
+    _add_agent(db, default_ai.id)
     db.commit()
 
-    monkeypatch.setattr(bank_import_service, "decrypt_key", lambda value: value)
-    monkeypatch.setattr(bank_import_service, "chat", lambda **_kwargs: {
+    monkeypatch.setattr(ai_parse_utils, "decrypt_key", lambda value: value)
+    monkeypatch.setattr(ai_parse_utils, "chat", lambda **_kwargs: {
         "ok": True,
         "content": '可以，结果如下：{"mapping": {"日期": "business_date", "收入": "income_amount", "摘要": "summary_text"}, "template_name": "测试模板"}',
     })
@@ -113,11 +126,12 @@ def test_ai_parse_headers_extracts_json_from_wrapped_content(monkeypatch):
 
 def test_ai_parse_headers_returns_error_code_for_unparseable_json(monkeypatch):
     db = _session()
-    _add_ai(db, "default-ai", is_default=True)
+    default_ai = _add_ai(db, "default-ai", is_default=True)
+    _add_agent(db, default_ai.id)
     db.commit()
 
-    monkeypatch.setattr(bank_import_service, "decrypt_key", lambda value: value)
-    monkeypatch.setattr(bank_import_service, "chat", lambda **_kwargs: {
+    monkeypatch.setattr(ai_parse_utils, "decrypt_key", lambda value: value)
+    monkeypatch.setattr(ai_parse_utils, "chat", lambda **_kwargs: {
         "ok": True,
         "content": "完全不是 JSON",
     })
@@ -130,7 +144,8 @@ def test_ai_parse_headers_returns_error_code_for_unparseable_json(monkeypatch):
 
 def test_ai_parse_headers_masks_sample_rows_before_prompt(monkeypatch):
     db = _session()
-    _add_ai(db, "default-ai", is_default=True)
+    default_ai = _add_ai(db, "default-ai", is_default=True)
+    _add_agent(db, default_ai.id)
     db.commit()
 
     captured = {}
@@ -142,8 +157,8 @@ def test_ai_parse_headers_masks_sample_rows_before_prompt(monkeypatch):
             "content": '{"mapping": {"交易日期": "business_date", "对方账号": "counterpart_account", "收入金额": "income_amount", "摘要": "summary_text"}, "template_name": "测试模板"}',
         }
 
-    monkeypatch.setattr(bank_import_service, "decrypt_key", lambda value: value)
-    monkeypatch.setattr(bank_import_service, "chat", fake_chat)
+    monkeypatch.setattr(ai_parse_utils, "decrypt_key", lambda value: value)
+    monkeypatch.setattr(ai_parse_utils, "chat", fake_chat)
 
     result = bank_import_service.ai_parse_headers(
         db,
@@ -151,7 +166,7 @@ def test_ai_parse_headers_masks_sample_rows_before_prompt(monkeypatch):
         [["2026-04-24", "6222021234567890123", "128934.55", "张三付款"]],
     )
 
-    prompt = captured["messages"][0]["content"]
+    prompt = captured["messages"][1]["content"]
     assert result["ok"] is True
     assert "6222021234567890123" not in prompt
     assert "128934.55" not in prompt

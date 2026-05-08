@@ -3,12 +3,13 @@ from datetime import datetime
 
 import pytest
 
-from conftest import make_xlsx
-from db.tables import AgentConfig, AIConfig, FundEvent, ParserTemplate
+from helpers import make_xlsx
+from core import ai_parse_utils
+from db.tables import Agent, AIConfig, FundEvent, ParserTemplate
 from services import bank_import_service
 
 
-def _add_template(db):
+def _add_template(db, account_code="A001"):
     template = ParserTemplate(
         template_name="Bank Template",
         template_type="bank",
@@ -18,12 +19,11 @@ def _add_template(db):
         sample_headers=json.dumps(["Date", "EntityId", "AccountId", "Summary", "Income", "Expense"]),
         mapping_json=json.dumps({
             "Date": "business_date",
-            "EntityId": "_entity_id",
-            "AccountId": "_account_id",
             "Summary": "summary_text",
             "Income": "income_amount",
             "Expense": "expense_amount",
         }),
+        account_code=account_code,
         created_by="test",
         status="active",
         created_at=datetime.now(),
@@ -51,46 +51,53 @@ def _add_ai(db, provider, is_default=False):
     return cfg
 
 
+def _add_agent(db, ai_config_id):
+    agent = Agent(
+        agent_code="parser_assistant",
+        display_name="Parser Assistant",
+        role_prompt="",
+        workspace_path="agents/parser-assistant",
+        ai_config_id=ai_config_id,
+        permission_json="{}",
+        status="active",
+        sort_order=100,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(agent)
+    db.flush()
+    return agent
+
+
 def test_commit_creates_fund_events(db_session, chart_of_accounts, tmp_path, monkeypatch):
-    template = _add_template(db_session)
-    entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
+    template = _add_template(db_session, account.account_code)
     file_data = make_xlsx([
         ["Date", "EntityId", "AccountId", "Summary", "Income", "Expense"],
-        ["2026-04-24", str(entity.id), str(account.id), "bank receipt", "120.50", ""],
+        ["2026-04-24", "", "", "bank receipt", "120.50", ""],
     ])
     monkeypatch.setattr(bank_import_service, "DATA_DIR", str(tmp_path))
 
     upload = bank_import_service.upload_file(db_session, file_data, "bank.xlsx")
-    preview = bank_import_service.preview(db_session, upload["batch_code"], template_id=template.id)
-    result = bank_import_service.commit(db_session, upload["batch_code"], preview["parsed_rows"])
+    bank_import_service.preview(db_session, upload["batch_code"], template_id=template.id)
+    result = bank_import_service.commit_by_mapping(db_session, upload["batch_code"], template_id=template.id)
     event = db_session.query(FundEvent).filter(FundEvent.batch_id == upload["batch_id"]).one()
 
-    assert result["committed_count"] == 1
-    assert result["abnormal_count"] == 0
-    assert event.parse_status == "valid"
-    assert event.direction == "income"
-    assert float(event.income_amount) == 120.50
+    assert result["inserted_rows"] == 1
+    assert event.state == "正常"
+    assert float(event.amount_in) == 120.50
+    assert float(event.amount_out) == 0
 
 
 def test_commit_invalid_batch_raises(db_session):
     with pytest.raises(ValueError):
-        bank_import_service.commit(db_session, "MISSING_BATCH", [])
+        bank_import_service.commit_by_mapping(db_session, "MISSING_BATCH", account_code="A001", mapping={})
 
 
 def test_ai_parse_respects_agent_binding(db_session, monkeypatch):
     default_ai = _add_ai(db_session, "default-provider", is_default=True)
     bound_ai = _add_ai(db_session, "bound-provider")
-    db_session.add(AgentConfig(
-        agent_code="parser_assistant",
-        agent_name="Parser Assistant",
-        agent_type="parser",
-        workspace_dir="agents/parser-assistant",
-        ai_config_id=bound_ai.id,
-        status="active",
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
-    ))
+    _add_agent(db_session, bound_ai.id)
     db_session.commit()
     captured = {}
 
@@ -104,8 +111,8 @@ def test_ai_parse_respects_agent_binding(db_session, monkeypatch):
             }),
         }
 
-    monkeypatch.setattr(bank_import_service, "chat", fake_chat)
-    monkeypatch.setattr(bank_import_service, "decrypt_key", lambda value: value)
+    monkeypatch.setattr(ai_parse_utils, "chat", fake_chat)
+    monkeypatch.setattr(ai_parse_utils, "decrypt_key", lambda value: value)
 
     result = bank_import_service.ai_parse_headers(
         db_session,

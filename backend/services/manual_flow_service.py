@@ -218,7 +218,7 @@ def upload_workbook(db: Session, file_data: bytes, filename: str, scheme_code: s
     with open(file_path, "wb") as f:
         f.write(file_data)
 
-    batch = _create_batch(db, "manual_excel", filename)
+    batch = _create_batch(db, "manual_file", filename)
 
     return {
         "batch_code": batch.batch_code,
@@ -240,11 +240,11 @@ def preview_manual(db: Session, batch_code: str, scheme_code: str = None) -> Dic
         return _preview_from_events(db, batch)
 
     # Excel 上传场景：如果已有 parser_artifact，通过 artifact runtime 生成预览
-    if batch.source_type == "manual_file":
+    if batch.source_type in ("manual_file", "manual_excel"):
         existing_events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).count()
         if existing_events > 0:
             return _preview_from_events(db, batch)
-        raise ValueError("Excel 预览需要先通过 commit 步骤指定解析器，请使用 commit 接口并传入 parser_artifact_id")
+        return _preview_from_file(db, batch, scheme_code or "manual_multi_subject_basic")
 
     raise ValueError(f"不支持的批次类型: {batch.source_type}")
 
@@ -526,16 +526,23 @@ def _event_to_dict(ev: FundEvent) -> Dict:
 def _create_fund_event(db: Session, batch_id: int, source_type: str, parsed: Dict):
     income = parsed.get("income_amount")
     expense = parsed.get("expense_amount")
+    entity = db.query(Entity).filter(Entity.id == parsed.get("_entity_id")).first()
+    account = db.query(Account).filter(Account.id == parsed.get("_account_id")).first()
+    state = "正常" if parsed.get("parse_status") == "valid" else "待确认"
     ev = FundEvent(
         batch_id=batch_id,
-        business_date=parsed.get("date"),
+        business_date=datetime.strptime(str(parsed.get("business_date"))[:10].replace("/", "-"), "%Y-%m-%d").date(),
+        entity_code=entity.entity_code if entity else str(parsed.get("entity_match_key") or ""),
+        entity_name=entity.name if entity else str(parsed.get("_entity_name") or ""),
+        account_code=account.account_code if account else str(parsed.get("account_match_key") or ""),
+        account_name=account.account_alias if account else str(parsed.get("_account_name") or ""),
         summary=parsed.get("summary_text", ""),
         counterparty=parsed.get("counterparty_name", ""),
         amount_in=float(income) if income else 0,
         amount_out=float(expense) if expense else 0,
-        balance=0,
-        state=parsed.get("parse_status", "正常") if parsed.get("parse_status") == "valid" else parsed.get("parse_status", "正常"),
-        source=source_type,
+        rolling_balance=None,
+        state=state,
+        source="手工录入",
     )
     db.add(ev)
     db.flush()

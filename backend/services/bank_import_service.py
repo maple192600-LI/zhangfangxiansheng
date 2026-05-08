@@ -24,6 +24,7 @@ from core.ai_parse_utils import (
     shorten_headers, format_sample_text,
     restore_mapping_keys, validate_mapping_confidence,
 )
+from core.pii_masker import mask_row
 from core.security import decrypt_key
 from db.tables import FundEvent, ImportBatch, ParserTemplate, AIConfig
 from config import DATA_DIR
@@ -572,7 +573,11 @@ def ai_parse_headers(db: Session, headers: list, sample_rows: list = None, agent
     field_desc = "\n".join(f"  - {k}: {v}" for k, v in STANDARD_FIELDS.items())
     short = shorten_headers(headers)
     header_list = ", ".join(f'"{h}"' for h in short)
-    sample_text = format_sample_text(sample_rows, max_rows=3)
+    sample_text = format_sample_text(
+        sample_rows,
+        max_rows=3,
+        mask_fn=lambda row: mask_row(row, short),
+    )
 
     user_message = f"""请分析以下银行流水的表头和样本数据，将每列映射到对应的标准字段。
 

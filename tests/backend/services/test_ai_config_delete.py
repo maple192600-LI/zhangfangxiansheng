@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "backend"))
 
 from database import Base
-from db.tables import AgentConfig, AIConfig
+from db.tables import Agent, AIConfig
 from services import ai_config_service
 
 
@@ -35,12 +35,13 @@ def _ai(db, provider, is_default=False):
 
 
 def _agent(db, ai_config_id=None):
-    agent = AgentConfig(
+    agent = Agent(
         agent_code="parser_assistant",
-        agent_name="解析助手",
-        agent_type="parser",
-        workspace_dir="agents/parser-assistant",
+        display_name="解析助手",
+        role_prompt="",
+        workspace_path="agents/parser-assistant",
         ai_config_id=ai_config_id,
+        permission_json="{}",
         status="active",
         created_at=datetime.now(),
         updated_at=datetime.now(),
@@ -83,12 +84,14 @@ def test_delete_ai_config_rejects_agent_reference():
     assert db.query(AIConfig).filter(AIConfig.id == cfg.id).first() is not None
 
 
-def test_delete_agent_config_removes_agent():
+def test_delete_ai_config_ignores_deleted_agent_reference():
     db = _session()
-    agent = _agent(db)
+    cfg = _ai(db, "zhipu")
+    agent = _agent(db, cfg.id)
+    agent.status = "deleted"
     db.commit()
 
-    result = ai_config_service.delete_agent_config(db, agent.id)
+    result = ai_config_service.delete_ai_config(db, cfg.id)
 
-    assert result == {"deleted_id": agent.id}
-    assert db.query(AgentConfig).filter(AgentConfig.id == agent.id).first() is None
+    assert result == {"deleted_id": cfg.id}
+    assert db.query(AIConfig).filter(AIConfig.id == cfg.id).first() is None

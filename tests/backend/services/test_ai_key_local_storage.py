@@ -18,8 +18,11 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
-def test_key_helpers_are_explicit_local_storage_identity():
-    assert encrypt_key("sk-local-test") == "sk-local-test"
+def test_key_helpers_encrypt_local_storage_value():
+    encrypted = encrypt_key("sk-local-test")
+
+    assert encrypted != "sk-local-test"
+    assert decrypt_key(encrypted) == "sk-local-test"
     assert decrypt_key("sk-local-test") == "sk-local-test"
 
 
@@ -34,5 +37,6 @@ def test_ai_config_stores_key_in_local_plain_field():
     })
 
     row = db.query(AIConfig).filter(AIConfig.id == created["id"]).one()
-    assert row.api_key_local == "sk-local-test"
+    assert row.api_key_local != "sk-local-test"
+    assert decrypt_key(row.api_key_local) == "sk-local-test"
     assert not hasattr(row, "api_key_encrypted")

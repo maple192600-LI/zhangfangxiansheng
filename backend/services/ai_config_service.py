@@ -7,7 +7,16 @@ from sqlalchemy.orm import Session
 from core.security import decrypt_key, encrypt_key
 from core.ai_provider import test_connection
 from core.privacy_pipeline import validate_privacy_mode
-from db.tables import AICallLog, AIConfig
+from db.tables import AICallLog, AIConfig, Agent
+
+
+class AIConfigInUseError(ValueError):
+    """Raised when an AI config is still assigned to active agents."""
+
+    def __init__(self, references: list[str]):
+        self.references = references
+        names = "、".join(references)
+        super().__init__(f"AI 配置正在被以下智能体使用：{names}")
 
 
 # ──────────────────────────────────────────
@@ -85,6 +94,15 @@ def delete_ai_config(db: Session, config_id: int) -> Dict[str, Any]:
         raise ValueError("AI 配置不存在")
     if obj.is_default:
         raise ValueError("默认 AI 配置不能删除，请先设置其他配置为默认")
+    references = [
+        agent.display_name
+        for agent in db.query(Agent)
+        .filter(Agent.ai_config_id == config_id, Agent.status == "active")
+        .order_by(Agent.id)
+        .all()
+    ]
+    if references:
+        raise AIConfigInUseError(references)
 
     db.delete(obj)
     db.commit()

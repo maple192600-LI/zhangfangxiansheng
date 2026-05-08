@@ -125,7 +125,8 @@ def emit_row(**fields) -> CanonicalRow:
     # 金额互斥 → 自动 '异常'
     if fields["amount_in"] > 0 and fields["amount_out"] > 0:
         fields["state"] = "异常"
-    return CanonicalRow(**fields)  # type: ignore[typeddict-item]
+    ordered = {field: fields[field] for field in CANONICAL_FIELDS}
+    return CanonicalRow(**ordered)  # type: ignore[typeddict-item]
 
 
 def normalize_row(raw: dict) -> CanonicalRow:

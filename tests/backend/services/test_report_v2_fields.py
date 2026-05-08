@@ -86,17 +86,18 @@ def _seed_event(db):
 
     event = FundEvent(
         batch_id=batch.id,
-        source_type="bank",
         business_date=date(2026, 4, 24),
-        entity_id=entity.id,
-        account_id=account.id,
-        direction="income",
-        income_amount=25,
-        expense_amount=0,
-        counterparty_name="客户",
-        summary_text="收款",
-        parse_status="valid",
-        raw_data_json="{}",
+        entity_code=entity.entity_code,
+        entity_name=entity.name,
+        account_code=account.account_code,
+        account_name=account.account_alias,
+        summary="收款",
+        counterparty="客户",
+        amount_in=25,
+        amount_out=0,
+        rolling_balance=None,
+        state="正常",
+        source="网银导入",
         created_at=now,
         updated_at=now,
     )
@@ -114,7 +115,7 @@ def test_report_queries_use_v2_fund_event_fields_and_relationships():
 
     assert daily[0]["total_income"] == 25
     assert daily[0]["ending_balance"] == 125
-    assert income["items"][0]["entity_name"] == "测试"
+    assert income["items"][0]["entity_name"] == "测试单位"
     assert income["items"][0]["account_name"] == "基本户"
 
 
@@ -133,9 +134,10 @@ def test_bank_upload_preview_commit_then_daily_report_uses_v2_schema(tmp_path, m
         skip_rows=0,
         sample_headers='["日期", "单位ID", "账户ID", "摘要", "收入", "支出"]',
         mapping_json=(
-            '{"日期": "business_date", "单位ID": "_entity_id", "账户ID": "_account_id", '
-            '"摘要": "summary_text", "收入": "income_amount", "支出": "expense_amount"}'
+            '{"日期": "business_date", "摘要": "summary_text", '
+            '"收入": "income_amount", "支出": "expense_amount"}'
         ),
+        account_code=account.account_code,
         created_by="test",
         status="active",
         created_at=datetime.now(),
@@ -157,10 +159,10 @@ def test_bank_upload_preview_commit_then_daily_report_uses_v2_schema(tmp_path, m
     uploaded = bank_import_service.upload_file(db, buf.getvalue(), "bank.xlsx")
     assert uploaded["sample_rows"] == [["2026-04-24", str(entity.id), str(account.id), "测试收款", "50", "0"]]
     preview = bank_import_service.preview(db, uploaded["batch_code"], template_id=template.id)
-    committed = bank_import_service.commit(db, uploaded["batch_code"], preview["parsed_rows"])
+    committed = bank_import_service.commit_by_mapping(db, uploaded["batch_code"], template_id=template.id)
     daily = report_service.daily_report(db, date(2026, 4, 24), date(2026, 4, 24), entity.id)
 
     assert preview["valid_count"] == 1
-    assert committed["committed_count"] == 1
+    assert committed["inserted_rows"] == 1
     assert daily[0]["total_income"] == 50
     assert daily[0]["ending_balance"] == 150

@@ -126,19 +126,22 @@ def add_fund_event(
     if batch is None:
         batch = add_import_batch(db, batch_code=f"BATCH{datetime.now().timestamp()}", source_type="test")
 
+    amount_in = income_amount if direction == "income" else 0
+    amount_out = expense_amount if direction == "expense" else 0
     event = FundEvent(
         batch_id=batch.id,
-        source_type=batch.source_type,
         business_date=business_date,
-        entity_id=entity.id,
-        account_id=account.id,
-        direction=direction,
-        income_amount=income_amount,
-        expense_amount=expense_amount,
-        counterparty_name="Counterparty",
-        summary_text=summary_text,
-        parse_status="valid",
-        raw_data_json="{}",
+        entity_code=entity.entity_code,
+        entity_name=entity.name,
+        account_code=account.account_code,
+        account_name=account.account_alias,
+        summary=summary_text,
+        counterparty="Counterparty",
+        amount_in=amount_in,
+        amount_out=amount_out,
+        rolling_balance=None,
+        state="正常",
+        source="网银导入",
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )

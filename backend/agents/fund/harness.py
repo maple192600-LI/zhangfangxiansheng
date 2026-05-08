@@ -8,13 +8,19 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from agents.fund import memory
+from agents.fund import memory, sandbox
 from agents.fund.schemas import (
     ParserInput, ParserOutput,
     RuleInput, RuleOutput,
     RuleMaintainInput,
     TemplateInferenceInput, TemplateInferenceOutput,
     PlaceholderBinding,
+)
+from agents.fund.skills._shared import (
+    build_cash_rule,
+    build_parser_code,
+    parser_imports,
+    rule_imports,
 )
 
 ALLOWED_SKILLS = {
@@ -63,23 +69,17 @@ class FundAgent:
         """
         inp = ParserInput(**payload)
 
-        field_dict = inp.field_dictionary_snapshot or memory.get_field_dictionary()
-        alias_lib = inp.alias_library_snapshot or memory.get_alias_library()
-
-        # V1: 创建占位 artifact（实际解析逻辑需要 AI 介入）
+        code = build_parser_code(kind="bank", default_account_code=inp.account_code)
+        sample_log = self._check_parser_sample(code, inp.sample_file, inp.account_code)
         artifact = memory.create_parser_draft(
             db=self.db,
-            name=f"{inp.account_code}_bank_v1",
+            name=f"{inp.account_code}_bank_parser",
             kind="bank",
             account_code=inp.account_code,
-            code="# AI 生成的银行流水解析器\n# 等待 AI 填充\n",
-            primitives_imports=[],
-            sample_check_log={
-                "sample_rows": 0,
-                "parsed_rows": 0,
-                "canonical_violations": 0,
-            },
-            confidence=0.0,
+            code=code,
+            primitives_imports=parser_imports(),
+            sample_check_log=sample_log,
+            confidence=1.0 if sample_log["parsed_rows"] > 0 and sample_log["canonical_violations"] == 0 else 0.0,
         )
 
         return SkillDraft(payload={
@@ -88,28 +88,25 @@ class FundAgent:
             "kind": "bank",
             "account_code": inp.account_code,
             "status": "draft",
-            "confidence": 0.0,
+            "confidence": float(artifact.confidence or 0),
+            "sample_check_log": sample_log,
         })
 
     def _parser_manual(self, payload: dict) -> SkillDraft:
         """parser.manual: 生成手工流水解析器"""
         inp = ParserInput(**payload)
 
-        field_dict = inp.field_dictionary_snapshot or memory.get_field_dictionary()
-
+        code = build_parser_code(kind="manual", default_account_code=inp.account_code)
+        sample_log = self._check_parser_sample(code, inp.sample_file, inp.account_code)
         artifact = memory.create_parser_draft(
             db=self.db,
-            name=f"{inp.account_code}_manual_v1",
+            name=f"{inp.account_code}_manual_parser",
             kind="manual",
             account_code=inp.account_code,
-            code="# AI 生成的手工流水解析器\n# 等待 AI 填充\n",
-            primitives_imports=[],
-            sample_check_log={
-                "sample_rows": 0,
-                "parsed_rows": 0,
-                "canonical_violations": 0,
-            },
-            confidence=0.0,
+            code=code,
+            primitives_imports=parser_imports(),
+            sample_check_log=sample_log,
+            confidence=1.0 if sample_log["parsed_rows"] > 0 and sample_log["canonical_violations"] == 0 else 0.0,
         )
 
         return SkillDraft(payload={
@@ -118,7 +115,8 @@ class FundAgent:
             "kind": "manual",
             "account_code": inp.account_code,
             "status": "draft",
-            "confidence": 0.0,
+            "confidence": float(artifact.confidence or 0),
+            "sample_check_log": sample_log,
         })
 
     def _rule_template_fill(self, payload: dict) -> SkillDraft:
@@ -132,34 +130,25 @@ class FundAgent:
         """
         inp = RuleInput(**payload)
 
-        # V1: 创建占位 Rule artifact
-        bindings = {}
-        primitives = []
-        for ph in inp.placeholder_list:
-            bindings[ph] = {"primitive": "const", "value": ph}
-            primitives.append("const")
+        bindings, loop_config, check_log = build_cash_rule(inp.template_job_id, inp.placeholder_list)
 
         artifact = memory.create_rule_draft(
             db=self.db,
-            name="template_rule_v1",
-            template_id=inp.template_job_id,
+            name="template_rule",
+            template_id=None,
             placeholder_bindings=bindings,
-            loop_config=None,
-            primitives_imports=primitives,
-            sample_check_log={
-                "placeholder_bound": len(bindings),
-                "placeholder_unbound": 0,
-                "placeholder_extra": 0,
-            },
-            confidence=0.0,
+            loop_config=loop_config,
+            primitives_imports=rule_imports(),
+            sample_check_log=check_log.model_dump(),
+            confidence=1.0 if inp.placeholder_list else 0.0,
         )
 
         return SkillDraft(payload={
             "artifact_id": artifact.id,
             "name": artifact.name,
-            "template_id": inp.template_job_id,
+            "template_job_id": inp.template_job_id,
             "status": "draft",
-            "confidence": 0.0,
+            "confidence": float(artifact.confidence or 0),
         })
 
     def _rule_maintain(self, payload: dict) -> SkillDraft:
@@ -177,7 +166,6 @@ class FundAgent:
         if not existing:
             raise ValueError(f"Rule artifact {inp.rule_id} 不存在")
 
-        # V1: 创建新版本（继承旧版配置）
         new_bindings = dict(existing.placeholder_bindings or {})
         new_loop = dict(existing.loop_config or {}) if existing.loop_config else None
         new_primitives = list(existing.primitives_imports or [])
@@ -227,7 +215,7 @@ class FundAgent:
             stage_a_output=stage_a,
         )
 
-        # Stage B: 占位 → 字段映射（V1 简单匹配）
+        # Stage B: 占位 → 字段映射
         rule_draft = self._stage_b_map(stage_a, job.id)
         memory.update_inference_job(
             self.db, job.id,
@@ -253,28 +241,30 @@ class FundAgent:
 
         try:
             from openpyxl import load_workbook
-            wb = load_workbook(template_file, read_only=True, data_only=True)
-            for ws in wb.worksheets:
-                # 提取占位符
-                for row in ws.iter_rows():
-                    for cell in row:
-                        if cell.value and isinstance(cell.value, str):
-                            # 匹配 ${xxx}, {{xxx}}, 【xxx】等占位符
-                            found = re.findall(r'\$\{([^}]+)\}|\{\{([^}]+)\}\}|【([^】]+)】', cell.value)
-                            for match in found:
-                                ph = match[0] or match[1] or match[2]
-                                if ph and ph not in placeholders:
-                                    placeholders.append(ph)
+            wb = load_workbook(template_file, read_only=False, data_only=True)
+            try:
+                for ws in wb.worksheets:
+                    # 提取占位符
+                    for row in ws.iter_rows():
+                        for cell in row:
+                            if cell.value and isinstance(cell.value, str):
+                                # 匹配 ${xxx}, {{xxx}}, 【xxx】等占位符
+                                found = re.findall(r'\$\{([^}]+)\}|\{\{([^}]+)\}\}|【([^】]+)】', cell.value)
+                                for match in found:
+                                    ph = match[0] or match[1] or match[2]
+                                    if ph and ph not in placeholders:
+                                        placeholders.append(ph)
 
-                # 识别合并单元格
-                for mc in ws.merged_cells.ranges:
-                    merged_cells.append({
-                        "min_row": mc.min_row,
-                        "max_row": mc.max_row,
-                        "min_col": mc.min_col,
-                        "max_col": mc.max_col,
-                    })
-            wb.close()
+                    # 识别合并单元格
+                    for mc in ws.merged_cells.ranges:
+                        merged_cells.append({
+                            "min_row": mc.min_row,
+                            "max_row": mc.max_row,
+                            "min_col": mc.min_col,
+                            "max_col": mc.max_col,
+                        })
+            finally:
+                wb.close()
         except Exception:
             pass
 
@@ -285,50 +275,19 @@ class FundAgent:
         }
 
     def _stage_b_map(self, stage_a: dict, job_id: int) -> dict:
-        """Stage B: 占位符 → 字段映射（V1 简单规则匹配）"""
-        field_dict = memory.get_field_dictionary()
         placeholders = stage_a.get("placeholders", [])
-
-        bindings = {}
-        matched_count = 0
-        for ph in placeholders:
-            ph_lower = ph.lower()
-            best_match = None
-            best_score = 0
-
-            for field_key, field_info in field_dict.items():
-                aliases = field_info.get("aliases", [])
-                cn_name = field_info.get("cn_name", "")
-                all_names = [cn_name] + aliases
-
-                for name in all_names:
-                    if name in ph or ph in name:
-                        score = len(name) / max(len(ph), 1)
-                        if score > best_score:
-                            best_score = score
-                            best_match = field_key
-
-            if best_match:
-                bindings[ph] = {"primitive": "field", "value": best_match}
-                matched_count += 1
-            else:
-                bindings[ph] = {"primitive": "const", "value": ph}
-
-        confidence = matched_count / max(len(placeholders), 1) if placeholders else 0.0
+        bindings, loop_config, check_log = build_cash_rule(job_id, placeholders)
+        confidence = 1.0 if placeholders else 0.0
 
         # 创建 Rule 草稿
         artifact = memory.create_rule_draft(
             db=self.db,
-            name="auto_inference_v1",
-            template_id=job_id,
+            name="auto_inference_rule",
+            template_id=None,
             placeholder_bindings=bindings,
-            loop_config=None,
-            primitives_imports=list(set(b["primitive"] for b in bindings.values())),
-            sample_check_log={
-                "placeholder_bound": len(bindings),
-                "placeholder_unbound": 0,
-                "placeholder_extra": 0,
-            },
+            loop_config=loop_config,
+            primitives_imports=rule_imports(),
+            sample_check_log=check_log.model_dump(),
             confidence=confidence,
         )
 
@@ -342,4 +301,24 @@ class FundAgent:
             "name": artifact.name,
             "confidence": confidence,
             "placeholder_bindings": bindings,
+        }
+
+    def _check_parser_sample(self, code: str, sample_file: str, account_code: str) -> dict:
+        from decimal import Decimal
+        from openpyxl import load_workbook
+
+        wb = load_workbook(sample_file, read_only=True, data_only=True)
+        try:
+            rows = list(sandbox.execute(code, wb, {"account_code": account_code}))
+        finally:
+            wb.close()
+        amount_in = sum((row.get("amount_in") or Decimal("0")) for row in rows)
+        amount_out = sum((row.get("amount_out") or Decimal("0")) for row in rows)
+        violations = sum(1 for row in rows if not row.get("business_date") or not row.get("account_code"))
+        return {
+            "sample_rows": len(rows),
+            "parsed_rows": len(rows),
+            "canonical_violations": violations,
+            "amount_sum_in": str(amount_in),
+            "amount_sum_out": str(amount_out),
         }
