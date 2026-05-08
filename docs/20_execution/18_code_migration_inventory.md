@@ -20,7 +20,7 @@
 | 智能列映射接口 | `backend/api/bank_import.py` | 迁移到 Agent 创建 Parser 草稿流程。 |
 | 旧模板模型 | `backend/db/tables.py`、`backend/services/bank_import_service.py` | 将规则中心展示迁移到 Parser artifact。 |
 | 旧规则页面 | `frontend/src/views/BankRule.vue` | 改为规则中心的银行 Parser 视图。 |
-| 前端旧提交调用 | `frontend/src/views/BankImport.vue` | 改为调用 Parser 匹配、预览和确认入库接口。 |
+| 前端旧提交调用 | `frontend/src/views/BankImport.vue` | 已改为调用 Parser 匹配、预览和确认入库接口；后续浏览器验收。 |
 
 完成标准：
 
@@ -46,9 +46,9 @@
 
 | 点位 | 文件 | 现状 | 处理方向 |
 | --- | --- | --- | --- |
-| Parser 执行 | `backend/core/artifact_runtime.py` | 当前未真正执行 Parser artifact | 实现已审核 Parser 的确定性执行。 |
-| Rule 执行 | `backend/core/artifact_runtime.py` | 当前未真正执行 Rule artifact | 实现已审核 Rule 的确定性报表生成。 |
-| 占位 Parser 草稿 | `backend/agents/fund/harness.py` | 可能只生成占位内容 | 改为能产出可校验草稿或明确失败原因。 |
+| Parser 执行 | `backend/core/artifact_runtime.py` | 已能执行已审核 Parser artifact | 继续补齐异常追溯和更多样本测试。 |
+| Rule 执行 | `backend/core/artifact_runtime.py` | 已能执行已审核 Rule artifact | 继续补齐模板变体和浏览器生成验收。 |
+| Parser 草稿 | `backend/agents/fund/harness.py` | 已能产出可执行草稿的基础版本 | 继续增强银行识别、样本校验和用户确认沉淀。 |
 
 完成标准：
 
@@ -131,7 +131,7 @@
 5. 文件上传安全：所有上传接口限制文件名、大小、类型，并有清理策略。
 6. 备份恢复可靠性：恢复后重建数据库连接，验证备份完整性。
 7. Schema 迁移：新增正式 Alembic 迁移替代 `_patch_schema()` 漏洞。
-8. 银行导入：删除前端对 `/bank-import/commit-by-mapping` 的依赖，改为 Parser artifact 工作流。
+8. 银行导入：前端对 `/bank-import/commit-by-mapping` 的依赖已删除；后端兼容入口待规则中心和无 Parser 创建链路完成后删除或转发。
 9. 规则中心：删除用户手写 JSON 映射入口，改为 Agent 创建、用户审核、资产启停。
 10. 前端导航：隐藏或删除 26 个 Placeholder 路由，避免开源用户看到不可用入口。
 

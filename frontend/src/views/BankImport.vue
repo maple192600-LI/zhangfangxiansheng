@@ -39,27 +39,23 @@
         <div><label>数据行</label><strong>{{ uploadResult.row_count }}</strong></div>
       </div>
       <!-- 规则匹配结果提示 -->
-      <div v-if="ruleMatch" class="match-banner">
-        <span class="tag tag-green">匹配规则：{{ ruleMatch.template_name }}</span>
+      <div v-if="parserMatch" class="match-banner">
+        <span class="tag tag-green">匹配 Parser：{{ parserMatch.name }}</span>
         <span style="margin-left:8px;color:var(--muted);font-size:12px">
-          已有 {{ Object.keys(displayMapping).length }} 个字段规则，直接进入确定性预览
+          已审核规则已命中，正在使用确定性解析
         </span>
       </div>
     </div>
 
-    <!-- Step 2: 规则匹配详情（有规则时自动进入预览，此区域仅作为回看） -->
-    <div v-if="step === 2 && ruleMatch" class="panel" style="margin-top:14px">
-      <div class="panel-title">规则匹配详情</div>
-      <table style="margin-top:10px">
-        <thead><tr><th>银行列名</th><th>→</th><th>标准字段</th></tr></thead>
-        <tbody>
-          <tr v-for="(field, col) in displayMapping" :key="col">
-            <td>{{ col }}</td>
-            <td style="color:var(--green)">→</td>
-            <td><strong>{{ fieldLabel(field) }}</strong></td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- Step 2: Parser 匹配详情（有规则时自动进入预览，此区域仅作为回看） -->
+    <div v-if="step === 2 && parserMatch" class="panel" style="margin-top:14px">
+      <div class="panel-title">Parser 匹配详情</div>
+      <div class="summary-grid">
+        <div><label>Parser</label><strong>{{ parserMatch.name }}</strong></div>
+        <div><label>类型</label><strong>{{ parserMatch.kind }}</strong></div>
+        <div><label>范围</label><strong>{{ parserMatch.account_code || '通用' }}</strong></div>
+        <div><label>样本校验</label><strong>{{ parserCheckStatus }}</strong></div>
+      </div>
       <div class="btn-row" style="margin-top:14px">
         <button class="btn btn-secondary" @click="reset">重新上传</button>
         <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
@@ -97,7 +93,7 @@
         </div>
       </div>
       <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-secondary" @click="step = ruleMatch ? 2 : 2">返回修改</button>
+        <button class="btn btn-secondary" @click="step = 2">返回</button>
         <button class="btn btn-primary" :disabled="committing" @click="doCommit">
           {{ committing ? '提交中...' : `确认提交 ${previewResult.valid_count} 条记录` }}
         </button>
@@ -109,7 +105,7 @@
       <div class="panel-title">导入完成</div>
       <div class="summary-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
         <div><label>批次号</label><strong>{{ commitResult.batch_code }}</strong></div>
-        <div><label>关联账户</label><strong>{{ commitResult.account_code || '自动匹配' }}</strong></div>
+        <div><label>Parser</label><strong>{{ parserMatch?.name || commitResult.parser_artifact_id }}</strong></div>
         <div><label>入库行数</label><strong>{{ commitResult.inserted_rows }}</strong></div>
       </div>
       <div class="btn-row" style="margin-top:14px">
@@ -132,36 +128,17 @@ const fileInput = ref(null)
 const uploadResult = ref({})
 const hint = ref('')
 const step = ref(1)
-const aiResult = ref({})
-const ruleMatch = ref(null)
+const parserMatch = ref(null)
 const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
 const noRuleHint = ref(false)
 
-const displayMapping = computed(() => {
-  const m = ruleMatch.value?.mapping || aiResult.value?.mapping || {}
-  // 新格式：{ _columns: {...}, post_process: {...} }
-  if (m._columns) return m._columns
-  // 旧格式：纯 key-value
-  return m
+const parserCheckStatus = computed(() => {
+  const log = parserMatch.value?.sample_check_log || {}
+  if (log.ok === false) return '需复核'
+  return '已通过'
 })
-
-const FIELD_LABELS = {
-  business_date: '交易日期',
-  income_amount: '收入金额',
-  expense_amount: '支出金额',
-  counterparty_name: '对方户名',
-  summary_text: '摘要/用途',
-  balance: '余额',
-  business_time: '交易时间',
-  counterpart_account: '对方账号',
-  counterpart_bank: '对方开户行',
-  voucher_no: '凭证号',
-  transaction_type: '交易类型',
-}
-
-function fieldLabel(code) { return FIELD_LABELS[code] || code }
 
 function triggerFileInput() { fileInput.value?.click() }
 
@@ -184,24 +161,13 @@ async function upload(file) {
     uploadResult.value = await bank.uploadBankFile(file)
     step.value = 2
 
-    // 检测是否匹配到已有规则
-    const match = uploadResult.value.template_match
-    if (match && match.matched && match.mapping && Object.keys(match.mapping).length > 0) {
-      ruleMatch.value = match
-      const colMapping = match.mapping._columns || match.mapping
-      const fieldCount = Object.keys(colMapping).filter(k => !k.startsWith('_')).length
-      aiResult.value = {
-        ok: true,
-        mapping: match.mapping,
-        template_name: match.template_name,
-        confidence: match.confidence || 'high',
-        matched_count: fieldCount,
-        total_columns: uploadResult.value.headers?.length || 0,
-      }
+    const match = uploadResult.value.parser_match
+    if (match && match.matched && match.parser_artifact_id) {
+      parserMatch.value = match
       await doPreview()
     } else {
       // 无匹配规则 → 提示去 Agent 创建
-      ruleMatch.value = null
+      parserMatch.value = null
       step.value = 1
       noRuleHint.value = true
     }
@@ -212,11 +178,15 @@ async function upload(file) {
 
 async function doPreview() {
   hint.value = ''
+  if (!parserMatch.value?.parser_artifact_id) {
+    noRuleHint.value = true
+    step.value = 1
+    return
+  }
   try {
     previewResult.value = await bank.previewBankImport({
       batch_code: uploadResult.value.batch_code,
-      mapping: aiResult.value.mapping,
-      header_row: ruleMatch.value?.header_row ?? uploadResult.value.header_row,
+      parser_artifact_id: parserMatch.value.parser_artifact_id,
     })
     step.value = 3
   } catch (e) {
@@ -228,12 +198,9 @@ async function doCommit() {
   committing.value = true
   hint.value = ''
   try {
-    commitResult.value = await bank.commitBankImportByRule({
+    commitResult.value = await bank.commitBankImport({
       batch_code: uploadResult.value.batch_code,
-      mapping: aiResult.value.mapping,
-      template_id: ruleMatch.value?.template_id || null,
-      template_name: aiResult.value.template_name,
-      sample_headers: uploadResult.value.headers,
+      parser_artifact_id: parserMatch.value.parser_artifact_id,
     })
     step.value = 4
   } catch (e) {
@@ -246,10 +213,9 @@ async function doCommit() {
 function reset() {
   step.value = 1
   uploadResult.value = {}
-  aiResult.value = {}
   previewResult.value = {}
   commitResult.value = {}
-  ruleMatch.value = null
+  parserMatch.value = null
   hint.value = ''
   noRuleHint.value = false
 }

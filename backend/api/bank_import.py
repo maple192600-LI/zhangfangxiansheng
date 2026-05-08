@@ -24,6 +24,7 @@ router = APIRouter()
 
 class PreviewBody(BaseModel):
     batch_code: str
+    parser_artifact_id: Optional[int] = None
     template_id: Optional[int] = None
     header_row: Optional[int] = None
     mapping: Optional[Dict[str, Any]] = None
@@ -85,6 +86,7 @@ def preview(body: PreviewBody, db: Session = Depends(get_db)):
         result = svc.preview(
             db,
             batch_code=body.batch_code,
+            parser_artifact_id=body.parser_artifact_id,
             template_id=body.template_id,
             header_row=body.header_row,
             mapping=body.mapping,

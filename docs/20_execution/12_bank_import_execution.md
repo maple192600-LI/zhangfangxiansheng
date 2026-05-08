@@ -66,6 +66,13 @@ Parser 至少描述：
 - Artifact runtime 只执行已审核 Parser，不调用 LLM。
 - Agent harness 只创建或修正 Parser 草稿，不直接入库。
 
+当前主接口状态：
+
+- `POST /api/bank-import/upload` 返回 `parser_match`，命中已审核 Parser 时前端直接进入预览。
+- `POST /api/bank-import/preview` 优先使用 `parser_artifact_id` 执行已审核 Parser。
+- `POST /api/bank-import/commit` 使用 `parser_artifact_id` 确认入库，并写入 `fund_events.parser_artifact_id`。
+- `POST /api/bank-import/commit-by-mapping` 仅作为旧数据迁移期兼容入口，不得再被前端日常工作流调用。
+
 ## 6. 数据要求
 
 每条正式入库记录必须携带：
@@ -103,7 +110,22 @@ Parser 至少描述：
 
 旧的映射提交、手工保存模板、用户选择智能体解析表头等入口属于迁移对象，不得继续作为新功能开发依据。
 
-## 9. 完成标准
+## 9. 当前落地状态
+
+已完成：
+
+- 银行导入前端已停止调用 `/bank-import/commit-by-mapping`。
+- 上传、预览、确认提交已串到 `ParserArtifact`。
+- 上传阶段支持匹配 `account_code` 为空的通用银行 Parser，用于同银行同格式的多账户复用。
+
+仍需完成：
+
+- 首次无 Parser 时，从上传结果直接进入 Agent 创建 Parser 草稿。
+- 规则中心展示、启停和审核记录统一迁移到 Parser artifact。
+- 入库记录补齐原始行快照和用户确认记录。
+- 浏览器主链路验收需要覆盖上传、Parser 命中、预览、确认入库、基础数据表查看。
+
+## 10. 完成标准
 
 - 同一银行同一格式的不同公司、不同账户流水可复用同一 Parser。
 - 未匹配文件能进入 Agent 规则创建流程。

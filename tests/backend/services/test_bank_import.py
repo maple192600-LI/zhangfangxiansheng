@@ -1,11 +1,13 @@
 import json
+from datetime import date
+from decimal import Decimal
 from datetime import datetime
 
 import pytest
 
 from helpers import make_xlsx
 from core import ai_parse_utils
-from db.tables import Agent, AIConfig, FundEvent, ParserTemplate
+from db.tables import Agent, AIConfig, FundEvent, ParserArtifact, ParserTemplate
 from services import bank_import_service
 
 
@@ -69,6 +71,53 @@ def _add_agent(db, ai_config_id):
     return agent
 
 
+def _add_generic_bank_parser(db):
+    parser = ParserArtifact(
+        name="Generic Bank Parser",
+        kind="bank",
+        account_code=None,
+        version=1,
+        status="active",
+        code="""
+from datetime import date
+from decimal import Decimal
+
+from fund.primitives.canonical import emit_row, derive_source
+
+
+def parse(wb, ctx):
+    yield emit_row(
+        business_date=date(2026, 4, 24),
+        entity_code="E001",
+        entity_name="Entity 001 Ltd",
+        account_code="A001",
+        account_name="Main Account",
+        summary="parser receipt",
+        counterparty="Customer A",
+        amount_in=Decimal("120.50"),
+        amount_out=Decimal("0"),
+        rolling_balance=Decimal("1120.50"),
+        source=derive_source("bank"),
+    )
+""",
+        primitives_imports=[
+            "fund.primitives.canonical.emit_row",
+            "fund.primitives.canonical.derive_source",
+        ],
+        sample_check_log={"ok": True, "rows_checked": 1},
+        confidence=Decimal("1.0"),
+        created_by="test",
+        approved_by="test",
+        approved_at=datetime.now(),
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(parser)
+    db.commit()
+    db.refresh(parser)
+    return parser
+
+
 def test_commit_creates_fund_events(db_session, chart_of_accounts, tmp_path, monkeypatch):
     account = chart_of_accounts["account"]
     template = _add_template(db_session, account.account_code)
@@ -87,6 +136,40 @@ def test_commit_creates_fund_events(db_session, chart_of_accounts, tmp_path, mon
     assert event.state == "正常"
     assert float(event.amount_in) == 120.50
     assert float(event.amount_out) == 0
+
+
+def test_upload_preview_and_commit_use_active_parser_artifact(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    parser = _add_generic_bank_parser(db_session)
+    file_data = make_xlsx([
+        ["Date", "Summary", "Income", "Expense"],
+        ["2026-04-24", "ignored by parser", "1.00", ""],
+    ])
+    monkeypatch.setattr(bank_import_service, "DATA_DIR", str(tmp_path))
+
+    upload = bank_import_service.upload_file(db_session, file_data, "boc.xlsx")
+
+    assert upload["parser_match"]["matched"] is True
+    assert upload["parser_match"]["parser_artifact_id"] == parser.id
+    assert upload["parser_match"]["name"] == "Generic Bank Parser"
+
+    preview = bank_import_service.preview(
+        db_session,
+        upload["batch_code"],
+        parser_artifact_id=parser.id,
+    )
+
+    assert preview["valid_count"] == 1
+    assert preview["parsed_rows"][0]["summary_text"] == "parser receipt"
+    assert preview["parsed_rows"][0]["counterparty_name"] == "Customer A"
+    assert preview["parsed_rows"][0]["income_amount"] == "120.50"
+
+    result = bank_import_service.commit(db_session, upload["batch_code"], parser.id)
+    event = db_session.query(FundEvent).filter(FundEvent.batch_id == upload["batch_id"]).one()
+
+    assert result["inserted_rows"] == 1
+    assert event.parser_artifact_id == parser.id
+    assert event.business_date == date(2026, 4, 24)
+    assert event.account_code == "A001"
 
 
 def test_commit_invalid_batch_raises(db_session):

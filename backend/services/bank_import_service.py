@@ -1,6 +1,6 @@
 """银行流水导入服务层
 
-上传 → 模板匹配 → 预览 → 确认提交 全流程。
+上传 → Parser 匹配 → 预览 → 确认提交 全流程。
 """
 import json
 import os
@@ -26,7 +26,7 @@ from core.ai_parse_utils import (
 )
 from core.pii_masker import mask_row
 from core.security import decrypt_key
-from db.tables import FundEvent, ImportBatch, ParserTemplate, AIConfig
+from db.tables import FundEvent, ImportBatch, ParserArtifact, ParserTemplate, AIConfig
 from config import DATA_DIR
 from services import log_service
 
@@ -81,7 +81,7 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         if any(c and str(c).strip() for c in row)
     ]
 
-    # 查找匹配模板
+    # 查找兼容模板，辅助旧数据迁移和账号线索识别。
     templates = _get_active_templates(db, "bank")
     tpl = match_template(headers, [
         {
@@ -95,6 +95,8 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         }
         for t in templates
     ])
+    matched_account_code = tpl.get("account_code") if tpl else None
+    parser_artifact = _match_active_parser_artifact(db, "bank", matched_account_code)
 
     # 保存文件
     os.makedirs(os.path.join(DATA_DIR, "uploads"), exist_ok=True)
@@ -123,6 +125,7 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         "headers": headers,
         "sample_rows": sample_rows,
         "header_row": header_idx,
+        "parser_match": _parser_match_out(parser_artifact) if parser_artifact else None,
         "template_match": None,
     }
 
@@ -157,6 +160,7 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
 def preview(
     db: Session,
     batch_code: str,
+    parser_artifact_id: Optional[int] = None,
     template_id: Optional[int] = None,
     header_row: Optional[int] = None,
     mapping: Optional[Dict[str, str]] = None,
@@ -165,18 +169,28 @@ def preview(
     if not batch:
         raise ValueError("批次不存在")
 
-    # 重新读取文件
-    upload_dir = os.path.join(DATA_DIR, "uploads")
-    file_data = None
     filename = batch.source_name or ""
-    for f in os.listdir(upload_dir):
-        if batch_code in f:
-            with open(os.path.join(upload_dir, f), "rb") as fh:
-                file_data = fh.read()
-            break
-    if not file_data:
+    file_path = _find_uploaded_file(batch_code, filename)
+    if not file_path:
         raise ValueError("原始文件未找到")
 
+    if parser_artifact_id:
+        rows = list(
+            artifact_runtime.run_parser(
+                db,
+                parser_artifact_id,
+                file_path,
+                {"batch_code": batch_code},
+            )
+        )
+        result = _preview_from_canonical_rows(batch_code, rows)
+        batch.status = "previewed"
+        db.commit()
+        return result
+
+    # 兼容旧 mapping 模板预览。
+    with open(file_path, "rb") as fh:
+        file_data = fh.read()
     fmt = detect_format(filename)
     rows = read_file_from_bytes(file_data, filename, fmt)
 
@@ -458,6 +472,40 @@ def _get_active_templates(db: Session, template_type: str) -> List[ParserTemplat
     ).all()
 
 
+def _match_active_parser_artifact(
+    db: Session,
+    kind: str,
+    account_code: Optional[str] = None,
+) -> Optional[ParserArtifact]:
+    query = db.query(ParserArtifact).filter(
+        ParserArtifact.kind == kind,
+        ParserArtifact.status == "active",
+    )
+    if account_code:
+        account_parser = query.filter(ParserArtifact.account_code == account_code).order_by(
+            ParserArtifact.version.desc(),
+            ParserArtifact.id.desc(),
+        ).first()
+        if account_parser:
+            return account_parser
+    return query.filter(ParserArtifact.account_code.is_(None)).order_by(
+        ParserArtifact.version.desc(),
+        ParserArtifact.id.desc(),
+    ).first()
+
+
+def _parser_match_out(artifact: ParserArtifact) -> Dict[str, Any]:
+    return {
+        "matched": True,
+        "parser_artifact_id": artifact.id,
+        "name": artifact.name,
+        "kind": artifact.kind,
+        "account_code": artifact.account_code,
+        "confidence": str(artifact.confidence) if artifact.confidence is not None else None,
+        "sample_check_log": artifact.sample_check_log or {},
+    }
+
+
 def _find_uploaded_file(batch_code: str, source_name: str) -> Optional[str]:
     upload_dir = os.path.join(DATA_DIR, "uploads")
     if not os.path.isdir(upload_dir):
@@ -466,6 +514,53 @@ def _find_uploaded_file(batch_code: str, source_name: str) -> Optional[str]:
         if filename.startswith(batch_code + "_") and os.path.isfile(os.path.join(upload_dir, filename)):
             return os.path.join(upload_dir, filename)
     return None
+
+
+def _display_scalar(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def _preview_from_canonical_rows(batch_code: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    valid_rows = []
+    abnormal_rows = []
+    for row in rows:
+        preview_row = {
+            "business_date": _display_scalar(row.get("business_date")),
+            "entity_code": _display_scalar(row.get("entity_code")),
+            "entity_name": _display_scalar(row.get("entity_name")),
+            "account_code": _display_scalar(row.get("account_code")),
+            "account_name": _display_scalar(row.get("account_name")),
+            "summary_text": _display_scalar(row.get("summary")),
+            "counterparty_name": _display_scalar(row.get("counterparty")),
+            "income_amount": _display_scalar(row.get("amount_in")),
+            "expense_amount": _display_scalar(row.get("amount_out")),
+            "balance": _display_scalar(row.get("rolling_balance")),
+            "state": _display_scalar(row.get("state")),
+            "source": _display_scalar(row.get("source")),
+            "_errors": [],
+        }
+        errors = []
+        if not row.get("business_date") or not row.get("account_code"):
+            errors.append("CORE_FIELD_MISSING")
+        if row.get("state") != "正常":
+            errors.append("ROW_STATE_NOT_NORMAL")
+        if errors:
+            preview_row["_errors"] = errors
+            abnormal_rows.append(preview_row)
+        else:
+            valid_rows.append(preview_row)
+    return {
+        "batch_code": batch_code,
+        "total_count": len(rows),
+        "valid_count": len(valid_rows),
+        "abnormal_count": len(abnormal_rows),
+        "parsed_rows": valid_rows,
+        "abnormal_rows": abnormal_rows,
+    }
 
 
 def _ensure_summary(row: Dict) -> None:

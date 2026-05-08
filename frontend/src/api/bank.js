@@ -19,11 +19,6 @@ export const previewBankImport = (data) =>
 export const commitBankImport = (data) =>
   http.post('/bank-import/commit', data)
 
-// 当前后端的可用确定性提交入口仍由映射规则执行。
-// 前端统一通过“规则提交”语义调用，后续迁移到 Parser artifact 时只改这里。
-export const commitBankImportByRule = (data) =>
-  http.post('/bank-import/commit-by-mapping', data)
-
 // ── 解析模板 ──
 export const getParserTemplates = (params) =>
   http.get('/parser-templates', { params })
