@@ -118,7 +118,14 @@
   padding: 4px 10px;
   font-size: var(--font-size-xs);
 }
-
+.btn-danger {
+  border: 1px solid #e0b8ad;
+  color: #9b3d2f;
+  background: transparent;
+}
+.btn-danger:hover {
+  background: #fdf2ef;
+}
 /* ===== 标签系统 ===== */
 .tag {
   display: inline-block;

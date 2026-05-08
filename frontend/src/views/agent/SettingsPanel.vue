@@ -217,7 +217,10 @@ function toggleGroup(group, enabled) {
 async function savePermissions() {
   try {
     await http.put(`/agent/agents/${props.agent.id}/permissions`, permissions.value)
-  } catch {}
+  } catch (e) {
+    errMsg.value = '权限保存失败：' + (e.message || '未知错误')
+    setTimeout(() => { errMsg.value = '' }, 3000)
+  }
 }
 
 const tokenPresets = [

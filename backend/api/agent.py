@@ -604,14 +604,14 @@ def get_agent_permissions(agent_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/agents/{agent_id}/permissions")
-def update_agent_permissions(agent_id: int, request: Request, db: Session = Depends(get_db)):
+async def update_agent_permissions(agent_id: int, request: Request, db: Session = Depends(get_db)):
     """更新智能体的工具权限配置"""
     import json as _json
     from datetime import datetime
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
-    body = request.json() if hasattr(request, '_json') else request.json()
+    body = await request.json()
     agent.permission_json = _json.dumps(body, ensure_ascii=False)
     agent.updated_at = datetime.now()
     db.commit()

@@ -84,6 +84,7 @@
           <span class="user-name">{{ auth.user?.username || '未知用户' }}</span>
         </div>
         <div class="user-actions">
+          <button class="user-btn skin-toggle" @click="themeStore.toggleSkin" :title="'当前：' + themeStore.currentSkinLabel + '，点击切换'">{{ themeStore.currentSkinLabel }}</button>
           <button class="user-btn" @click="showPwdDialog = true">修改密码</button>
           <button class="user-btn user-btn-logout" @click="handleLogout">退出登录</button>
         </div>
@@ -184,6 +185,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useNavStore } from '@/stores/nav'
 import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
+import { useThemeStore } from '@/stores/theme'
 import { changePassword } from '@/api/auth'
 import AgentCreateModal from '@/components/agent/AgentCreateModal.vue'
 
@@ -191,6 +193,7 @@ const nav = useNavStore()
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const themeStore = useThemeStore()
 const agentsStore = useAgentsStore()
 
 // 首次登录强制改密码检测
@@ -673,6 +676,14 @@ watch(() => router.currentRoute.value, (route) => {
 .user-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skin-toggle {
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+  background: var(--green-2) !important;
+  font-weight: 500;
 }
 
 .user-btn {

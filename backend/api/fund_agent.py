@@ -73,6 +73,17 @@ def approve_parser(artifact_id: int, db: Session = Depends(get_db)):
         return error(2001, str(exc))
 
 
+@router.delete("/parsers/{artifact_id}")
+def delete_parser(artifact_id: int, db: Session = Depends(get_db)):
+    artifact = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
+    if artifact is None:
+        return error(2001, "Parser artifact 不存在")
+    name = artifact.name
+    db.delete(artifact)
+    db.commit()
+    return success({"message": f"解析器「{name}」已删除"})
+
+
 @router.get("/rules")
 def list_rules(status: Optional[str] = None, template_id: Optional[int] = None, db: Session = Depends(get_db)):
     q = db.query(RuleArtifact)
@@ -110,6 +121,17 @@ def approve_rule(artifact_id: int, db: Session = Depends(get_db)):
         return success(_rule_to_dict(artifact, include_bindings=True))
     except ValueError as exc:
         return error(2001, str(exc))
+
+
+@router.delete("/rules/{artifact_id}")
+def delete_rule(artifact_id: int, db: Session = Depends(get_db)):
+    artifact = db.query(RuleArtifact).filter(RuleArtifact.id == artifact_id).first()
+    if artifact is None:
+        return error(2001, "Rule artifact 不存在")
+    name = artifact.name
+    db.delete(artifact)
+    db.commit()
+    return success({"message": f"报表规则「{name}」已删除"})
 
 
 @router.post("/templates/upload")
@@ -237,14 +259,16 @@ def _parser_to_dict(row: ParserArtifact, *, include_code: bool) -> dict[str, Any
         "artifact_id": row.id,
         "name": row.name,
         "kind": row.kind,
-        "account_code": row.account_code,
+        "account_code": row.account_code if row.account_code and row.account_code != "null" else None,
         "version": row.version,
         "status": row.status,
         "primitives_imports": row.primitives_imports,
         "sample_check_log": row.sample_check_log,
         "confidence": float(row.confidence) if row.confidence is not None else None,
+        "created_by": row.created_by,
         "approved_by": row.approved_by,
         "approved_at": row.approved_at.isoformat() if row.approved_at else None,
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else None,
     }
     if include_code:
         data["code"] = row.code
@@ -262,8 +286,10 @@ def _rule_to_dict(row: RuleArtifact, *, include_bindings: bool) -> dict[str, Any
         "primitives_imports": row.primitives_imports,
         "sample_check_log": row.sample_check_log,
         "confidence": float(row.confidence) if row.confidence is not None else None,
+        "created_by": row.created_by,
         "approved_by": row.approved_by,
         "approved_at": row.approved_at.isoformat() if row.approved_at else None,
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else None,
     }
     if include_bindings:
         data["placeholder_bindings"] = row.placeholder_bindings

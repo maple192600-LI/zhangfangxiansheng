@@ -10,13 +10,15 @@
       </button>
     </div>
 
+    <div v-if="loadError" class="load-error">{{ loadError }}</div>
+
     <!-- Tab: 银行 Parser -->
     <template v-if="activeTab === 'bank'">
       <div v-if="bankParsers.length" class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>规则名称</th><th>来源银行</th><th>文件格式</th>
+              <th>规则名称</th><th>来源银行</th><th>创建者</th>
               <th>样本校验</th><th>状态</th><th>创建时间</th><th>操作</th>
             </tr>
           </thead>
@@ -27,7 +29,7 @@
                 <span class="bank-tag" v-if="p.account_code">{{ p.account_code }}</span>
                 <span class="tag tag-gray" v-else>通用</span>
               </td>
-              <td>{{ p.file_format || '-' }}</td>
+              <td>{{ p.created_by || '-' }}</td>
               <td>
                 <span class="tag" :class="sampleCheckClass(p.sample_check_log)">
                   {{ sampleCheckText(p.sample_check_log) }}
@@ -40,6 +42,7 @@
                   <button class="btn btn-secondary btn-sm" @click="viewParser(p)">查看</button>
                   <button class="btn btn-primary btn-sm" v-if="p.status === 'draft'" @click="doApprove('parser', p.id)">审核通过</button>
                   <button class="btn btn-secondary btn-sm" v-if="p.status === 'active'" @click="doStatusChange('parser', p.id, 'retired')">停用</button>
+                  <button class="btn btn-danger btn-sm" @click="doDelete('parser', p.id, p.name)">删除</button>
                 </div>
               </td>
             </tr>
@@ -55,13 +58,14 @@
         <table>
           <thead>
             <tr>
-              <th>规则名称</th><th>适用账户</th><th>样本校验</th><th>状态</th><th>创建时间</th><th>操作</th>
+              <th>规则名称</th><th>适用账户</th><th>创建者</th><th>样本校验</th><th>状态</th><th>创建时间</th><th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="p in manualParsers" :key="p.id">
               <td><strong>{{ p.name || '手工解析器' }}</strong></td>
               <td>{{ p.account_code || '通用' }}</td>
+              <td>{{ p.created_by || '-' }}</td>
               <td>
                 <span class="tag" :class="sampleCheckClass(p.sample_check_log)">
                   {{ sampleCheckText(p.sample_check_log) }}
@@ -74,6 +78,7 @@
                   <button class="btn btn-secondary btn-sm" @click="viewParser(p)">查看</button>
                   <button class="btn btn-primary btn-sm" v-if="p.status === 'draft'" @click="doApprove('parser', p.id)">审核通过</button>
                   <button class="btn btn-secondary btn-sm" v-if="p.status === 'active'" @click="doStatusChange('parser', p.id, 'retired')">停用</button>
+                  <button class="btn btn-danger btn-sm" @click="doDelete('parser', p.id, p.name)">删除</button>
                 </div>
               </td>
             </tr>
@@ -89,13 +94,14 @@
         <table>
           <thead>
             <tr>
-              <th>规则名称</th><th>关联模板</th><th>占位符绑定</th><th>状态</th><th>创建时间</th><th>操作</th>
+              <th>规则名称</th><th>关联模板</th><th>创建者</th><th>占位符绑定</th><th>状态</th><th>创建时间</th><th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in rules" :key="r.id">
               <td><strong>{{ r.name || '报表规则' }}</strong></td>
               <td>{{ r.template_id || '-' }}</td>
+              <td>{{ r.created_by || '-' }}</td>
               <td>{{ bindingCount(r) }} 个</td>
               <td><span class="tag" :class="statusClass(r.status)">{{ statusText(r.status) }}</span></td>
               <td class="time-cell">{{ shortDate(r.created_at) }}</td>
@@ -104,6 +110,7 @@
                   <button class="btn btn-secondary btn-sm" @click="viewRule(r)">查看</button>
                   <button class="btn btn-primary btn-sm" v-if="r.status === 'draft'" @click="doApprove('rule', r.id)">审核通过</button>
                   <button class="btn btn-secondary btn-sm" v-if="r.status === 'active'" @click="doStatusChange('rule', r.id, 'retired')">停用</button>
+                  <button class="btn btn-danger btn-sm" @click="doDelete('rule', r.id, r.name)">删除</button>
                 </div>
               </td>
             </tr>
@@ -210,20 +217,22 @@ function bindingCount(r) {
   return Object.keys(r.placeholder_bindings).length
 }
 
+const loadError = ref('')
+
 async function loadBankParsers() {
   try {
     bankParsers.value = await fundApi.listParserArtifacts({ kind: 'bank' }) || []
-  } catch { bankParsers.value = [] }
+  } catch (e) { bankParsers.value = []; loadError.value = '加载银行解析器失败：' + (e.message || '接口不可用') }
 }
 async function loadManualParsers() {
   try {
     manualParsers.value = await fundApi.listParserArtifacts({ kind: 'manual' }) || []
-  } catch { manualParsers.value = [] }
+  } catch (e) { manualParsers.value = []; loadError.value = '加载手工解析器失败：' + (e.message || '接口不可用') }
 }
 async function loadRules() {
   try {
     rules.value = await fundApi.listRuleArtifacts({}) || []
-  } catch { rules.value = [] }
+  } catch (e) { rules.value = []; loadError.value = '加载报表规则失败：' + (e.message || '接口不可用') }
 }
 
 async function viewParser(p) {
@@ -254,8 +263,16 @@ async function doApprove(type, id) {
 async function doStatusChange(type, id, newStatus) {
   const label = newStatus === 'retired' ? '停用' : '启用'
   if (!confirm(`确定${label}该规则？`)) return
-  // 后端暂无 status change API，审批后状态由 approve 管理
   alert('状态变更功能待后端支持')
+}
+
+async function doDelete(type, id, name) {
+  if (!confirm(`确定要删除「${name || '此规则'}」吗？\n此操作不可恢复。`)) return
+  try {
+    if (type === 'parser') await fundApi.deleteParserArtifact(id)
+    else await fundApi.deleteRuleArtifact(id)
+    await Promise.all([loadBankParsers(), loadManualParsers(), loadRules()])
+  } catch (e) { alert('删除失败: ' + e.message) }
 }
 
 onMounted(() => {
@@ -328,5 +345,9 @@ td { padding: 10px 12px; border-bottom: 1px solid #f0ebe3; }
 
 .empty-hint {
   color: var(--muted); font-size: 14px; padding: 20px 0; margin: 0;
+}
+.load-error {
+  background: #fdf2ef; border: 1px solid #e0b8ad; color: #9b3d2f;
+  padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
 }
 </style>

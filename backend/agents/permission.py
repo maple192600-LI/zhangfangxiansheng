@@ -24,6 +24,7 @@ DEFAULT_PERMISSION = {
         "skill_create", "skill_test", "skill_install", "skill_upgrade",
         "db_insert_fund_event",
         "db_save_parser_template",
+        "db_create_parser_artifact",
         "db_delete_parser_template",
         "openpyxl_write", "openpyxl_edit",
     ],
@@ -44,6 +45,7 @@ _CONFIRM_MESSAGES = {
     "skill_install": "确认允许安装技能？",
     "db_insert_fund_event": "确认允许插入资金流水记录？",
     "db_save_parser_template": "确认允许保存解析模板？",
+    "db_create_parser_artifact": "确认允许创建解析器并保存到规则中心？",
     "db_delete_parser_template": "确认允许删除解析模板？",
     "openpyxl_write": "确认允许创建 Excel 文件？",
     "openpyxl_edit": "确认允许修改 Excel 文件？",
@@ -53,25 +55,19 @@ _CONFIRM_MESSAGES = {
 def get_permission(permission_json_str: str) -> dict:
     """解析 agent 的权限配置
 
-    list 类型字段（allowed_tools, needs_user_confirm, disabled_toolsets, allowed_paths, allowed_shell）
-    使用并集合并，避免用户配置意外覆盖默认列表。
+    未配置时返回默认权限；已配置时直接使用用户的配置。
     """
     if not permission_json_str or permission_json_str == "{}":
         return DEFAULT_PERMISSION.copy()
     try:
         user_perm = json.loads(permission_json_str)
-        merged = DEFAULT_PERMISSION.copy()
-        # list 字段做并集，其他字段直接覆盖
-        for key in ("allowed_tools", "needs_user_confirm", "disabled_toolsets", "allowed_paths", "allowed_shell"):
-            if key in user_perm:
-                default_set = set(merged.get(key, []))
-                user_set = set(user_perm[key]) if isinstance(user_perm[key], list) else set()
-                merged[key] = list(default_set | user_set)
-        # 非 list 字段直接覆盖
+        result = DEFAULT_PERMISSION.copy()
         for key, value in user_perm.items():
-            if key not in ("allowed_tools", "needs_user_confirm", "disabled_toolsets", "allowed_paths", "allowed_shell"):
-                merged[key] = value
-        return merged
+            if key in ("allowed_tools", "needs_user_confirm", "disabled_toolsets", "allowed_paths", "allowed_shell"):
+                result[key] = value if isinstance(value, list) else result.get(key, [])
+            else:
+                result[key] = value
+        return result
     except (json.JSONDecodeError, TypeError):
         return DEFAULT_PERMISSION.copy()
 

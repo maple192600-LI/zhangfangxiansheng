@@ -39,7 +39,7 @@ const routes = [
       { path: 'agents/:id', name: 'agent-detail', component: () => import('@/views/AgentDetail.vue') },
 
       // 系统设置 > 数据中心
-      { path: 'account-manage', name: 'account-manage', component: () => import('@/views/AccountManage.vue') },
+      { path: 'account-manage', name: 'account-manage', component: () => import('@/views/AccountManage/index.vue') },
       { path: 'data/report-tpl', name: 'data-report-tpl', component: () => import('@/views/ReportTemplate.vue') },
 
       // 系统设置 > 规则中心

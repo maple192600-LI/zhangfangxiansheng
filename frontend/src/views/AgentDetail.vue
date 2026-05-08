@@ -25,6 +25,22 @@
     <!-- 内容区：根据 tab 切换 -->
     <div class="agent-content">
       <div v-if="activeTab === 'chat' && agent" class="chat-layout">
+        <div class="chat-sessions">
+          <button class="btn-new-session" @click="newSession">+ 新建对话</button>
+          <div class="session-list">
+            <div
+              v-for="s in sessions"
+              :key="s.id"
+              class="session-item"
+              :class="{ active: s.id === currentSessionId }"
+              @click="switchSession(s.id)"
+            >
+              <span class="session-title">{{ s.title || '未命名' }}</span>
+              <span class="session-time">{{ fmtTime(s.created_at) }}</span>
+              <button class="session-del" @click.stop="delSession(s.id)" title="删除">✕</button>
+            </div>
+          </div>
+        </div>
         <div class="chat-main">
           <ChatPanel
             ref="chatPanelRef"
@@ -81,6 +97,7 @@ const agent = ref(null)
 const activeTab = ref('chat')
 const currentSessionId = ref(null)
 const chatPanelRef = ref(null)
+const sessions = ref([])
 
 const tabs = [
   { key: 'chat', label: '聊天' },
@@ -98,18 +115,59 @@ async function loadAgent() {
   if (!id) return
   try {
     agent.value = await agentsStore.getAgent(id)
-    const sessions = await agentsStore.listSessions(id)
-    if (sessions.length > 0) {
-      currentSessionId.value = sessions[0].id
+    sessions.value = await agentsStore.listSessions(id)
+    if (sessions.value.length > 0) {
+      currentSessionId.value = sessions.value[0].id
     } else {
       const s = await agentsStore.createSession(id, '新会话')
+      sessions.value.unshift(s)
       currentSessionId.value = s.id
     }
   } catch (e) { console.error('加载 agent 失败:', e) }
 }
 
-function onSessionCreated(sid) { currentSessionId.value = sid; activeTab.value = 'chat' }
+function onSessionCreated(sid) {
+  currentSessionId.value = sid
+  activeTab.value = 'chat'
+  loadSessions()
+}
 function onOpenSession(sid) { currentSessionId.value = sid; activeTab.value = 'chat' }
+
+async function loadSessions() {
+  if (!agent.value) return
+  try { sessions.value = await agentsStore.listSessions(agent.value.id) } catch {}
+}
+
+async function newSession() {
+  if (!agent.value) return
+  try {
+    const s = await agentsStore.createSession(agent.value.id, '新会话')
+    sessions.value.unshift(s)
+    currentSessionId.value = s.id
+  } catch {}
+}
+
+function switchSession(sid) { currentSessionId.value = sid }
+
+async function delSession(sid) {
+  if (!agent.value) return
+  try {
+    await agentsStore.deleteSession(agent.value.id, sid)
+    sessions.value = sessions.value.filter(s => s.id !== sid)
+    if (currentSessionId.value === sid) {
+      currentSessionId.value = sessions.value.length > 0 ? sessions.value[0].id : null
+    }
+  } catch {}
+}
+
+function fmtTime(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  if (d.toDateString() === now.toDateString()) return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 function onStartTeach(prompt) {
   activeTab.value = 'chat'
   setTimeout(() => {
@@ -206,13 +264,73 @@ function onAgentDeleted() { router.push({ name: 'home' }) }
   padding: 16px 24px 24px;
 }
 
-/* 聊天布局：左侧聊天 + 右侧文件 */
+/* 聊天布局：左侧对话列表 + 中间聊天 + 右侧文件 */
 .chat-layout {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 200px 1fr 280px;
   gap: 16px;
   height: 100%;
 }
+
+/* 对话侧边栏 */
+.chat-sessions {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e7e0d5;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.btn-new-session {
+  margin: 12px;
+  padding: 8px;
+  border: 1px dashed #c5d4c2;
+  border-radius: 10px;
+  background: #f7f9f6;
+  color: #4a6b48;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.btn-new-session:hover { background: #eef3ec; border-color: #7f9b7a; }
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+.session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .12s;
+  position: relative;
+  margin-bottom: 2px;
+}
+.session-item:hover { background: #f4f1ea; }
+.session-item.active { background: #eef3ec; }
+.session-title {
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 16px;
+}
+.session-time { font-size: 11px; color: #aaa; }
+.session-del {
+  position: absolute;
+  top: 6px; right: 6px;
+  border: none; background: transparent;
+  color: #ccc; font-size: 11px; cursor: pointer;
+  padding: 2px 4px; border-radius: 4px;
+}
+.session-del:hover { color: #c0392b; background: #fde; }
 
 .chat-main { min-width: 0; overflow: hidden; }
 .chat-side { overflow: hidden; }
@@ -226,6 +344,12 @@ function onAgentDeleted() { router.push({ name: 'home' }) }
   max-width: 600px;
 }
 
+@media (max-width: 1100px) {
+  .chat-layout {
+    grid-template-columns: 1fr 280px;
+  }
+  .chat-sessions { display: none; }
+}
 @media (max-width: 900px) {
   .chat-layout {
     grid-template-columns: 1fr;

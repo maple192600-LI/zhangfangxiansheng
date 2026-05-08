@@ -26,7 +26,7 @@
       <div v-for="msg in messages" :key="msg.id" class="chat-msg" :class="'msg-' + msg.role">
         <div class="msg-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
         <div class="msg-body">
-          <div v-if="msg.content" class="msg-bubble" v-html="fmtContent(msg.content)"></div>
+          <MessageBubble v-if="msg.content" :content="msg.content" :role="msg.role" />
 
           <!-- 消息操作按钮 -->
           <div v-if="msg.content && !streaming" class="msg-actions" :class="'actions-' + msg.role">
@@ -44,24 +44,13 @@
             </div>
           </div>
 
-          <!-- 工具调用块 -->
-          <div v-if="msg.tool_call_json" class="tool-block" @click="toggleTool(msg.id)">
-            <div class="tool-head" :class="toolStatus(msg)">
-              <span class="tool-icon">{{ toolIcon(msg) }}</span>
-              <span class="tool-name">{{ toolName(msg.tool_call_json) }}</span>
-              <span class="tool-toggle">{{ expandedTools[msg.id] ? '收起 ▴' : '展开 ▸' }}</span>
-            </div>
-            <div v-if="expandedTools[msg.id]" class="tool-detail">
-              <div class="tool-section">
-                <div class="tool-section-title">参数</div>
-                <pre>{{ fmtArgs(msg.tool_call_json) }}</pre>
-              </div>
-              <div v-if="msg._tool_result" class="tool-section">
-                <div class="tool-section-title">结果</div>
-                <pre>{{ fmtResult(msg._tool_result) }}</pre>
-              </div>
-            </div>
-          </div>
+          <ToolCallBlock
+            v-if="msg.tool_call_json"
+            :tool-call-json="msg.tool_call_json"
+            :tool-result="msg._tool_result"
+            :expanded="!!expandedTools[msg.id]"
+            @toggle="toggleTool(msg.id)"
+          />
 
           <!-- 工具结果（独立显示） -->
           <div v-if="msg.tool_result_json && !msg.tool_call_json" class="tool-result-block">
@@ -74,7 +63,7 @@
       <div v-if="streaming" class="chat-msg msg-assistant">
         <div class="msg-avatar">🤖</div>
         <div class="msg-body">
-          <div v-if="streamingText" class="msg-bubble" v-html="fmtContent(streamingText)"></div>
+          <MessageBubble v-if="streamingText" :content="streamingText" role="assistant" />
           <div v-else class="msg-bubble typing">正在思考<span>.</span><span>.</span><span>.</span></div>
           <span v-if="streamingText" class="cursor">▊</span>
         </div>
@@ -88,42 +77,27 @@
         <span class="attach-name">{{ ref.name }}</span>
         <button class="attach-del" @click="removeWsRef(i)">✕</button>
       </div>
-      <div v-for="(f, i) in attachFiles" :key="'f-'+i" class="attach-item">
-        <span class="attach-icon">{{ fileIcon(f.name) }}</span>
-        <span class="attach-name">{{ f.name }}</span>
+      <div v-for="(f, i) in attachFiles" :key="'f-'+i" class="attach-item" :class="{ 'attach-img-item': isImageFile(f.name) }">
+        <img v-if="attachPreviews[f.name + '_' + f.lastModified]" :src="attachPreviews[f.name + '_' + f.lastModified]" class="attach-thumb" />
+        <span v-else class="attach-icon">{{ fileIcon(f.name) }}</span>
+        <div class="attach-info">
+          <span class="attach-name">{{ f.name }}</span>
+          <span v-if="f.size" class="attach-size">{{ fmtSize(f.size) }}</span>
+        </div>
         <button class="attach-del" @click="removeAttach(i)">✕</button>
       </div>
     </div>
 
-    <!-- 工具确认 / Agent 提问对话框 -->
-    <div v-if="confirmData" class="confirm-overlay">
-      <div class="confirm-box">
-        <template v-if="confirmData.isAskUser">
-          <div class="confirm-icon">💬</div>
-          <div class="confirm-title">Agent 提问</div>
-          <div class="confirm-msg">{{ confirmData.message }}</div>
-          <div class="confirm-input-row">
-            <input
-              v-model="askUserReply"
-              class="confirm-input"
-              placeholder="请输入回复..."
-              @keydown.enter.prevent="submitAskUser"
-            />
-            <button class="confirm-approve" @click="submitAskUser">发送回复</button>
-          </div>
-        </template>
-        <template v-else>
-          <div class="confirm-icon">🔐</div>
-          <div class="confirm-title">工具执行确认</div>
-          <div class="confirm-msg">{{ confirmData.message }}</div>
-          <div class="confirm-tool">工具: {{ confirmData.name }}</div>
-          <div class="confirm-btns">
-            <button class="confirm-reject" @click="rejectConfirm">拒绝</button>
-            <button class="confirm-approve" @click="approveConfirm">允许执行</button>
-          </div>
-        </template>
-      </div>
-    </div>
+    <ConfirmDialog
+      v-if="confirmData"
+      :is-ask-user="confirmData.isAskUser"
+      :message="confirmData.message"
+      :tool-name="confirmData.name"
+      v-model:reply-text="askUserReply"
+      @approve="approveConfirm"
+      @reject="rejectConfirm"
+      @submit-reply="submitAskUser"
+    />
 
     <!-- 输入区 -->
     <div class="chat-input-bar">
@@ -141,6 +115,7 @@
         rows="3"
         @keydown="handleKey"
         @paste="handlePaste"
+        @input="autoResize"
       ></textarea>
       <button v-if="streaming" class="btn-stop" @click="stopStream">
         ■ 停止
@@ -154,9 +129,12 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, nextTick, onMounted, watch, onBeforeUnmount } from 'vue'
 import { sendMessageStream, toolConfirm } from '@/api/agent'
 import { useAgentsStore } from '@/stores/agents'
+import ToolCallBlock from './ChatPanel/ToolCallBlock.vue'
+import ConfirmDialog from './ChatPanel/ConfirmDialog.vue'
+import MessageBubble from './ChatPanel/MessageBubble.vue'
 
 const props = defineProps({ agent: Object, sessionId: Number })
 const emit = defineEmits(['session-created'])
@@ -214,6 +192,12 @@ function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
 }
 
+function autoResize(e) {
+  const el = e.target
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+}
+
 function handlePaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
@@ -262,6 +246,7 @@ async function send() {
 
   messages.value.push({ id: Date.now(), role: 'user', content: fullText })
   inputText.value = ''
+  if (inputRef.value) inputRef.value.style.height = 'auto'
   streaming.value = true
   streamingText.value = ''
   scrollEnd()
@@ -453,61 +438,42 @@ function fileIcon(name) {
   return map[ext] || '📄'
 }
 
+function isImageFile(name) {
+  return /\.(png|jpg|jpeg|gif|bmp|webp|tiff|tif)$/i.test(name)
+}
+
+function fmtSize(bytes) {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+const attachPreviews = ref({})
+
+function generatePreviews() {
+  Object.values(attachPreviews.value).forEach(url => URL.revokeObjectURL(url))
+  const previews = {}
+  for (const f of attachFiles.value) {
+    if (isImageFile(f.name)) {
+      previews[f.name + '_' + f.lastModified] = URL.createObjectURL(f)
+    }
+  }
+  attachPreviews.value = previews
+}
+
+watch(attachFiles, () => generatePreviews(), { deep: true })
+onBeforeUnmount(() => {
+  Object.values(attachPreviews.value).forEach(url => URL.revokeObjectURL(url))
+})
+
 function scrollEnd() {
   nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight })
 }
 
 function toggleTool(id) { expandedTools.value[id] = !expandedTools.value[id] }
-
-function toolName(j) {
-  try { return JSON.parse(j).name || '?' } catch { return '?' }
-}
-
-function toolIcon(msg) {
-  if (msg._tool_result) {
-    try {
-      const r = JSON.parse(msg._tool_result)
-      return r.ok ? '✅' : '❌'
-    } catch {}
-  }
-  return '🔧'
-}
-
-function toolStatus(msg) {
-  if (msg._tool_result) {
-    try {
-      const r = JSON.parse(msg._tool_result)
-      return r.ok ? 'tool-ok' : 'tool-err'
-    } catch {}
-  }
-  return 'tool-running'
-}
-
-function fmtArgs(j) {
-  try {
-    const d = JSON.parse(j)
-    return JSON.stringify(d.arguments || d, null, 2)
-  } catch { return j }
-}
-
-function fmtResult(j) {
-  try {
-    const d = JSON.parse(j)
-    return JSON.stringify(d.result || d, null, 2)
-  } catch { return j }
-}
-
 function fmtJson(j) {
   try { return JSON.stringify(JSON.parse(j), null, 2) } catch { return j || '' }
-}
-
-function fmtContent(t) {
-  if (!t) return ''
-  return t
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
 }
 </script>
 
@@ -586,10 +552,6 @@ function fmtContent(t) {
   line-height: 1.7;
   word-break: break-word;
 }
-.msg-user .msg-bubble {
-  background: #7f9b7a; color: #fff;
-  border-bottom-right-radius: 4px;
-}
 .msg-assistant .msg-bubble {
   background: #f7f4ee;
   border: 1px solid #e7e0d5;
@@ -654,57 +616,6 @@ function fmtContent(t) {
 .typing span:nth-child(2) { animation-delay: .2s; }
 .typing span:nth-child(3) { animation-delay: .4s; }
 @keyframes dot { 0%,60%,100% { opacity: 0; } 30% { opacity: 1; } }
-
-/* 工具块 */
-.tool-block {
-  margin-top: 6px;
-  border-radius: 10px;
-  overflow: hidden;
-  font-size: 13px;
-  cursor: pointer;
-}
-.tool-head {
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 12px;
-  transition: background .15s;
-}
-.tool-head.tool-running { background: #eef5f8; border: 1px solid #d0e4ea; }
-.tool-head.tool-ok { background: #eef3ec; border: 1px solid #d7e5d4; }
-.tool-head.tool-err { background: #fdf2ef; border: 1px solid #e0b8ad; }
-.tool-block:hover .tool-head { filter: brightness(.97); }
-
-.tool-icon { font-size: 14px; }
-.tool-name { font-weight: 600; flex: 1; }
-.tool-running .tool-name { color: #1a7a8a; }
-.tool-ok .tool-name { color: #2f5e2e; }
-.tool-err .tool-name { color: #9b3d2f; }
-.tool-toggle { color: #8c8680; font-size: 12px; }
-
-.tool-detail {
-  border-top: 1px solid #ede8df;
-  background: #faf8f3;
-}
-.tool-section {
-  padding: 8px 12px;
-}
-.tool-section + .tool-section {
-  border-top: 1px dashed #e7e0d5;
-}
-.tool-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #8c8680;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-}
-.tool-detail pre {
-  margin: 0; padding: 6px 8px;
-  background: #fff; border-radius: 6px;
-  font-size: 12px; overflow: auto;
-  max-height: 200px; line-height: 1.5;
-  border: 1px solid #ede8df;
-}
-
 .tool-result-block pre {
   margin: 6px 0 0;
   padding: 8px 12px;
@@ -802,53 +713,43 @@ function fmtContent(t) {
   flex-shrink: 0;
   flex-wrap: wrap;
   border-top: 1px solid #e7e0d5;
+  align-items: flex-end;
 }
 .attach-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 6px 10px;
   background: #fff;
   border: 1px solid #e7e0d5;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 12px;
   color: #435046;
+  max-width: 240px;
+  transition: border-color .15s;
 }
+.attach-item:hover { border-color: #b8ccb5; }
 .attach-ws { border-color: #d7e5d4; background: #f2f7f0; }
 .attach-ws-svg { flex-shrink: 0; }
-.attach-icon { font-size: 14px; }
-.attach-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-icon { font-size: 14px; flex-shrink: 0; }
+.attach-img-item { padding: 4px; }
+.attach-thumb {
+  width: 48px; height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.attach-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.attach-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-size { font-size: 11px; color: #8c8680; }
 .attach-del {
   border: none; background: transparent; cursor: pointer;
-  color: #aaa; font-size: 12px; padding: 0 2px;
+  color: #aaa; font-size: 12px; padding: 0 2px; flex-shrink: 0;
 }
 .attach-del:hover { color: #c0392b; }
-
-/* 确认对话框 */
-.confirm-overlay {
-  position: absolute; inset: 0;
-  background: rgba(0,0,0,.35);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 30; border-radius: 14px;
-}
-.confirm-box {
-  background: #fff; border-radius: 16px; padding: 28px 32px;
-  max-width: 420px; width: 90%; text-align: center;
-  box-shadow: 0 20px 60px rgba(0,0,0,.2);
-}
-.confirm-icon { font-size: 36px; margin-bottom: 12px; }
-.confirm-title { font-size: 17px; font-weight: 700; color: #333; margin-bottom: 10px; }
-.confirm-msg { font-size: 14px; color: #555; line-height: 1.6; margin-bottom: 8px; }
-.confirm-tool { font-size: 13px; color: #8c8680; margin-bottom: 18px; }
-.confirm-btns { display: flex; gap: 10px; justify-content: center; }
-.confirm-reject {
-  padding: 8px 24px; border-radius: 10px; border: 1px solid #e7e0d5;
-  background: #fff; color: #8c8680; font-size: 14px; cursor: pointer; font-family: inherit;
-}
-.confirm-reject:hover { background: #fdf2ef; border-color: #e0b8ad; color: #9b3d2f; }
-.confirm-approve {
-  padding: 8px 24px; border-radius: 10px; border: none;
-  background: #7f9b7a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
-}
-.confirm-approve:hover { background: #3d6b3a; }
 </style>
