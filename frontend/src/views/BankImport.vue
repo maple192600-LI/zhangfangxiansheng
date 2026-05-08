@@ -17,9 +17,9 @@
 
     <!-- 无匹配规则提示 -->
     <div v-if="noRuleHint" class="hint-panel" style="margin-bottom:14px">
-      未匹配到可用解析规则。请先由 Agent 创建并审核 Parser，再回到这里导入。
-      <strong style="cursor:pointer;color:var(--green);margin-left:6px" @click="$router.push('/agent')">去创建规则</strong>
-      <button class="btn btn-secondary btn-sm" style="margin-left:10px" @click="noRuleHint = false">关闭</button>
+      当前银行/文件格式尚无已审核的解析规则。请通过 AI 智能体创建解析器。
+      <button class="btn btn-primary btn-sm" style="margin-left:12px" @click="goCreateRule">让 AI 创建解析规则</button>
+      <button class="btn btn-secondary btn-sm" style="margin-left:8px" @click="noRuleHint = false">关闭</button>
     </div>
 
     <div v-if="step === 1" class="upload-box" @dragover.prevent @drop.prevent="onDrop" @click="triggerFileInput">
@@ -124,6 +124,9 @@
 <script setup>
 import * as bank from '@/api/bank'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 const fileInput = ref(null)
 const uploadResult = ref({})
 const hint = ref('')
@@ -195,6 +198,7 @@ async function doPreview() {
 }
 
 async function doCommit() {
+  if (!confirm(`确认将 ${previewResult.value.valid_count} 条记录入库？此操作不可撤销。`)) return
   committing.value = true
   hint.value = ''
   try {
@@ -208,6 +212,10 @@ async function doCommit() {
   } finally {
     committing.value = false
   }
+}
+
+function goCreateRule() {
+  router.push({ name: 'agent-detail', params: { id: 'fund' } })
 }
 
 function reset() {

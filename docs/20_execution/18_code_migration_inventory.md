@@ -173,3 +173,64 @@
 4. 检查失败时是否保留旧数据、展示错误、允许重试。
 5. 检查同一动作是否有重复入口或旧 API。
 6. 对导入、确认、删除、恢复、清理等危险操作进行浏览器验证。
+
+## 9. 前端入口收束执行记录（2025-05-08）
+
+### 9.1 路由清理
+
+已完成：
+
+- 删除 26 条 Placeholder 路由：票据中心 4 条、贷款管理 4 条、预算管理 1 条、AI 子路由 7 条、权限管理 5 条、规则子分类 4 条、部门管理 1 条
+- 删除 2 条重复路由：`backup-restore`、`data-cleanup`（均已被 SystemMaintenance 替代）
+- 合并异常中心路由：`exception/receipt` + `exception/other` → 单一 `exception`
+- 规则中心路由：`rule/bank` → `rules`
+- 删除 `Placeholder.vue` 组件文件
+
+### 9.2 导航菜单调整
+
+已完成：
+
+- 移除导航分组：票据中心、贷款管理、预算管理、用户和权限
+- 规则中心简化为单入口：`规则管理 → /rules`
+- 部门信息管理从数据中心移除
+- 操作日志合并到系统维护二级组
+
+### 9.3 孤立文件删除
+
+- `frontend/src/views/BackupRestore.vue` — 已被 SystemMaintenance 替代
+- `frontend/src/views/DataCleanup.vue` — 已被 SystemMaintenance 替代
+- `frontend/src/views/BankManage.vue` — 无路由引用
+- `frontend/src/views/Placeholder.vue` — 不再需要
+
+### 9.4 规则中心改造
+
+`BankRule.vue` 已从旧的 `parser_templates` CRUD 改为统一规则中心：
+
+- Tab 1: 银行解析器（`parser_artifacts` where kind='bank'）
+- Tab 2: 手工解析器（`parser_artifacts` where kind='manual'）
+- Tab 3: 报表规则（`rule_artifacts`）
+- 操作：查看详情、审核通过（draft → active）、停用
+- 不暴露 JSON 编辑器、字段映射编辑器、代码编辑器
+
+API 层新增：`listParserArtifacts`、`listRuleArtifacts`。
+
+### 9.5 安全底线修复
+
+- `fmtAmt`：NaN 和空字符串保护，返回 `'--'` 而非显示 `NaN`
+- 时区：确认全部 `toISOString().slice(0,10)` 已替换为 `todayLocalDate()`
+- 确认弹窗：银行导入提交（doCommit）、余额重建（doRebuild）已补充 `confirm()`
+- 其他危险操作（批量删除、审核、账户删除）已有 `confirm()`
+
+### 9.6 BankImport 无 Parser 引导
+
+改进无匹配规则时的用户引导：
+- 文案从"去创建规则"改为"让 AI 创建解析规则"按钮
+- 跳转目标从 `/agent` 改为 Agent 详情页（`/agents/fund`）
+
+### 9.7 待完成
+
+- 手工流水旧入口迁移（Section 3）
+- 旧 `parser_templates` API 和数据表清理
+- API 端点收敛（Section 6 基线 152 → 目标 42）
+- AccountManage.vue 拆分
+- 浏览器端到端验证

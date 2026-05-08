@@ -1,8 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-// 通用占位组件 — 所有未实现的页面共用
-const Placeholder = () => import('@/views/Placeholder.vue')
-
 const routes = [
   // 登录页 — 顶层路由，不走 MainLayout
   { path: '/login', name: 'login', component: () => import('@/views/Login.vue') },
@@ -37,62 +34,25 @@ const routes = [
       { path: 'month-report', name: 'month-report', component: () => import('@/views/MonthReport.vue') },
       { path: 'year-report', name: 'year-report', component: () => import('@/views/YearReport.vue') },
 
-      // 票据中心
-      { path: 'ocr/upload', name: 'ocr-upload', component: Placeholder },
-      { path: 'ocr/settings', name: 'ocr-settings', component: Placeholder },
-      { path: 'invoice-ledger', name: 'invoice-ledger', component: Placeholder },
-      { path: 'contract-ledger', name: 'contract-ledger', component: Placeholder },
-
-      // 贷款管理
-      { path: 'loan-ledger', name: 'loan-ledger', component: Placeholder },
-      { path: 'loan-interest', name: 'loan-interest', component: Placeholder },
-      { path: 'loan-other-ledger', name: 'loan-other-ledger', component: Placeholder },
-      { path: 'loan-other', name: 'loan-other', component: Placeholder },
-
-      // 预算管理
-      { path: 'budget-plan', name: 'budget-plan', component: Placeholder },
-
-      // AI智能体
+      // AI 智能体
       { path: 'agent/review/:type/:id', name: 'agent-review', component: () => import('@/views/AgentReview.vue') },
       { path: 'agents/:id', name: 'agent-detail', component: () => import('@/views/AgentDetail.vue') },
-      { path: 'agent/social', name: 'agent-social', component: Placeholder },
-      { path: 'agent/daily', name: 'agent-daily', component: Placeholder },
-      { path: 'agent/cost', name: 'agent-cost', component: Placeholder },
-      { path: 'agent/income', name: 'agent-income', component: Placeholder },
-      { path: 'agent/material', name: 'agent-material', component: Placeholder },
-      { path: 'agent/tax', name: 'agent-tax', component: Placeholder },
-      { path: 'agent/custom', name: 'agent-custom', component: Placeholder },
 
       // 系统设置 > 数据中心
       { path: 'account-manage', name: 'account-manage', component: () => import('@/views/AccountManage.vue') },
       { path: 'data/report-tpl', name: 'data-report-tpl', component: () => import('@/views/ReportTemplate.vue') },
-      { path: 'data/department', name: 'data-department', component: Placeholder },
 
       // 系统设置 > 规则中心
-      { path: 'rule/bank', name: 'rule-bank', component: () => import('@/views/BankRule.vue') },
-      { path: 'rule/io', name: 'rule-io', component: Placeholder },
-      { path: 'rule/origin', name: 'rule-origin', component: Placeholder },
-      { path: 'rule/voucher', name: 'rule-voucher', component: Placeholder },
-      { path: 'rule/other', name: 'rule-other', component: Placeholder },
+      { path: 'rules', name: 'rules', component: () => import('@/views/BankRule.vue') },
 
       // 系统设置 > 异常中心
-      { path: 'exception/receipt', name: 'exception-receipt', component: () => import('@/views/ExceptionCenter.vue') },
-      { path: 'exception/other', name: 'exception-other', component: () => import('@/views/ExceptionCenter.vue') },
+      { path: 'exception', name: 'exception', component: () => import('@/views/ExceptionCenter.vue') },
 
       // 系统设置 > 模型配置
       { path: 'ai-config', name: 'ai-config', component: () => import('@/views/AIConfig.vue') },
 
-      // 系统设置 > 用户和权限
-      { path: 'perm/admin', name: 'perm-admin', component: Placeholder },
-      { path: 'perm/cashier', name: 'perm-cashier', component: Placeholder },
-      { path: 'perm/manager', name: 'perm-manager', component: Placeholder },
-      { path: 'perm/boss', name: 'perm-boss', component: Placeholder },
-      { path: 'perm/accountant', name: 'perm-accountant', component: Placeholder },
-
       // 系统设置 > 系统维护 / 操作日志
       { path: 'system-maintenance', name: 'system-maintenance', component: () => import('@/views/SystemMaintenance.vue') },
-      { path: 'backup-restore', name: 'backup-restore', component: () => import('@/views/SystemMaintenance.vue') },
-      { path: 'data-cleanup', name: 'data-cleanup', component: () => import('@/views/SystemMaintenance.vue') },
       { path: 'operation-log', name: 'operation-log', component: () => import('@/views/OperationLog.vue') },
     ]
   }

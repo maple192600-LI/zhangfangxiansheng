@@ -172,6 +172,7 @@ async function loadData() {
 }
 
 async function doRebuild() {
+  if (!confirm('确定重建所有账户余额？此操作将重新计算所有记录的余额数据。')) return
   rebuilding.value = true
   try {
     const r = await api.rebuildBalance()

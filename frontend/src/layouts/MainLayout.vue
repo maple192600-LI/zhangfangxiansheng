@@ -270,7 +270,7 @@ const navData = {
           { name: '手工流水', explain: '工作台中的手工流水页。用于录入或导入手工流水。', route: 'manual-flow' },
           { name: '手动维护', explain: '工作台中的手动维护页。用于修正记录、补录信息和维护。', route: 'manual-maintenance' },
           { name: '上传结果预览', explain: '工作台中的上传结果预览页。查看处理状态、未处理项和异常数据。', route: 'upload-preview' },
-          { name: '异常处理', explain: '集中处理待确认和异常流水，修正或作废。', route: 'exception-receipt' }
+          { name: '异常处理', explain: '集中处理待确认和异常流水，修正或作废。', route: 'exception' }
         ]
       },
       '资金日报表': {
@@ -293,33 +293,9 @@ const navData = {
       }
     }
   },
-  '票据中心': {
-    icon: '📷',
-    tabs: [
-      { name: '票据上传', explain: '上传发票、合同、回单等票据，自动识别类型和内容。', route: 'ocr-upload' },
-      { name: '发票管理', explain: '发票台账管理，查看识别结果和历史记录。', route: 'invoice-ledger' },
-      { name: '合同管理', explain: '合同台账管理，查看识别结果和历史记录。', route: 'contract-ledger' },
-      { name: '识别设置', explain: '配置识别模板、分类规则和识别参数。', route: 'ocr-settings' }
-    ]
-  },
-  '贷款管理': {
-    icon: '🏦',
-    tabs: [
-      { name: '贷款台账', explain: '贷款管理下的贷款台账页。', route: 'loan-ledger' },
-      { name: '利息支出', explain: '贷款管理下的利息支出页。', route: 'loan-interest' },
-      { name: '贷款其他信息台账', explain: '贷款管理下的贷款其他信息台账页。', route: 'loan-other-ledger' },
-      { name: '其他信息', explain: '贷款管理下的其他信息页。', route: 'loan-other' }
-    ]
-  },
-  '预算管理': {
-    icon: '📋',
-    tabs: [
-      { name: '资金计划', explain: '预算管理下的资金计划页。', route: 'budget-plan' }
-    ]
-  },
   'AI智能体': {
     icon: '🤖',
-    _dynamic: true  // 标记为动态渲染
+    _dynamic: true
   },
   '系统设置': {
     icon: '⚙️',
@@ -327,17 +303,12 @@ const navData = {
       '数据中心': {
         tabs: [
           { name: '主数据管理', explain: '管理核算组织、单位、银行账户等基础数据', route: 'account-manage' },
-          { name: '报表模板管理', explain: '数据中心下的报表模板管理页。', route: 'data-report-tpl' },
-          { name: '部门信息管理', explain: '数据中心下的部门信息管理页。', route: 'data-department' }
+          { name: '报表模板管理', explain: '数据中心下的报表模板管理页。', route: 'data-report-tpl' }
         ]
       },
       '规则中心': {
         tabs: [
-          { name: '银行流水规则', explain: '规则中心下的银行流水规则页。', route: 'rule-bank' },
-          { name: '收支规则', explain: '规则中心下的收支规则页。', route: 'rule-io' },
-          { name: '原始凭证规则', explain: '规则中心下的原始凭证规则页。', route: 'rule-origin' },
-          { name: '凭证生成规则', explain: '规则中心下的凭证生成规则页。', route: 'rule-voucher' },
-          { name: '其他待拓展规则', explain: '规则中心下的其他待拓展规则页。', route: 'rule-other' }
+          { name: '规则管理', explain: '管理银行解析器、手工解析器、报表规则，审核、启停和归档。', route: 'rules' }
         ]
       },
       '模型配置': {
@@ -345,22 +316,11 @@ const navData = {
           { name: '模型配置', explain: '配置 AI 模型供应商和 API Key。', route: 'ai-config' }
         ]
       },
-      '用户和权限': {
-        tabs: [
-          { name: '超级管理员', explain: '用户和权限下的超级管理员视图。', route: 'perm-admin' },
-          { name: '出纳', explain: '用户和权限下的出纳视图。', route: 'perm-cashier' },
-          { name: '财务总监/经理', explain: '用户和权限下的财务总监/经理视图。', route: 'perm-manager' },
-          { name: '老板', explain: '用户和权限下的老板视图。', route: 'perm-boss' },
-          { name: '各不同会计', explain: '用户和权限下的不同会计视图。', route: 'perm-accountant' }
-        ]
-      },
       '系统维护': {
         tabs: [
-          { name: '系统维护', explain: '系统备份恢复与数据清理。', route: 'system-maintenance' }
+          { name: '系统维护', explain: '系统备份恢复与数据清理。', route: 'system-maintenance' },
+          { name: '操作日志', explain: '系统操作日志。', route: 'operation-log' }
         ]
-      },
-      '操作日志': {
-        tabs: [{ name: '操作日志', explain: '系统操作日志。', route: 'operation-log' }]
       }
     }
   }
@@ -368,7 +328,6 @@ const navData = {
 
 const openState = ref({
   '资金板块': true,
-  '票据中心': true,
   'AI智能体': true,
   '系统设置': true
 })
