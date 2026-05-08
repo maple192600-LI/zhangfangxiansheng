@@ -488,7 +488,9 @@ def _match_active_parser_artifact(
         ).first()
         if account_parser:
             return account_parser
-    return query.filter(ParserArtifact.account_code.is_(None)).order_by(
+    return query.filter(
+        ParserArtifact.account_code.is_(None) | (ParserArtifact.account_code == "null")
+    ).order_by(
         ParserArtifact.version.desc(),
         ParserArtifact.id.desc(),
     ).first()

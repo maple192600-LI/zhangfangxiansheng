@@ -42,6 +42,7 @@
                   <button class="btn btn-secondary btn-sm" @click="viewParser(p)">查看</button>
                   <button class="btn btn-primary btn-sm" v-if="p.status === 'draft'" @click="doApprove('parser', p.id)">审核通过</button>
                   <button class="btn btn-secondary btn-sm" v-if="p.status === 'active'" @click="doStatusChange('parser', p.id, 'retired')">停用</button>
+                  <button class="btn btn-primary btn-sm" v-if="p.status === 'retired'" @click="doStatusChange('parser', p.id, 'active')">启用</button>
                   <button class="btn btn-danger btn-sm" @click="doDelete('parser', p.id, p.name)">删除</button>
                 </div>
               </td>
@@ -78,6 +79,7 @@
                   <button class="btn btn-secondary btn-sm" @click="viewParser(p)">查看</button>
                   <button class="btn btn-primary btn-sm" v-if="p.status === 'draft'" @click="doApprove('parser', p.id)">审核通过</button>
                   <button class="btn btn-secondary btn-sm" v-if="p.status === 'active'" @click="doStatusChange('parser', p.id, 'retired')">停用</button>
+                  <button class="btn btn-primary btn-sm" v-if="p.status === 'retired'" @click="doStatusChange('parser', p.id, 'active')">启用</button>
                   <button class="btn btn-danger btn-sm" @click="doDelete('parser', p.id, p.name)">删除</button>
                 </div>
               </td>
@@ -110,6 +112,7 @@
                   <button class="btn btn-secondary btn-sm" @click="viewRule(r)">查看</button>
                   <button class="btn btn-primary btn-sm" v-if="r.status === 'draft'" @click="doApprove('rule', r.id)">审核通过</button>
                   <button class="btn btn-secondary btn-sm" v-if="r.status === 'active'" @click="doStatusChange('rule', r.id, 'retired')">停用</button>
+                  <button class="btn btn-primary btn-sm" v-if="r.status === 'retired'" @click="doStatusChange('rule', r.id, 'active')">启用</button>
                   <button class="btn btn-danger btn-sm" @click="doDelete('rule', r.id, r.name)">删除</button>
                 </div>
               </td>
@@ -263,7 +266,11 @@ async function doApprove(type, id) {
 async function doStatusChange(type, id, newStatus) {
   const label = newStatus === 'retired' ? '停用' : '启用'
   if (!confirm(`确定${label}该规则？`)) return
-  alert('状态变更功能待后端支持')
+  try {
+    if (type === 'parser') await fundApi.updateParserStatus(id, newStatus)
+    else await fundApi.updateRuleStatus(id, newStatus)
+    await Promise.all([loadBankParsers(), loadManualParsers(), loadRules()])
+  } catch (e) { alert(`${label}失败: ` + e.message) }
 }
 
 async function doDelete(type, id, name) {

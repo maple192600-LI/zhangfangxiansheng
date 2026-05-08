@@ -85,6 +85,16 @@ def _patch_schema():
                 else:
                     print(f"[schema] 补齐 {col_name} 失败: {e}")
 
+        # 一次性清理 account_code 字符串 'null' → SQL NULL
+        for table, col in [("parser_artifacts", "account_code"), ("rule_artifacts", "account_code")]:
+            try:
+                result = conn.execute(_t(f"UPDATE {table} SET {col} = NULL WHERE {col} = 'null'"))
+                conn.commit()
+                if result.rowcount:
+                    print(f"[data-fix] {table}.{col}: 清理了 {result.rowcount} 条字符串 'null' → NULL")
+            except Exception:
+                pass
+
 
 def _run_alembic_upgrade():
     """运行 Alembic 迁移到 head。"""

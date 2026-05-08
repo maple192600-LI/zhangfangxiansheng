@@ -215,7 +215,7 @@ async function doCommit() {
 }
 
 function goCreateRule() {
-  router.push({ name: 'agent-detail', params: { id: 'fund' } })
+  router.push({ name: 'agent-detail', params: { id: '1' } })
 }
 
 function reset() {

@@ -16,6 +16,9 @@ export const approveParserArtifact = (id) =>
 export const deleteParserArtifact = (id) =>
   http.delete(`/fund/parsers/${id}`)
 
+export const updateParserStatus = (id, status) =>
+  http.patch(`/fund/parsers/${id}/status`, { status })
+
 // Rule Artifact
 export const listRuleArtifacts = (params) =>
   http.get('/fund/rules', { params })
@@ -28,6 +31,9 @@ export const approveRuleArtifact = (id) =>
 
 export const deleteRuleArtifact = (id) =>
   http.delete(`/fund/rules/${id}`)
+
+export const updateRuleStatus = (id, status) =>
+  http.patch(`/fund/rules/${id}/status`, { status })
 
 // Template Inference
 export const uploadFundTemplate = (file, kind = 'cash_journal') => {

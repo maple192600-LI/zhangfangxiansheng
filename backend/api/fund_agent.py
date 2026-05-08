@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from agents.fund import memory
@@ -73,6 +74,24 @@ def approve_parser(artifact_id: int, db: Session = Depends(get_db)):
         return error(2001, str(exc))
 
 
+class StatusUpdate(BaseModel):
+    status: str
+
+_VALID_STATUSES = {"draft", "active", "retired"}
+
+@router.patch("/parsers/{artifact_id}/status")
+def update_parser_status(artifact_id: int, body: StatusUpdate, db: Session = Depends(get_db)):
+    if body.status not in _VALID_STATUSES:
+        return error(2001, f"无效状态: {body.status}")
+    artifact = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
+    if artifact is None:
+        return error(2001, "Parser artifact 不存在")
+    artifact.status = body.status
+    db.commit()
+    db.refresh(artifact)
+    return success(_parser_to_dict(artifact, include_code=False))
+
+
 @router.delete("/parsers/{artifact_id}")
 def delete_parser(artifact_id: int, db: Session = Depends(get_db)):
     artifact = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
@@ -121,6 +140,19 @@ def approve_rule(artifact_id: int, db: Session = Depends(get_db)):
         return success(_rule_to_dict(artifact, include_bindings=True))
     except ValueError as exc:
         return error(2001, str(exc))
+
+
+@router.patch("/rules/{artifact_id}/status")
+def update_rule_status(artifact_id: int, body: StatusUpdate, db: Session = Depends(get_db)):
+    if body.status not in _VALID_STATUSES:
+        return error(2001, f"无效状态: {body.status}")
+    artifact = db.query(RuleArtifact).filter(RuleArtifact.id == artifact_id).first()
+    if artifact is None:
+        return error(2001, "Rule artifact 不存在")
+    artifact.status = body.status
+    db.commit()
+    db.refresh(artifact)
+    return success(_rule_to_dict(artifact, include_bindings=False))
 
 
 @router.delete("/rules/{artifact_id}")
