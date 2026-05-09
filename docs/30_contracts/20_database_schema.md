@@ -15,7 +15,7 @@
 3. banks                    银行
 4. accounts                 账户
 5. account_aliases          账户别名
-6. parser_templates         已生效模板列表 UI 渲染（与 parser_artifacts 互补）
+6. parser_templates         [已移除] 银行流水解析规则已迁移到 parser_artifacts
 7. manual_field_pool        手工流水字段池
 8. manual_template_schemes  手工模板方案
 9. import_batches           导入批次
@@ -134,27 +134,9 @@ CREATE INDEX idx_account_aliases_text ON account_aliases(alias_text);
 
 ## §T2 · 导入与流水表
 
-### §T2.1 · `parser_templates`
+### §T2.1 · `parser_templates`（已移除）
 
-`parser_templates` 仍在 V1 中用作"已生效模板列表" UI 渲染，与 `parser_artifacts` 互补。
-
-```sql
-CREATE TABLE parser_templates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  template_name VARCHAR(100) NOT NULL,
-  template_type VARCHAR(30) NOT NULL,
-  file_format VARCHAR(20) NOT NULL,
-  header_row INTEGER NOT NULL,
-  skip_rows INTEGER NOT NULL DEFAULT 0,
-  sample_headers TEXT NOT NULL,
-  mapping_json TEXT NOT NULL,
-  created_by VARCHAR(30) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'active',
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
-);
-CREATE INDEX idx_parser_templates_type ON parser_templates(template_type, status);
-```
+`parser_templates` 表已在 Alembic 迁移 `005_drop_parser_templates` 中移除。银行流水解析规则当前以 `parser_artifacts`（§T4.1）为准。
 
 ### §T2.2 · `manual_field_pool`
 
@@ -599,6 +581,7 @@ CREATE INDEX idx_agent_memories_key ON agent_memories(agent_id, key);
 ---
 
 **版本**
+- v4.1 · 2026-05-10 · 移除 parser_templates 表（§T2.1），银行流水解析规则统一使用 parser_artifacts
 - v4.0 · 2026-05-02 · 新增 §T7 Agent 系统扩展表（6 张表 DDL）
 - v3.1 · 2026-04-25 · Phase 0 文档复位为 v3 真实 Schema，20 表清单与三张 artifact 表恢复。
 - v3.0 · 2026-04-23 · AI-First artifact schema。
