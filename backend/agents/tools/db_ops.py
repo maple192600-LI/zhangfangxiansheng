@@ -17,7 +17,6 @@ def db_query_business(table_name: str, filters: dict = None, limit: int = 50, ct
     - fund_events: 资金流水记录（business_date, entity_code, account_code, amount_in, amount_out, balance, summary, counterparty, ...）
     - divisions: 核算部门
     - account_aliases: 账户别名
-    - parser_templates: 解析规则模板（id, template_name, template_type, mapping_json, ...）
 
     参数说明：
     - table_name: 必需，要查询的表名（必须是上面列出的之一）
@@ -27,7 +26,6 @@ def db_query_business(table_name: str, filters: dict = None, limit: int = 50, ct
     使用场景：
     - 查询账户信息：table_name="accounts", filters={"account_code": "ZH0008"}
     - 查询资金流水：table_name="fund_events", filters={"account_code": "ZH0008"}, limit=100
-    - 查询解析规则：table_name="parser_templates", filters={"template_type": "bank"}
     - 查询法人信息：table_name="entities"
 
     返回格式：{"ok": true, "table": "表名", "count": N, "rows": [{...}, ...]}
@@ -42,7 +40,6 @@ def db_query_business(table_name: str, filters: dict = None, limit: int = 50, ct
         "fund_events": tb.FundEvent,
         "divisions": tb.Division,
         "account_aliases": tb.AccountAlias,
-        "parser_templates": tb.ParserTemplate,
     }
 
     if table_name not in TABLE_MAP:
@@ -127,115 +124,6 @@ def db_insert_fund_event(
         ctx.db.add(evt)
         ctx.db.commit()
         return {"ok": True, "id": evt.id}
-    except Exception as e:
-        ctx.db.rollback()
-        return {"ok": False, "error": str(e)}
-
-
-@register_tool(read_only=False)
-def db_save_parser_template(
-    template_name: str,
-    account_code: str = "",
-    file_format: str = "xlsx",
-    header_row: int = 0,
-    skip_rows: int = 0,
-    sample_headers: str = "[]",
-    mapping_json: str = "{}",
-    ctx: ToolContext = None,
-) -> dict:
-    """保存解析规则模板到规则中心（银行流水解析规则或报表填充规则）。
-
-    使用场景：
-    - 分析完银行流水文件结构后，保存列映射规则
-    - 创建报表模板的数据映射规则
-
-    参数说明：
-    - template_name: 必需，规则名称（如"中国银行流水规则"、"XX日报填充规则"）
-    - account_code: 可选，关联的账户编号（如"ZH0008"），银行流水规则必须填写
-    - file_format: 文件格式，"xlsx"（默认）/"xls"/"csv"
-    - header_row: 表头所在行号，从 0 开始计数
-    - skip_rows: 数据区前需要跳过的行数
-    - sample_headers: 样本表头，JSON 数组字符串。如 '["交易日期","贷方发生额","余额","摘要"]'
-    - mapping_json: 列映射规则，JSON 对象字符串，键为银行原始列名，值为标准字段名。mapping_json 必须是非空字典。
-
-    标准字段名（mapping_json 的值只能用这些）：
-    - business_date: 交易日期
-    - business_time: 交易时间
-    - income_amount: 收入金额
-    - expense_amount: 支出金额
-    - balance: 余额
-    - counterparty_name: 对方户名
-    - summary_text: 摘要
-    - counterpart_account: 对方账号
-    - counterpart_bank: 对方开户行
-    - transaction_type: 交易类型
-    - voucher_no: 凭证号
-
-    mapping_json 示例：
-    '{"交易日期": "business_date", "贷方发生额": "income_amount", "余额": "balance", "摘要": "summary_text"}'
-
-    返回格式：{"ok": true, "id": 模板ID, "template_name": "名称"} 或 {"ok": false, "error": "错误原因"}
-    """
-    from db.tables import ParserTemplate
-    import json as _json
-
-    # 解析 JSON 字符串
-    try:
-        headers = _json.loads(sample_headers) if isinstance(sample_headers, str) else sample_headers
-    except _json.JSONDecodeError:
-        return {"ok": False, "error": "sample_headers JSON 格式错误"}
-
-    try:
-        mapping = _json.loads(mapping_json) if isinstance(mapping_json, str) else mapping_json
-    except _json.JSONDecodeError:
-        return {"ok": False, "error": "mapping_json JSON 格式错误"}
-
-    if not isinstance(mapping, dict) or not mapping:
-        return {"ok": False, "error": "mapping_json 必须是非空的列映射字典"}
-
-    try:
-        obj = ParserTemplate(
-            template_name=template_name,
-            template_type="bank",
-            file_format=file_format,
-            header_row=header_row,
-            skip_rows=skip_rows,
-            sample_headers=_json.dumps(headers, ensure_ascii=False),
-            mapping_json=_json.dumps(mapping, ensure_ascii=False),
-            account_code=account_code or None,
-            created_by="ai_assist",
-            status="active",
-        )
-        ctx.db.add(obj)
-        ctx.db.commit()
-        ctx.db.refresh(obj)
-        return {
-            "ok": True,
-            "id": obj.id,
-            "template_name": obj.template_name,
-            "message": f"规则模板「{template_name}」已保存到规则中心",
-        }
-    except Exception as e:
-        ctx.db.rollback()
-        return {"ok": False, "error": str(e)}
-
-
-@register_tool(read_only=False)
-def db_delete_parser_template(
-    template_id: int,
-    ctx: ToolContext = None,
-) -> dict:
-    """删除规则中心的一条解析规则模板。template_id 为规则模板的 ID。"""
-    from db.tables import ParserTemplate
-
-    try:
-        obj = ctx.db.query(ParserTemplate).filter(ParserTemplate.id == template_id).first()
-        if not obj:
-            return {"ok": False, "error": f"未找到 ID 为 {template_id} 的规则模板"}
-        name = obj.template_name
-        ctx.db.delete(obj)
-        ctx.db.commit()
-        return {"ok": True, "message": f"规则模板「{name}」（ID={template_id}）已删除"}
     except Exception as e:
         ctx.db.rollback()
         return {"ok": False, "error": str(e)}
