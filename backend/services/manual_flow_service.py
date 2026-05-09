@@ -540,7 +540,7 @@ def _create_fund_event(db: Session, batch_id: int, source_type: str, parsed: Dic
         amount_in=float(income) if income else 0,
         amount_out=float(expense) if expense else 0,
         rolling_balance=parsed.get("ending_balance_input"),
-        state=parsed.get("parse_status", "正常") if parsed.get("parse_status") == "valid" else parsed.get("parse_status", "正常"),
+        state="正常" if parsed.get("parse_status") == "valid" else "待确认",
         source="手工录入",
     )
     db.add(ev)
