@@ -157,7 +157,7 @@ async function doSave() {
       return obj
     })
     const result = await api.saveQuickEntry({ scheme_code: currentSchemeCode.value, rows })
-    alert(`保存成功！共 ${result.total_count} 条，有效 ${result.saved_count} 条，异常 ${result.abnormal_count} 条`)
+    alert(`保存成功！共 ${result.inserted_rows} 条记录已保存`)
     editableRows.value = []
     router.push({ path: '/upload-preview', query: { batch_code: result.batch_code } })
   } catch (e) { alert('保存失败: ' + (e.message || e)) }
