@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterator, Optional
 
-from openpyxl import load_workbook
+from core.excel_compat import load_workbook_compat
 from openpyxl.workbook.workbook import Workbook
 from sqlalchemy.orm import Session
 
@@ -28,7 +28,7 @@ def run_parser(
     if artifact.account_code and not runtime_ctx.get("account_code"):
         runtime_ctx["account_code"] = artifact.account_code
 
-    wb = load_workbook(file_path, read_only=True, data_only=True)
+    wb = load_workbook_compat(file_path, data_only=True, read_only=True)
     try:
         yield from sandbox.execute(artifact.code, wb, runtime_ctx)
     finally:
