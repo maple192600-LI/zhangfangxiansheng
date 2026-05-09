@@ -120,11 +120,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
 import * as bank from '@/api/bank'
 
-const router = useRouter()
 const fileInput = ref(null)
 const uploadResult = ref({})
 const hint = ref('')
