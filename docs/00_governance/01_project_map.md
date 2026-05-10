@@ -1,7 +1,10 @@
 # 项目地图
 
-> 本文档基于 main 分支 `3a7dd83`（PR #2 合并后）的实际代码审计生成。
-> 本文档不修改代码，只记录当前事实、风险边界和后续建议。
+> **当前实现地图** — 只描述 main 分支真实状态。
+> 本文件不是目标产品蓝图（目标见 [03_target_product_map.md](03_target_product_map.md)）。
+> 本文件不是永久不变契约（路线图见 [04_roadmap_and_change_log.md](04_roadmap_and_change_log.md)）。
+> 本文件中的"可用、半成品、断链、占位"状态必须随相关 PR 更新。
+> 凡是涉及页面、API、Service、数据库表、Artifact、Agent、报表链路的 PR，都必须检查是否需要更新本文件。
 
 ## 1. 项目总览
 
