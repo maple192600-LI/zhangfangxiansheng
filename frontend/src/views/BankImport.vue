@@ -2,13 +2,13 @@
   <div class="section">
     <div class="section-title">
       <h3>银行流水导入</h3>
-      <span>上传银行流水文件，AI 自动识别列映射，确认后直接入库</span>
+      <span>上传银行流水文件，匹配已审核解析规则，预览确认后入库</span>
     </div>
 
     <div class="flow-steps">
       <div class="flow-step" :class="{ active: step >= 1, done: step > 1 }" @click="step > 1 && goToStep(1)">上传</div>
       <div class="flow-line"></div>
-      <div class="flow-step" :class="{ active: step >= 2, done: step > 2 }" @click="step > 2 && goToStep(2)">解析</div>
+      <div class="flow-step" :class="{ active: step >= 2, done: step > 2 }" @click="step > 2 && goToStep(2)">匹配规则</div>
       <div class="flow-line"></div>
       <div class="flow-step" :class="{ active: step >= 3, done: step > 3 }" @click="step > 3 && goToStep(3)">确认</div>
       <div class="flow-line"></div>
@@ -17,8 +17,8 @@
 
     <!-- 无匹配规则提示 -->
     <div v-if="noRuleHint" class="hint-panel" style="margin-bottom:14px">
-      该银行尚未配置解析规则，请前往 <strong style="cursor:pointer;color:var(--green)" @click="$router.push('/agent')">AI 智能体</strong> 创建规则后再导入
-      <button class="btn btn-secondary btn-sm" style="margin-left:10px" @click="noRuleHint = false">关闭</button>
+      当前银行/文件格式尚无已审核解析规则。请从左侧 AI 智能体创建财务助手后，再创建解析规则。
+      <button class="btn btn-secondary btn-sm" style="margin-left:8px" @click="noRuleHint = false">关闭</button>
     </div>
 
     <div v-if="step === 1" class="upload-box" @dragover.prevent @drop.prevent="onDrop" @click="triggerFileInput">
@@ -28,7 +28,7 @@
       <span>支持 xls / xlsx / csv 格式</span>
     </div>
 
-    <!-- 上传结果（step >= 2 时持续显示） -->
+    <!-- 上传结果 -->
     <div v-if="uploadResult.batch_code && step >= 2" class="panel">
       <div class="panel-title">上传结果</div>
       <div class="summary-grid">
@@ -37,28 +37,23 @@
         <div><label>格式</label><strong>{{ uploadResult.detected_format }}</strong></div>
         <div><label>数据行</label><strong>{{ uploadResult.row_count }}</strong></div>
       </div>
-      <!-- 规则匹配结果提示 -->
-      <div v-if="ruleMatch" class="match-banner">
-        <span class="tag tag-green">匹配规则：{{ ruleMatch.template_name }}</span>
+      <div v-if="parserMatch" class="match-banner">
+        <span class="tag tag-green">匹配 Parser：{{ parserMatch.name }}</span>
         <span style="margin-left:8px;color:var(--muted);font-size:12px">
-          已有 {{ Object.keys(displayMapping).length }} 个字段映射，无需 AI 解析
+          已审核规则已命中，正在使用确定性解析
         </span>
       </div>
     </div>
 
-    <!-- Step 2: 规则匹配详情（有规则时自动进入预览，此区域仅作为回看） -->
-    <div v-if="step === 2 && ruleMatch" class="panel" style="margin-top:14px">
-      <div class="panel-title">规则匹配详情</div>
-      <table style="margin-top:10px">
-        <thead><tr><th>银行列名</th><th>→</th><th>标准字段</th></tr></thead>
-        <tbody>
-          <tr v-for="(field, col) in displayMapping" :key="col">
-            <td>{{ col }}</td>
-            <td style="color:var(--green)">→</td>
-            <td><strong>{{ fieldLabel(field) }}</strong></td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- Step 2: Parser 匹配详情 -->
+    <div v-if="step === 2 && parserMatch" class="panel" style="margin-top:14px">
+      <div class="panel-title">Parser 匹配详情</div>
+      <div class="summary-grid">
+        <div><label>Parser</label><strong>{{ parserMatch.name }}</strong></div>
+        <div><label>类型</label><strong>{{ parserMatch.kind }}</strong></div>
+        <div><label>范围</label><strong>{{ parserMatch.account_code || '通用' }}</strong></div>
+        <div><label>置信度</label><strong>{{ parserMatch.confidence || '-' }}</strong></div>
+      </div>
       <div class="btn-row" style="margin-top:14px">
         <button class="btn btn-secondary" @click="reset">重新上传</button>
         <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
@@ -96,7 +91,7 @@
         </div>
       </div>
       <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-secondary" @click="step = ruleMatch ? 2 : 2">返回修改</button>
+        <button class="btn btn-secondary" @click="step = 2">返回</button>
         <button class="btn btn-primary" :disabled="committing" @click="doCommit">
           {{ committing ? '提交中...' : `确认提交 ${previewResult.valid_count} 条记录` }}
         </button>
@@ -108,7 +103,7 @@
       <div class="panel-title">导入完成</div>
       <div class="summary-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
         <div><label>批次号</label><strong>{{ commitResult.batch_code }}</strong></div>
-        <div><label>关联账户</label><strong>{{ commitResult.account_code || '自动匹配' }}</strong></div>
+        <div><label>Parser</label><strong>{{ parserMatch?.name || '-' }}</strong></div>
         <div><label>入库行数</label><strong>{{ commitResult.inserted_rows }}</strong></div>
       </div>
       <div class="btn-row" style="margin-top:14px">
@@ -125,54 +120,22 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
 import * as bank from '@/api/bank'
-import http from '@/api/index'
 
-const router = useRouter()
 const fileInput = ref(null)
 const uploadResult = ref({})
 const hint = ref('')
 const step = ref(1)
-const aiParsing = ref(false)
-const aiResult = ref({})
-const ruleMatch = ref(null)
+const parserMatch = ref(null)
 const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
-const savingRule = ref(false)
 const noRuleHint = ref(false)
-
-const displayMapping = computed(() => {
-  const m = ruleMatch.value?.mapping || aiResult.value?.mapping || {}
-  // 新格式：{ _columns: {...}, post_process: {...} }
-  if (m._columns) return m._columns
-  // 旧格式：纯 key-value
-  return m
-})
-
-const FIELD_LABELS = {
-  business_date: '交易日期',
-  income_amount: '收入金额',
-  expense_amount: '支出金额',
-  counterparty_name: '对方户名',
-  summary_text: '摘要/用途',
-  balance: '余额',
-  business_time: '交易时间',
-  counterpart_account: '对方账号',
-  counterpart_bank: '对方开户行',
-  voucher_no: '凭证号',
-  transaction_type: '交易类型',
-}
-
-function fieldLabel(code) { return FIELD_LABELS[code] || code }
 
 function triggerFileInput() { fileInput.value?.click() }
 
 function goToStep(n) { step.value = n }
-
-function cancelParse() { aiParsing.value = false; step.value = 1 }
 
 function onFileChange(event) {
   const file = event.target.files?.[0]
@@ -191,24 +154,12 @@ async function upload(file) {
     uploadResult.value = await bank.uploadBankFile(file)
     step.value = 2
 
-    // 检测是否匹配到已有规则
-    const match = uploadResult.value.template_match
-    if (match && match.matched && match.mapping && Object.keys(match.mapping).length > 0) {
-      ruleMatch.value = match
-      const colMapping = match.mapping._columns || match.mapping
-      const fieldCount = Object.keys(colMapping).filter(k => !k.startsWith('_')).length
-      aiResult.value = {
-        ok: true,
-        mapping: match.mapping,
-        template_name: match.template_name,
-        confidence: match.confidence || 'high',
-        matched_count: fieldCount,
-        total_columns: uploadResult.value.headers?.length || 0,
-      }
+    const match = uploadResult.value.parser_match
+    if (match && match.matched && match.parser_artifact_id) {
+      parserMatch.value = match
       await doPreview()
     } else {
-      // 无匹配规则 → 提示去 Agent 创建
-      ruleMatch.value = null
+      parserMatch.value = null
       step.value = 1
       noRuleHint.value = true
     }
@@ -219,11 +170,15 @@ async function upload(file) {
 
 async function doPreview() {
   hint.value = ''
+  if (!parserMatch.value?.parser_artifact_id) {
+    noRuleHint.value = true
+    step.value = 1
+    return
+  }
   try {
     previewResult.value = await bank.previewBankImport({
       batch_code: uploadResult.value.batch_code,
-      mapping: aiResult.value.mapping,
-      header_row: ruleMatch.value?.header_row ?? uploadResult.value.header_row,
+      parser_artifact_id: parserMatch.value.parser_artifact_id,
     })
     step.value = 3
   } catch (e) {
@@ -232,15 +187,13 @@ async function doPreview() {
 }
 
 async function doCommit() {
+  if (!confirm(`确认将 ${previewResult.value.valid_count} 条记录入库？此操作不可撤销。`)) return
   committing.value = true
   hint.value = ''
   try {
-    commitResult.value = await http.post('/bank-import/commit-by-mapping', {
+    commitResult.value = await bank.commitBankImport({
       batch_code: uploadResult.value.batch_code,
-      mapping: aiResult.value.mapping,
-      template_id: ruleMatch.value?.template_id || null,
-      template_name: aiResult.value.template_name,
-      sample_headers: uploadResult.value.headers,
+      parser_artifact_id: parserMatch.value.parser_artifact_id,
     })
     step.value = 4
   } catch (e) {
@@ -253,10 +206,9 @@ async function doCommit() {
 function reset() {
   step.value = 1
   uploadResult.value = {}
-  aiResult.value = {}
   previewResult.value = {}
   commitResult.value = {}
-  ruleMatch.value = null
+  parserMatch.value = null
   hint.value = ''
   noRuleHint.value = false
 }
@@ -300,9 +252,7 @@ function reset() {
 .summary-grid div { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; }
 .summary-grid label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .summary-grid strong { font-size: 13px; }
-.pending-line { margin-top: 12px; color: var(--muted); font-size: 13px; display: flex; align-items: center; }
 .hint-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #e6c7b8; background: #fff4ef; color: #8b4f38; border-radius: var(--radius-sm); display: flex; align-items: center; }
-.mapping-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .match-banner { margin-top: 10px; padding: 8px 12px; background: #f0f9f4; border: 1px solid #c8e6d0; border-radius: var(--radius-sm); display: flex; align-items: center; }
 .btn-row { display: flex; gap: 10px; justify-content: flex-end; }
 @media (max-width: 900px) {

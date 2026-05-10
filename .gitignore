@@ -42,3 +42,12 @@ backend/tmp_skill_content.txt
 # Backups & exports (runtime data)
 backups/*.zip
 exports/*.xlsx
+
+# Local backups directory
+backups/
+
+# Archived docs (not tracked)
+new/
+
+# Agent experience files (runtime)
+**/experience.json

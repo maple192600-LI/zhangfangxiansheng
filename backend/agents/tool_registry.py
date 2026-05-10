@@ -30,7 +30,7 @@ TOOLSETS: dict[str, list[str]] = {
     "file": ["fs_list", "fs_read", "fs_write", "fs_edit"],
     "parse": ["file_parse"],
     "shell": ["python_exec"],
-    "database": ["db_query_business", "db_insert_fund_event", "db_save_parser_template", "db_delete_parser_template", "fund_skill_run"],
+    "database": ["db_query_business", "db_insert_fund_event", "fund_skill_run"],
     "excel": ["openpyxl_read", "openpyxl_write", "openpyxl_edit"],
     "skill": ["skill_list", "skill_run", "skill_test", "skill_create", "skill_install", "skill_check_deps"],
     "memory": ["memory_save", "memory_search"],

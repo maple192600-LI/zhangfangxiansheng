@@ -526,16 +526,22 @@ def _event_to_dict(ev: FundEvent) -> Dict:
 def _create_fund_event(db: Session, batch_id: int, source_type: str, parsed: Dict):
     income = parsed.get("income_amount")
     expense = parsed.get("expense_amount")
+    entity_code = str(parsed.get("entity_match_key") or parsed.get("_entity_name") or "").strip()
+    account_code = str(parsed.get("account_match_key") or parsed.get("_account_name") or "").strip()
     ev = FundEvent(
         batch_id=batch_id,
-        business_date=parsed.get("date"),
+        business_date=parsed.get("business_date"),
+        entity_code=entity_code,
+        entity_name=parsed.get("_entity_name") or entity_code,
+        account_code=account_code,
+        account_name=parsed.get("_account_name") or account_code,
         summary=parsed.get("summary_text", ""),
         counterparty=parsed.get("counterparty_name", ""),
         amount_in=float(income) if income else 0,
         amount_out=float(expense) if expense else 0,
-        balance=0,
-        state=parsed.get("parse_status", "正常") if parsed.get("parse_status") == "valid" else parsed.get("parse_status", "正常"),
-        source=source_type,
+        rolling_balance=parsed.get("ending_balance_input"),
+        state="正常" if parsed.get("parse_status") == "valid" else "待确认",
+        source="手工录入",
     )
     db.add(ev)
     db.flush()

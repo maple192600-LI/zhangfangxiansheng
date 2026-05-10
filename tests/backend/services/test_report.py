@@ -8,8 +8,8 @@ def test_daily_report_sums_income_expense_and_opening_balance(db_session, chart_
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session)
-    add_fund_event(db_session, entity, account, batch, income_amount=200, summary_text="receipt")
-    add_fund_event(db_session, entity, account, batch, direction="expense", expense_amount=75, summary_text="payment")
+    add_fund_event(db_session, entity, account, batch, amount_in=200, summary="receipt")
+    add_fund_event(db_session, entity, account, batch, amount_out=75, summary="payment")
 
     rows = report_service.daily_report(db_session, date(2026, 4, 24), date(2026, 4, 24), entity.id)
 
@@ -28,8 +28,8 @@ def test_cash_journal_groups_by_account_and_day(db_session, chart_of_accounts):
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session)
-    add_fund_event(db_session, entity, account, batch, income_amount=200)
-    add_fund_event(db_session, entity, account, batch, direction="expense", expense_amount=75)
+    add_fund_event(db_session, entity, account, batch, amount_in=200)
+    add_fund_event(db_session, entity, account, batch, amount_out=75)
 
     blocks = report_service.cash_journal(db_session, date(2026, 4, 24), date(2026, 4, 24), account.id)
 
@@ -51,8 +51,8 @@ def test_income_and_expense_lists_page_committed_rows(db_session, chart_of_accou
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session)
-    add_fund_event(db_session, entity, account, batch, income_amount=200, summary_text="receipt")
-    add_fund_event(db_session, entity, account, batch, direction="expense", expense_amount=75, summary_text="payment")
+    add_fund_event(db_session, entity, account, batch, amount_in=200, summary="receipt")
+    add_fund_event(db_session, entity, account, batch, amount_out=75, summary="payment")
 
     income = report_service.income_list(db_session, date(2026, 4, 24), date(2026, 4, 24), entity.id)
     expense = report_service.expense_list(db_session, date(2026, 4, 24), date(2026, 4, 24), entity.id)
@@ -69,7 +69,7 @@ def test_account_balance_includes_account_rows_and_entity_subtotal(db_session, c
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session)
-    add_fund_event(db_session, entity, account, batch, income_amount=200)
+    add_fund_event(db_session, entity, account, batch, amount_in=200)
 
     rows = report_service.account_balance(db_session, date(2026, 4, 24), date(2026, 4, 24), entity.id)
 

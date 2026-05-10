@@ -2,14 +2,13 @@
 name: fund_template_inference
 description: "自动识别空白模板中的占位符并推断数据映射"
 when_to_use: "当用户上传空白报表模板、需要自动识别模板结构、或创建新报表模板时"
-version: "2.0.0"
+version: "3.0.0"
 execution_mode: instruction
 code_entry: "template.inference"
 allowed-tools:
   - file_parse
   - openpyxl_read
   - db_query_business
-  - db_save_parser_template
   - memory_save
   - memory_search
   - skill_step_report
@@ -61,7 +60,7 @@ arguments:
 推断规则：
 - 占位符含"收入"/"贷方"/"收款" → `fund_events.amount_in` 的汇总
 - 占位符含"支出"/"借方"/"付款" → `fund_events.amount_out` 的汇总
-- 占位符含"余额" → 最新 `fund_events.balance`
+- 占位符含"余额" → 最新 `fund_events.rolling_balance`
 - 占位符含"日期" → 当前会计期间
 - 占位符含"法人"/"公司" → `entities` 表的名称字段
 - 占位符含"银行" → `accounts` 表的相关字段
@@ -94,13 +93,7 @@ arguments:
 2. 中置信度映射（黄色）— 需要用户确认
 3. 低置信度映射（红色）— 需要用户指定
 
-用户确认后，调用 `db_save_parser_template(
-  template_name="<用户指定的模板名称>",
-  account_code="",
-  file_format="xlsx",
-  sample_headers="<占位符列表>",
-  mapping_json="<确认后的映射规则>"
-)`。
+用户确认后，产出 RuleArtifact（placeholder_bindings + loop_config），通过 Fund Agent 技能 `template.inference` 保存。
 
 ## 第七步：记录经验
 

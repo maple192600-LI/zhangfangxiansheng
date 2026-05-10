@@ -9,7 +9,7 @@ def factory_reset(db: Session) -> Dict:
     """清空业务数据，保留种子主数据
 
     清空: fund_events, import_batches, daily_report_runs, operation_logs
-    保留: divisions, entities, accounts, account_aliases, parser_templates,
+    保留: divisions, entities, accounts, account_aliases,
           manual_field_pool, manual_template_schemes, ai_configs, users
     """
     # 按外键依赖顺序删除

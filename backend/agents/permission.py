@@ -23,8 +23,6 @@ DEFAULT_PERMISSION = {
         "python_exec",
         "skill_create", "skill_test", "skill_install", "skill_upgrade",
         "db_insert_fund_event",
-        "db_save_parser_template",
-        "db_delete_parser_template",
         "openpyxl_write", "openpyxl_edit",
     ],
     "disabled_toolsets": [],
@@ -43,8 +41,6 @@ _CONFIRM_MESSAGES = {
     "skill_test": "确认允许测试技能？",
     "skill_install": "确认允许安装技能？",
     "db_insert_fund_event": "确认允许插入资金流水记录？",
-    "db_save_parser_template": "确认允许保存解析模板？",
-    "db_delete_parser_template": "确认允许删除解析模板？",
     "openpyxl_write": "确认允许创建 Excel 文件？",
     "openpyxl_edit": "确认允许修改 Excel 文件？",
 }

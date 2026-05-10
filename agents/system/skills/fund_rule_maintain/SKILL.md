@@ -2,14 +2,12 @@
 name: fund_rule_maintain
 description: "维护和迭代现有的报表填充规则"
 when_to_use: "当用户需要修改报表规则、调整填充逻辑、或更新已有规则时"
-version: "2.0.0"
+version: "3.0.0"
 execution_mode: instruction
 code_entry: "rule.maintain"
 allowed-tools:
   - db_query_business
-  - db_save_parser_template
-  - db_delete_parser_template
-  - openpyxl_read
+  - db_insert_fund_event
   - memory_save
   - memory_search
   - skill_step_report
@@ -21,7 +19,7 @@ triggers:
   - "编辑规则"
 arguments:
   rule_id:
-    description: "要修改的规则 ID"
+    description: "要修改的规则 ID（RuleArtifact ID）"
     required: true
   change_request:
     description: "修改请求描述"
@@ -32,44 +30,36 @@ arguments:
 
 ## 第一步：加载现有规则
 
-调用 `db_query_business(table_name="parser_templates", filters={"id": <rule_id>})`。
+调用 `db_query_business(table_name="rule_artifacts", filters={"id": <rule_id>})`。
 如果规则不存在，告知用户并列出所有可用规则。
 
 ## 第二步：展示当前规则
 
 将当前规则的内容展示给用户：
 - 规则名称
-- 列映射（mapping_json）
-- 关联账户
+- placeholder_bindings（占位符绑定）
+- loop_config（循环配置）
+- 关联模板
 - 创建时间
 
 ## 第三步：解析修改请求
 
 根据用户的 change_request 理解需要修改什么：
-- 修改列映射（某个字段的对应关系变了）
-- 修改日期格式
-- 修改跳过行数
-- 修改金额处理逻辑
-- 增加新的字段映射
-- 删除某个字段映射
+- 修改占位符绑定
+- 修改循环配置
+- 修改数据查询逻辑
+- 增加新的绑定
+- 删除某个绑定
 
 ## 第四步：应用修改
 
-在当前 mapping_json 基础上修改（保留未修改的部分），生成新的 mapping_json。
+在当前规则基础上修改（保留未修改的部分），生成新的规则配置。
 
 ## 第五步：保存新版本
 
-调用 `db_save_parser_template(
-  template_name="<原规则名称>_v2",
-  account_code="<原账户>",
-  file_format="<原格式>",
-  header_row=<原header_row>,
-  skip_rows=<修改后的skip_rows>,
-  sample_headers="<原sample_headers>",
-  mapping_json="<修改后的mapping_json>"
-)`。
+规则迭代通过 Agent 技能 `rule.maintain` 执行。新版本作为新的 RuleArtifact 保存，旧版本保留供回溯。
 
-注意：不要使用 db_delete_parser_template 删除旧版本。保留旧版本供回溯。
+注意：不要删除旧版本。保留旧版本供回溯。
 
 ## 第六步：记录修改历史
 

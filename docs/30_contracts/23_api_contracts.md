@@ -195,7 +195,7 @@
 
 ## §A99 · 错误码表
 
-> 注意：42 端点上限为 V3 设计约束。Agent V2 系统（`/api/agent_v2/*`）和 AI 解析端点（`/api/bank-import/ai-parse`, `/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent V2 智能体系统，不占用 Fund Agent 端点配额。
+> 注意：42 端点上限为 V3 设计约束。Agent V2 系统（`/api/agent_v2/*`）和手工流水 AI 解析端点（`/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent V2 智能体系统，不占用 Fund Agent 端点配额。银行导入旧端点（`/api/bank-import/ai-parse`、`/api/bank-import/commit-by-mapping`、`/api/bank-import/save-template`）已移除，银行导入统一使用 ParserArtifact 路线（upload → preview → commit）。
 
 ### Round 10-11 新增端点
 
@@ -214,37 +214,10 @@
 | N11 | Agent V2 | GET | `/api/agent_v2/agents/:id/skills` | 技能列表 |
 | N12 | Agent V2 | GET | `/api/agent_v2/agents/:id/files` | 工作区文件 |
 | N13 | Agent V2 | POST | `/api/agent_v2/agents/:id/files/upload` | 上传文件 |
-| N14 | 银行导入 | POST | `/api/bank-import/ai-parse` | AI 智能解析列映射 |
-| N15 | 银行导入 | POST | `/api/bank-import/commit-by-mapping` | 基于映射提交+自动保存规则 |
-| N16 | 银行导入 | POST | `/api/bank-import/save-template` | 手动保存规则模板 |
-| N17 | 手工流水 | POST | `/api/manual-flow/ai-parse` | AI 智能解析手工流水列映射 |
-
-### `POST /api/bank-import/ai-parse` 请求/响应
-
-**请求体**：
-```json
-{
-  "headers": ["交易日期", "收入金额", "支出金额", "对方户名", "摘要"],
-  "sample_rows": [["2026-04-28", "10000", "", "某公司", "货款"]],
-  "agent_id": 1
-}
-```
-
-**成功响应**：
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "ok": true,
-    "mapping": {"交易日期": "business_date", "收入金额": "income_amount", "支出金额": "expense_amount", "对方户名": "counterparty_name", "摘要": "summary_text"},
-    "template_name": "招商银行标准流水",
-    "confidence": "high",
-    "matched_count": 5,
-    "total_columns": 5
-  }
-}
-```
+| N14 | 手工流水 | POST | `/api/manual-flow/ai-parse` | AI 智能解析手工流水列映射 |
+| N15 | 银行导入 | POST | `/api/bank-import/upload` | 上传银行流水（返回 batch + parser_match） |
+| N16 | 银行导入 | POST | `/api/bank-import/preview` | 预览解析（参数：batch_code + parser_artifact_id） |
+| N17 | 银行导入 | POST | `/api/bank-import/commit` | 确认入库（参数：batch_code + parser_artifact_id） |
 
 ### `POST /api/manual-flow/ai-parse` 请求/响应
 
@@ -309,6 +282,7 @@
 ---
 
 **版本**
+- v4.1 · 2026-05-10 · 移除银行导入旧端点（ai-parse / commit-by-mapping / save-template），N14-N17 改为 ParserArtifact 路线
 - v4.0 · 2026-05-02 · 承认端点数从 42 扩展至 59，更新标题和说明
 - v3.2 · 2026-04-28 · Round 11：新增 Agent V2 + AI 解析端点（§A99 扩展）
 - v3.1 · 2026-04-27 · Round 10：登录认证 + 字段统一 + 模板修复

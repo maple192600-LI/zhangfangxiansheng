@@ -127,28 +127,6 @@ class AccountAlias(Base):
 
 
 # ──────────────────────────────────────────
-# 5. parser_templates — 已生效模板列表
-# ──────────────────────────────────────────
-class ParserTemplate(Base):
-    __tablename__ = "parser_templates"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    template_name = Column(String(100), nullable=False)
-    template_type = Column(String(30), nullable=False)
-    file_format = Column(String(20), nullable=False)
-    header_row = Column(Integer, nullable=False)
-    skip_rows = Column(Integer, nullable=False, default=0)
-    sample_headers = Column(Text, nullable=False)
-    mapping_json = Column(Text, nullable=False)
-    account_code = Column(String(30), nullable=True)
-    created_by = Column(String(30), nullable=False)
-    status = Column(String(20), nullable=False, default="active")
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
-
-    __table_args__ = (Index("idx_parser_templates_type", "template_type", "status"),)
-
-
-# ──────────────────────────────────────────
 # 6. manual_field_pool — 手工字段池
 # ──────────────────────────────────────────
 class ManualFieldPool(Base):

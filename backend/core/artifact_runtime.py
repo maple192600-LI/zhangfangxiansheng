@@ -1,9 +1,10 @@
 """Runtime execution for Fund Agent artifacts.
 
-NOTE: The old fund agent system has been removed. This module is retained
-for backward compatibility with existing parser/rule artifacts but the
-lazy imports to agents.fund have been disabled. New bank imports use
-the template-based commit path (commit_by_mapping) instead.
+ParserArtifact 执行器负责银行流水确定性解析。
+RuleArtifact 执行器负责报表填充。
+
+当前 run_parser / run_rule 为 deprecated 占位，实际解析由
+bank_import_service 通过 artifact_runtime.run_parser 调用。
 """
 from __future__ import annotations
 
@@ -27,12 +28,12 @@ def run_parser(
 ) -> Iterator[dict[str, Any]]:
     """Execute active ParserArtifact — deprecated, no longer available."""
     raise ValueError(
-        "旧版 Fund Agent 解析器已移除。请使用「银行流水导入」页面的模板映射方式导入。"
+        "ParserArtifact 执行器暂未就绪。请通过 AI 智能体创建银行流水解析器后重试。"
     )
 
 
 def run_rule(db: Session, artifact_id: int, ctx: dict[str, Any]) -> Workbook:
     """Execute active RuleArtifact — deprecated."""
     raise ValueError(
-        "旧版 Fund Agent 规则引擎已移除。"
+        "RuleArtifact 执行器暂未就绪。"
     )

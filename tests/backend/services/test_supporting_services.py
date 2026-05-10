@@ -162,8 +162,8 @@ def test_base_data_query_rebuild_and_factory_reset(db_session, chart_of_accounts
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session)
-    add_fund_event(db_session, entity, account, batch, income_amount=50, summary_text="receipt")
-    add_fund_event(db_session, entity, account, batch, direction="expense", expense_amount=20, summary_text="payment")
+    add_fund_event(db_session, entity, account, batch, amount_in=50, summary="receipt")
+    add_fund_event(db_session, entity, account, batch, amount_out=20, summary="payment")
 
     queried = base_data_service.query_base_data(
         db_session,
@@ -188,7 +188,7 @@ def test_dashboard_and_home_services_return_workbench_state(db_session, chart_of
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session, status="uploaded")
-    add_fund_event(db_session, entity, account, batch, income_amount=50)
+    add_fund_event(db_session, entity, account, batch, amount_in=50)
     db_session.add(DailyReportRun(
         report_code="R001",
         report_name="Daily",
@@ -385,13 +385,35 @@ def test_master_data_batch_import_accounts_creates_master_records(db_session):
     assert master_data_service.list_accounts(db_session, keyword="Batch Account").total == 1
 
 
-def test_manual_flow_excel_upload_preview_commit_and_export_template(db_session, chart_of_accounts, tmp_path, monkeypatch):
+def test_manual_flow_excel_upload_commit_and_export_template(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    from datetime import date as date_type
+    from unittest.mock import patch
+
+    from db.tables import ParserArtifact
+
     _seed_manual_scheme(db_session)
     monkeypatch.setattr("services.manual_flow_service.DATA_DIR", str(tmp_path))
+
+    artifact = ParserArtifact(
+        name="Test Manual Parser",
+        kind="manual",
+        account_code=None,
+        version=1,
+        status="active",
+        code="def parse(ws): return []",
+        primitives_imports=[],
+        sample_check_log={},
+        confidence=0.9,
+        created_by="test",
+        created_at=datetime.now(),
+    )
+    db_session.add(artifact)
+    db_session.commit()
+    db_session.refresh(artifact)
+
     file_data = make_xlsx([
         CORE_MANUAL_FIELDS,
         ["E001", "A001", "2026-04-24", "excel receipt", "Customer", "33.00", ""],
-        ["UNKNOWN", "A001", "2026-04-24", "excel abnormal", "Customer", "44.00", ""],
     ])
 
     uploaded = manual_flow_service.upload_workbook(
@@ -400,27 +422,42 @@ def test_manual_flow_excel_upload_preview_commit_and_export_template(db_session,
         "manual.xlsx",
         "manual_multi_subject_basic",
     )
-    preview = manual_flow_service.preview_manual(
-        db_session,
-        uploaded["batch_code"],
-        "manual_multi_subject_basic",
-    )
-    committed = manual_flow_service.commit_manual(
-        db_session,
-        uploaded["batch_code"],
-        confirm_rows=[1],
-    )
+
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+    canonical_rows = [
+        {
+            "business_date": date_type(2026, 4, 24),
+            "entity_code": entity.entity_code,
+            "entity_name": entity.short_name,
+            "account_code": account.account_code,
+            "account_name": account.account_alias,
+            "summary": "excel receipt",
+            "counterparty": "Customer",
+            "amount_in": 33,
+            "amount_out": 0,
+            "rolling_balance": None,
+            "state": "正常",
+            "source": "手工录入",
+        },
+    ]
+
+    with patch.object(manual_flow_service.artifact_runtime, "run_parser", return_value=iter(canonical_rows)):
+        committed = manual_flow_service.commit_manual(
+            db_session,
+            uploaded["batch_code"],
+            parser_artifact_id=artifact.id,
+        )
+
     template_bytes = manual_flow_service.export_template(
         db_session,
         "manual_multi_subject_basic",
         include_example=True,
     )
 
-    assert uploaded["row_count"] == 2
-    assert preview["valid_count"] == 1
-    assert preview["abnormal_count"] == 1
-    assert committed["committed_count"] == 1
-    assert committed["abnormal_count"] == 0
+    assert uploaded["row_count"] == 1
+    assert committed["inserted_rows"] == 1
+    assert committed["parser_artifact_id"] == artifact.id
     assert template_bytes.startswith(b"PK")
 
 
@@ -428,8 +465,8 @@ def test_export_service_generates_all_report_types(db_session, chart_of_accounts
     entity = chart_of_accounts["entity"]
     account = chart_of_accounts["account"]
     batch = add_import_batch(db_session, batch_code="EXPORT_BATCH")
-    add_fund_event(db_session, entity, account, batch, income_amount=70, summary_text="receipt")
-    add_fund_event(db_session, entity, account, batch, direction="expense", expense_amount=25, summary_text="payment")
+    add_fund_event(db_session, entity, account, batch, amount_in=70, summary="receipt")
+    add_fund_event(db_session, entity, account, batch, amount_out=25, summary="payment")
     base_kwargs = {
         "start_date": "2026-04-24",
         "end_date": "2026-04-24",
