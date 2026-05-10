@@ -38,6 +38,7 @@
               <div class="dropdown-menu">
                 <button @click="batchAccounts('enable'); accDropdownOpen = false">批量启用</button>
                 <button @click="batchAccounts('disable'); accDropdownOpen = false">批量停用</button>
+                <button @click="batchAccounts('delete'); accDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
             <button class="btn btn-secondary" @click="downloadTemplate">下载导入模板</button>
@@ -108,6 +109,7 @@
               <div class="dropdown-menu">
                 <button @click="batchDivisions('enable'); divDropdownOpen = false">批量启用</button>
                 <button @click="batchDivisions('disable'); divDropdownOpen = false">批量停用</button>
+                <button @click="batchDivisions('delete'); divDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
             <button class="btn btn-primary" @click="openDivForm()">+ 新建核算组织</button>
@@ -174,6 +176,7 @@
               <div class="dropdown-menu">
                 <button @click="batchEntities('enable'); entDropdownOpen = false">批量启用</button>
                 <button @click="batchEntities('disable'); entDropdownOpen = false">批量停用</button>
+                <button @click="batchEntities('delete'); entDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
             <button class="btn btn-primary" @click="openEntForm()">+ 新建单位</button>
@@ -898,9 +901,9 @@ async function batchAccounts(action) {
 async function batchDivisions(action) {
   const ids = [...selectedDivIds.value]
   if (!ids.length) return
-  const labels = { enable: '启用', disable: '停用' }
+  const labels = { enable: '启用', disable: '停用', delete: '删除' }
   const label = labels[action] || action
-  if (!confirm(`确定批量${label} ${ids.length} 个核算组织？`)) return
+  if (!confirm(`确定批量${label} ${ids.length} 个核算组织？${action === 'delete' ? '此操作不可撤销！' : ''}`)) return
   try {
     const result = await api.batchActionDivisions(ids, action)
     const failedCount = result.failed?.length || 0
@@ -916,9 +919,9 @@ async function batchDivisions(action) {
 async function batchEntities(action) {
   const ids = [...selectedEntIds.value]
   if (!ids.length) return
-  const labels = { enable: '启用', disable: '停用' }
+  const labels = { enable: '启用', disable: '停用', delete: '删除' }
   const label = labels[action] || action
-  if (!confirm(`确定批量${label} ${ids.length} 个单位？`)) return
+  if (!confirm(`确定批量${label} ${ids.length} 个单位？${action === 'delete' ? '此操作不可撤销！' : ''}`)) return
   try {
     const result = await api.batchActionEntities(ids, action)
     const failedCount = result.failed?.length || 0

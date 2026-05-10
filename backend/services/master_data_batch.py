@@ -89,7 +89,37 @@ def batch_action_accounts(db: Session, ids: List[int], action: str) -> Dict[str,
             db.rollback()
             failed.append({"id": aid, "message": str(e)})
 
+    # 账户列表是总列表，删除账户后自动清理无账户的孤立单位和无单位的孤立核算组织
+    if action == "delete" and success > 0:
+        _cleanup_orphans(db)
+
     return {"success": success, "failed": failed}
+
+
+def _cleanup_orphans(db: Session) -> None:
+    """删除没有银行账户的孤立单位，再删除没有单位的孤立核算组织。"""
+    from sqlalchemy import text as _sql_text
+    # 1. 删除没有账户的孤立单位
+    orphan_entities = db.execute(
+        _sql_text(
+            "SELECT id FROM entities WHERE id NOT IN "
+            "(SELECT DISTINCT entity_id FROM accounts WHERE entity_id IS NOT NULL)"
+        )
+    ).fetchall()
+    for (eid,) in orphan_entities:
+        db.execute(_sql_text("DELETE FROM entities WHERE id = :eid"), {"eid": eid})
+
+    # 2. 删除没有单位的孤立核算组织
+    orphan_divisions = db.execute(
+        _sql_text(
+            "SELECT id FROM divisions WHERE id NOT IN "
+            "(SELECT DISTINCT division_id FROM entities WHERE division_id IS NOT NULL)"
+        )
+    ).fetchall()
+    for (did,) in orphan_divisions:
+        db.execute(_sql_text("DELETE FROM divisions WHERE id = :did"), {"did": did})
+
+    db.commit()
 
 
 # ──────────────────────────────────────────
