@@ -126,16 +126,13 @@ def get_division_usage(db: Session, division_id: int) -> Dict[str, Any]:
     }
 
 
-def delete_division(db: Session, division_id: int, force: bool = False) -> None:
-    """删除核算组织。严格递进：名下有单位时拒绝删除。"""
+def delete_division(db: Session, division_id: int) -> None:
+    """删除核算组织。核算组织是辅助标签，可随时增删，不阻止删除。
+    关联单位的 division_id 由 FK ondelete SET NULL 自动置空。"""
     obj = db.query(Division).filter(Division.id == division_id).first()
     if not obj:
         raise ValueError("核算组织不存在")
-    linked_entities = db.query(Entity).filter(Entity.division_id == division_id).all()
-    if linked_entities:
-        names = "、".join(e.short_name or e.name for e in linked_entities[:5])
-        raise ValueError(f"该核算组织下存在 {len(linked_entities)} 个单位（{names}），请先删除所有单位后再删除核算组织")
-    db.execute(Division.__table__.delete().where(Division.id == division_id))
+    db.delete(obj)
     db.commit()
 
 
