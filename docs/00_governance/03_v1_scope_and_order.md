@@ -1,6 +1,6 @@
 # 01 · V1 范围与执行顺序
 
-> 配合 [00_project_constitution.md](00_project_constitution.md)、[03_tech_constraints.md](03_tech_constraints.md) 使用。
+> 配合 [00_project_constitution.md](00_project_constitution.md)、[05_tech_constraints.md](05_tech_constraints.md) 使用。
 > 本文档定义 V1 的功能边界、当前进度、剩余工作及开发顺序。
 
 ---

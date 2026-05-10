@@ -5,7 +5,7 @@
 > **修改流程**：本文档只有用户本人书面同意才能修改。任何 AI 修改本文件 = 立即回滚 + 作废当次会话产出。修改后必须更新 `contracts.lock`（SHA256）并触发 `tools/guards/` 全量回归。
 >
 > 相关文档：
-> - [01_v1_scope_and_order.md](01_v1_scope_and_order.md) · V1 范围与执行顺序
+> - [03_v1_scope_and_order.md](03_v1_scope_and_order.md) · V1 范围与执行顺序
 > - [08_anti_drift.md](08_anti_drift.md) · 防跑偏六层机制
 > - [09_ai_capability_v3.md](09_ai_capability_v3.md) · Agent 能力体系
 > - [30_contracts/](../30_contracts/) · 数据库 / 字段 / API 契约
