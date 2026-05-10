@@ -48,8 +48,8 @@
 - §C3 账户主数据 20 列
 - §C4 Fund Agent 5 skill
 - §C5 基元库白名单
-- §C6 数据库 14 张表
-- §C7 API 42 端点
+- §C6 数据库 24 张业务 ORM 表
+- §C7 API 端点清单（数量以 23_api_contracts.md 当前版本为准，旧 42 上限已失效）
 - §C8 Runtime 无 AI
 - §C9 用户零编程原则
 
@@ -66,7 +66,7 @@
 | `check_canonical_schema.py` | §C1 · 12 列基础表 | 解析 `fund_events` DDL，列序 / 列名 / 枚举与宪法不符则退出 1 |
 | `check_primitives_whitelist.py` | §C5 · 基元库 | 对所有 `parser_artifacts.code` + `rule_artifacts.code` 做 AST 扫描，禁用非白名单 import / 危险调用 |
 | `check_placeholder_binding.py` | §C2 · 18 占位符 | Rule artifact 的 bindings + loop.columns 必须恰好覆盖 18 个占位符 |
-| `check_api_inventory.py` | §C7 · 42 端点 | 遍历 `backend/api/**/*.py` 的路由注册，> 42 拒绝 |
+| `check_api_inventory.py` | §C7 · API 端点 | 遍历 `backend/api/**/*.py` 的路由注册，与 `23_api_contracts.md` 比对 |
 | `check_contract_hash.py` | 宪法完整性 | 对 00 宪法做 SHA256，与 `contracts.lock` 不符拒绝 |
 
 ### §4.1 · 扩展 guard（推荐）
@@ -87,6 +87,8 @@ python tools/guards/check_api_inventory.py
 ```
 
 任一非零 → 阻断提交。
+
+> **注意**：`check_api_inventory.py` 的旧 42 端点上限已失效。当前 API 数量以 `23_api_contracts.md` 为准。如该 guard 脚本尚未更新，标记为待修复，不得让它误导开发。
 
 ---
 
@@ -210,4 +212,5 @@ chore/feat/fix(scope): 简述
 ---
 
 **版本**
+- v3.1 · 2026-05-10 · 修正 §C6 表数为 24 张业务 ORM 表；旧 42 端点 guard 标记为已失效
 - v3.0 · 2026-04-23 · 首次发布

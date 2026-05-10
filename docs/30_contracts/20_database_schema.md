@@ -1,36 +1,56 @@
-# 20 · 数据库契约（v3 真实 Schema）
+# 20 · 数据库契约（当前 Schema，PR #2 后）
 
-> 本文件定义 V1 AI-First 路线的活动数据库契约。契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
-> Phase 0 仅修订文档；ORM、Alembic、SQLite 实库将在 Phase 1 按本文档落地。
+> 本文件定义当前 `backend/db/tables.py` 中 24 张业务 ORM 表的完整 DDL。
+> 契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
 
 ---
 
 ## §T0 · 表清单
 
-当前 V1 活动 schema：
+当前 24 张业务 ORM 表（按 `backend/db/tables.py` 中 `__tablename__` 定义）：
 
 ```text
-1. divisions                板块
-2. entities                 法人/单位
-3. banks                    银行
-4. accounts                 账户
-5. account_aliases          账户别名
-6. parser_templates         [已移除] 银行流水解析规则已迁移到 parser_artifacts
-7. manual_field_pool        手工流水字段池
-8. manual_template_schemes  手工模板方案
-9. import_batches           导入批次
-10. fund_events             CANONICAL_12 资金流水事实表（§C1）
-11. daily_report_runs       日报生成记录
-12. ai_configs              AI Provider 配置
-13. ai_call_logs            AI 调用审计日志
-14. agent_configs           Agent 配置与 AI 绑定
-15. operation_logs          操作日志
-16. users                   本地单用户认证
-17. report_templates        报表模板配置
-18. parser_artifacts        Fund Agent Parser 产物
-19. rule_artifacts          Fund Agent Rule 产物
-20. template_inference_job  template.inference 三阶段流水线状态
+── 主数据模块（6 张）──
+1.  divisions                板块
+2.  entities                 法人/单位
+3.  banks                    银行
+4.  accounts                 账户
+5.  account_aliases          账户别名
+6.  users                    本地单用户认证
+
+── 手工流水配置（2 张）──
+7.  manual_field_pool        手工流水字段池
+8.  manual_template_schemes  手工模板方案
+
+── 流水事实（2 张）──
+9.  import_batches           导入批次
+10. fund_events              CANONICAL_12 资金流水事实表（§C1）
+
+── Fund Agent 产物（3 张）──
+11. parser_artifacts         ParserArtifact 银行/手工解析器
+12. rule_artifacts           RuleArtifact 报表填充规则
+13. template_inference_job   template.inference 三阶段流水线状态
+
+── 报表（2 张）──
+14. report_templates         报表模板配置
+15. daily_report_runs        日报生成记录
+
+── AI / 日志（3 张）──
+16. ai_configs               AI Provider 配置
+17. ai_call_logs             AI 调用审计日志
+18. operation_logs           操作日志
+
+── Agent 系统（6 张）──
+19. agents_v2                Agent 实例
+20. skills_v2                技能注册表
+21. agent_sessions           Agent 会话
+22. agent_messages           Agent 消息
+23. agent_runs               Agent 运行记录
+24. agent_memories           Agent 记忆存储
 ```
+
+已移除：
+- `parser_templates` — Alembic `005_drop_parser_templates` 中移除，禁止恢复。
 
 ---
 
@@ -134,9 +154,9 @@ CREATE INDEX idx_account_aliases_text ON account_aliases(alias_text);
 
 ## §T2 · 导入与流水表
 
-### §T2.1 · `parser_templates`（已移除）
+### §T2.1 · `parser_templates`（已移除，禁止恢复）
 
-`parser_templates` 表已在 Alembic 迁移 `005_drop_parser_templates` 中移除。银行流水解析规则当前以 `parser_artifacts`（§T4.1）为准。
+`parser_templates` 表已在 Alembic 迁移 `005_drop_parser_templates` 中移除。代码零残留。银行流水解析规则当前以 `parser_artifacts`（§T4.1）为准。**禁止恢复此表。**
 
 ### §T2.2 · `manual_field_pool`
 
@@ -438,18 +458,20 @@ CREATE TABLE template_inference_job (
 
 ---
 
-## §T5 · Phase 1 落地迁移
+## §T5 · 历史迁移记录（已完成）
 
-| 任务 | 动作 |
+以下迁移任务已在 PR #2 及之前的开发中执行完毕，仅作历史记录保留。
+
+| 任务 | 状态 |
 |---|---|
-| P1-1 | 备份当前 `backend/data/zhangfang.db` |
-| P1-2 | 将 `backend/db/tables.py::FundEvent` 改回 CANONICAL_12 |
-| P1-3 | 重新加入 `ParserArtifact` / `RuleArtifact` / `TemplateInferenceJob` ORM |
-| P1-4 | 删除当前 ORM 中不属于 §C1 的兼容字段 |
-| P1-5 | 整理 Alembic 版本，建立 v3 baseline |
-| P1-6 | 编写一次性 reset 脚本重建 SQLite |
-| P1-7 | 启动时改用 Alembic upgrade head |
-| P1-8 | 下游服务先保证 import 通过，业务写入改由后续 Runtime 承接 |
+| P1-1 备份当前 `backend/data/zhangfang.db` | ✅ 已完成 |
+| P1-2 将 `backend/db/tables.py::FundEvent` 改回 CANONICAL_12 | ✅ 已完成 |
+| P1-3 重新加入 `ParserArtifact` / `RuleArtifact` / `TemplateInferenceJob` ORM | ✅ 已完成 |
+| P1-4 删除当前 ORM 中不属于 §C1 的兼容字段 | ✅ 已完成 |
+| P1-5 整理 Alembic 版本，建立 baseline | ✅ 已完成 |
+| P1-6 编写一次性 reset 脚本重建 SQLite | ✅ 已完成 |
+| P1-7 启动时改用 Alembic upgrade head | ✅ 已完成 |
+| P1-8 下游服务先保证 import 通过，业务写入改由后续 Runtime 承接 | ✅ 已完成 |
 
 ---
 
@@ -581,6 +603,7 @@ CREATE INDEX idx_agent_memories_key ON agent_memories(agent_id, key);
 ---
 
 **版本**
+- v5.0 · 2026-05-10 · 标题改为当前 Schema；§T0 更新为 24 张业务 ORM 表；§T5 标记已完成；移除 parser_templates 和 agent_configs 占位行
 - v4.1 · 2026-05-10 · 移除 parser_templates 表（§T2.1），银行流水解析规则统一使用 parser_artifacts
 - v4.0 · 2026-05-02 · 新增 §T7 Agent 系统扩展表（6 张表 DDL）
 - v3.1 · 2026-04-25 · Phase 0 文档复位为 v3 真实 Schema，20 表清单与三张 artifact 表恢复。
