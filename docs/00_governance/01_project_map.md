@@ -6,6 +6,17 @@
 > 本文件中的"可用、半成品、断链、占位"状态必须随相关 PR 更新。
 > 凡是涉及页面、API、Service、数据库表、Artifact、Agent、报表链路的 PR，都必须检查是否需要更新本文件。
 
+## 0. Phase 0 冻结标记（当前仓库状态说明）
+
+> 本节标记旧 FundAgent 体系的当前状态，不改变任何运行时行为。
+> 完整审计基线见 [`00_single_agent_cleanup_audit.md`](00_single_agent_cleanup_audit.md)。
+
+- `backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。不得新增对此目录的依赖。
+- `backend/api/fund_agent.py` 定义的 `/api/fund/*` 路由未注册到 `main.py`，生产环境不可用（全部 404）。
+- 前端中任何 `/api/fund/*` 调用都是死链路，不得作为目标实现依据。
+- `backend/fund/`（含 `primitives/` 和 `artifacts/parsers/`）是产物确定性执行基础设施，必须保留，不等于 `backend/agents/fund/`。
+- 本文件中旧 FundAgent 相关内容（§7 三层架构、§9 半成品链路等）仅表示当前仓库状态，不代表目标架构。目标架构见 [`03_target_product_map.md`](03_target_product_map.md) 和审计基线。
+
 ## 1. 项目总览
 
 **账房先生 (ZhangFang)** — Agent 驱动的本地财务工作台。

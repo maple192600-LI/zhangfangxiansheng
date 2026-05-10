@@ -1,3 +1,7 @@
+# DEPRECATED: This module belongs to the legacy FundAgent bypass.
+# It is not registered in backend/main.py and is not available in production.
+# Do not add new endpoints here.
+# New artifact APIs must be implemented outside this legacy FundAgent route.
 """Fund Agent API: skill invocation and artifact review."""
 from __future__ import annotations
 

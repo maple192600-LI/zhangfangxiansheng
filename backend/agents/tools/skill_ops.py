@@ -244,6 +244,9 @@ def skill_check_deps(skill_code: str, ctx: ToolContext = None) -> dict:
     }
 
 
+# DEPRECATED: fund_skill_run bridges the generic Agent tool layer to the legacy FundAgent harness.
+# Do not add new callers.
+# This function must be removed after artifact service and generic Agent skill paths are established.
 @register_tool(read_only=False, toolset="database")
 def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = None) -> dict:
     """运行 Fund Agent 的确定性财务技能（直接执行 Python 代码，不经过 LLM）。
