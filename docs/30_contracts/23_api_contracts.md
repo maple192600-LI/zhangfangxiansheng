@@ -1,7 +1,7 @@
 # 23 · API 契约（v4）
 
 > 本文件定义所有 API 端点 + 统一响应格式 + 错误码表。
-> 原始设计 42 端点上限（§A1），V1.1 因 Agent 系统扩展追加至 59 个（§A1-ext）。
+> 原始设计 42 端点上限（§A1），因 Agent 系统扩展追加至 59 个（§A1-ext）。
 > 契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C7。
 
 ---
@@ -195,7 +195,7 @@
 
 ## §A99 · 错误码表
 
-> 注意：42 端点上限为 V3 设计约束。Agent V2 系统（`/api/agent_v2/*`）和手工流水 AI 解析端点（`/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent V2 智能体系统，不占用 Fund Agent 端点配额。银行导入旧端点（`/api/bank-import/ai-parse`、`/api/bank-import/commit-by-mapping`、`/api/bank-import/save-template`）已移除，银行导入统一使用 ParserArtifact 路线（upload → preview → commit）。
+> 注意：42 端点上限为历史设计约束。Agent 系统（`/api/agent_v2/*`）和手工流水 AI 解析端点（`/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent V2 智能体系统，不占用 Fund Agent 端点配额。银行导入旧端点（`/api/bank-import/ai-parse`、`/api/bank-import/commit-by-mapping`、`/api/bank-import/save-template`）已移除，银行导入统一使用 ParserArtifact 路线（upload → preview → commit）。
 
 ### Round 10-11 新增端点
 

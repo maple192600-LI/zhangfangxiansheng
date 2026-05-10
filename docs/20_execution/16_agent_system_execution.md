@@ -1,7 +1,7 @@
 # 16 · Agent 系统开发文档
 
 > 本文档是 Agent 系统的开发参考。描述代码结构、模块职责、关键流程、扩展方式。
-> 配合 [09_ai_capability_v3.md](../00_governance/09_ai_capability_v3.md)（设计文档）和 [00_project_constitution.md](../00_governance/00_project_constitution.md) §C4 §C8 使用。
+> 配合 [09_ai_capability.md](../00_governance/09_ai_capability.md)（设计文档）和 [00_project_constitution.md](../00_governance/00_project_constitution.md) §C4 §C8 使用。
 
 ---
 

@@ -1,11 +1,11 @@
-# 01 · V1 范围与执行顺序
+# 03 · 范围与执行顺序
 
-> 配合 [00_project_constitution.md](00_project_constitution.md)、[03_tech_constraints.md](03_tech_constraints.md) 使用。
-> 本文档定义 V1 的功能边界、当前进度、剩余工作及开发顺序。
+> 配合 [00_project_constitution.md](00_project_constitution.md)、[05_tech_constraints.md](05_tech_constraints.md) 使用。
+> 本文档定义功能边界、当前进度、剩余工作及开发顺序。
 
 ---
 
-## §1 · V1 范围边界
+## §1 · 范围边界
 
 ### §1.1 · 包含
 
@@ -29,7 +29,7 @@
 - 费用审批、合同审批、多人协作
 - Electron / Tauri / Rust 重写
 - 收费表格组件
-- 集中部署（V1 纯本地）
+- 集中部署（纯本地）
 - 用户在 UI 中直接编辑字段映射 / 正则 / JSON
 - Runtime 阶段调用 LLM（§C8）
 - Agent 产物绕过 AST 扫描入库

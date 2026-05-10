@@ -1,13 +1,13 @@
 # 20 · 数据库契约（v3 真实 Schema）
 
-> 本文件定义 V1 AI-First 路线的活动数据库契约。契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
+> 本文件定义当前活动数据库契约。契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
 > Phase 0 仅修订文档；ORM、Alembic、SQLite 实库将在 Phase 1 按本文档落地。
 
 ---
 
 ## §T0 · 表清单
 
-当前 V1 活动 schema：
+当前活动 schema：
 
 ```text
 1. divisions                板块
@@ -193,7 +193,7 @@ CREATE INDEX idx_import_batches_source ON import_batches(source_type);
 
 ### §T2.5 · `fund_events`
 
-`fund_events` 是 V1 报表和基础数据表的唯一流水事实表。其 12 列 canonical schema 列序、列名、枚举值由 §C1 冻结。
+`fund_events` 是报表和基础数据表的唯一流水事实表。其 12 列 canonical schema 列序、列名、枚举值由 §C1 冻结。
 
 ```sql
 CREATE TABLE fund_events (

@@ -14,15 +14,15 @@
 | 序号 | 文件 | 内容 |
 |------|------|------|
 | 1 | [`00_governance/00_project_constitution.md`](00_governance/00_project_constitution.md) | **核心契约** — 数据库schema冻结、字段枚举、Agent技能体系、不可变规则 |
-| 2 | [`00_governance/02_user_constraints.md`](00_governance/02_user_constraints.md) | 用户画像 — 谁用、习惯、技术能力 |
-| 3 | [`00_governance/03_tech_constraints.md`](00_governance/03_tech_constraints.md) | 技术栈锁定 — Python/FastAPI/Vue/SQLite |
+| 2 | [`00_governance/04_user_constraints.md`](00_governance/04_user_constraints.md) | 用户画像 — 谁用、习惯、技术能力 |
+| 3 | [`00_governance/05_tech_constraints.md`](00_governance/05_tech_constraints.md) | 技术栈锁定 — Python/FastAPI/Vue/SQLite |
 
 ### 第二步：了解范围（10分钟）
 
 | 序号 | 文件 | 内容 |
 |------|------|------|
-| 4 | [`00_governance/01_v1_scope_and_order.md`](00_governance/01_v1_scope_and_order.md) | V1范围边界 + 验收清单 |
-| 5 | [`10_product_design/03_funds_v1_workflow.md`](10_product_design/03_funds_v1_workflow.md) | 资金板块主链路 — 从导入到报表的完整流程 |
+| 4 | [`00_governance/03_scope_and_order.md`](00_governance/03_scope_and_order.md) | 范围边界 + 验收清单 |
+| 5 | [`10_product_design/03_funds_workflow.md`](10_product_design/03_funds_workflow.md) | 资金板块主链路 — 从导入到报表的完整流程 |
 | 6 | [`10_product_design/02_frontend_information_architecture.md`](10_product_design/02_frontend_information_architecture.md) | 前端信息架构 — 页面结构、导航、职责划分 |
 
 ### 第三步：查契约（按需查阅）
@@ -40,10 +40,10 @@
 
 | 文件 | 内容 |
 |------|------|
-| [`00_governance/04_coding_conventions.md`](00_governance/04_coding_conventions.md) | 编码规范 — 命名、分层、响应格式、错误处理 |
-| [`00_governance/05_testing_strategy.md`](00_governance/05_testing_strategy.md) | 测试策略 — 分层、覆盖率、fixture、现有测试清单 |
+| [`00_governance/06_coding_conventions.md`](00_governance/06_coding_conventions.md) | 编码规范 — 命名、分层、响应格式、错误处理 |
+| [`00_governance/07_testing_strategy.md`](00_governance/07_testing_strategy.md) | 测试策略 — 分层、覆盖率、fixture、现有测试清单 |
 | [`00_governance/08_anti_drift.md`](00_governance/08_anti_drift.md) | 防跑偏六层机制 — 契约冻结、guards、DoD、Kickoff |
-| [`00_governance/09_ai_capability_v3.md`](00_governance/09_ai_capability_v3.md) | Agent能力体系 — 架构、工具、记忆、技能、隐私三档 |
+| [`00_governance/09_ai_capability.md`](00_governance/09_ai_capability.md) | Agent能力体系 — 架构、工具、记忆、技能、隐私三档 |
 
 ### 第五步：查执行细节（开发时按需）
 
@@ -65,7 +65,7 @@
 |------|------|
 | [`10_product_design/04_manual_flow_multi_subject.md`](10_product_design/04_manual_flow_multi_subject.md) | 多主体总表机制设计 |
 | [`10_product_design/05_manual_field_pool_and_template_scheme.md`](10_product_design/05_manual_field_pool_and_template_scheme.md) | 字段池与模板方案 |
-| [`10_product_design/06_manual_template_v2_spec.md`](10_product_design/06_manual_template_v2_spec.md) | 手工模板V2规范 |
+| [`10_product_design/06_manual_template_spec.md`](10_product_design/06_manual_template_spec.md) | 手工模板规范 |
 
 ---
 

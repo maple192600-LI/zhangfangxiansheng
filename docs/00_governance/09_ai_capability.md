@@ -1,6 +1,6 @@
 # 09 · AI 能力配置（v4 · Agent 能力体系）
 
-> 本文件定义账房先生 V1 的完整 Agent 能力体系。包含通用 Agent 架构、Fund Agent 专用约束、执行模式、记忆系统、技能生命周期。
+> 本文件定义账房先生的完整 Agent 能力体系。包含通用 Agent 架构、Fund Agent 专用约束、执行模式、记忆系统、技能生命周期。
 >
 > 配合 [00_project_constitution.md](00_project_constitution.md)、[08_anti_drift.md](08_anti_drift.md)、[../30_contracts/25_primitives_whitelist.md](../30_contracts/25_primitives_whitelist.md) 使用。
 
@@ -214,7 +214,7 @@ arguments:
 
 ## §5 · Fund Agent 专用约束
 
-Fund Agent 是 V1 阶段的核心财务 Agent，处理所有财务相关任务。它在通用 Agent 架构基础上增加了严格的约束。
+Fund Agent 是核心财务 Agent，处理所有财务相关任务。它在通用 Agent 架构基础上增加了严格的约束。
 
 ### §5.1 · 5 个基础 Skill（§C4 冻结）
 
@@ -338,7 +338,7 @@ Agent 在任何情况下**禁止**：
 
 ## §10 · 未来演进方向
 
-以下能力 V1 不交付，但架构设计必须预留扩展空间：
+以下能力当前不交付，但架构设计必须预留扩展空间：
 
 | 方向 | 说明 |
 |------|------|

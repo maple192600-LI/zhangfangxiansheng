@@ -5,9 +5,9 @@
 > **修改流程**：本文档只有用户本人书面同意才能修改。任何 AI 修改本文件 = 立即回滚 + 作废当次会话产出。修改后必须更新 `contracts.lock`（SHA256）并触发 `tools/guards/` 全量回归。
 >
 > 相关文档：
-> - [01_v1_scope_and_order.md](01_v1_scope_and_order.md) · V1 范围与执行顺序
+> - [03_scope_and_order.md](03_scope_and_order.md) · 范围与执行顺序
 > - [08_anti_drift.md](08_anti_drift.md) · 防跑偏六层机制
-> - [09_ai_capability_v3.md](09_ai_capability_v3.md) · Agent 能力体系
+> - [09_ai_capability.md](09_ai_capability.md) · Agent 能力体系
 > - [30_contracts/](../30_contracts/) · 数据库 / 字段 / API 契约
 
 ---
@@ -45,7 +45,7 @@ CHECK 约束：
 
 ## §C2 · 现金日记账月账模板 · 18 占位符不可变 `TEMPLATE_18`
 
-现金日记账是 V1 唯一必须交付的报表模板。其 Excel 模板的占位符集合冻结如下：
+现金日记账是唯一必须交付的报表模板。其 Excel 模板的占位符集合冻结如下：
 
 ```
 报表标题, 开始期间, 结束期间, 板块, 核算方式,
@@ -103,7 +103,7 @@ CHECK 约束：
 
 ### §C4.1 · 预置财务技能
 
-V1 阶段预置以下 5 个财务技能，Agent 可在此基础上通过 `skill_creator` 动态创建新技能：
+预置以下 5 个财务技能，Agent 可在此基础上通过 `skill_creator` 动态创建新技能：
 
 | # | Skill | 职责 | 输入 | 输出 |
 |---|---|---|---|---|
@@ -121,7 +121,7 @@ V1 阶段预置以下 5 个财务技能，Agent 可在此基础上通过 `skill_
 - 技能存放在 `agents/{agent_code}/skills/` 或 `agents/system/skills/` 目录
 - 技能通过 `SkillRegistry` 自动发现、热加载、匹配触发
 
-详细能力配置见 [09_ai_capability_v3.md](09_ai_capability_v3.md)。
+详细能力配置见 [09_ai_capability.md](09_ai_capability.md)。
 
 ---
 
@@ -173,7 +173,7 @@ Parser/Rule artifact 的 AST 扫描必须满足：
 18. rule_artifacts                 ← RuleArtifact 报表填充规则
 19. template_inference_job
 
-── V1.1 Agent 系统扩展表 ──
+── Agent 系统扩展表 ──
 20. agents_v2                      ← Agent 实例
 21. agent_sessions                 ← Agent 会话
 22. agent_messages                 ← Agent 消息（含工具调用和推理内容）
@@ -192,7 +192,7 @@ Parser/Rule artifact 的 AST 扫描必须满足：
 
 API 端点清单见 [`../30_contracts/23_api_contracts.md`](../30_contracts/23_api_contracts.md)。
 
-原始设计 42 端点上限，V1.1 阶段因 Agent 系统扩展已追加至 59 个端点。后续新增端点需更新 `23_api_contracts.md`。
+原始设计 42 端点上限，因 Agent 系统扩展已追加至 59 个端点。后续新增端点需更新 `23_api_contracts.md`。
 
 统一响应格式（强制）：
 
