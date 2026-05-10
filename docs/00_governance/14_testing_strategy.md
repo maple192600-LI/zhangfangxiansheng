@@ -1,6 +1,6 @@
-# 05 · 测试策略
+# 14 · 测试策略
 
-> 配合 [06_coding_conventions.md](06_coding_conventions.md)、[05_tech_constraints.md](05_tech_constraints.md) 使用。
+> 配合 [13_coding_conventions.md](13_coding_conventions.md)、[12_tech_constraints.md](12_tech_constraints.md) 使用。
 > 测试框架：pytest，覆盖率目标：80%。
 
 ---

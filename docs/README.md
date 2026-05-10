@@ -2,58 +2,59 @@
 
 > **任何 AI 或人类开发者开工前，必须按本文件指定的顺序阅读。**
 > 文档冲突时以 `00_governance/00_project_constitution.md` 为最高优先级。
-> 
-> 版本：v5.0 · 2026-05-10
+>
+> 版本：v6.0 · 2026-05-10
 
 ---
 
 ## 必读顺序
 
-### 第一优先级：当前代码实况
+### 第一步：当前实况与目标（必读）
+
+> **01_project_map.md 是当前实现地图。**
+> **03_target_product_map.md 是目标产品蓝图。**
+> **04_roadmap_and_change_log.md 是阶段路线图。**
+> **任何涉及页面、API、Service、数据库表、Artifact、Agent、报表链路的 PR，都必须检查是否更新项目地图和路线图。**
 
 | 序号 | 文件 | 内容 |
 |------|------|------|
-| 1 | [`00_governance/00_project_constitution.md`](00_governance/00_project_constitution.md) | **核心契约** — 数据库schema冻结、字段枚举、Agent技能体系、不可变规则 |
-| 2 | [`00_governance/04_user_constraints.md`](00_governance/04_user_constraints.md) | 用户画像 — 谁用、习惯、技术能力 |
-| 3 | [`00_governance/05_tech_constraints.md`](00_governance/05_tech_constraints.md) | 技术栈锁定 — Python/FastAPI/Vue/SQLite |
+| 1 | [`00_governance/01_project_map.md`](00_governance/01_project_map.md) | **当前实现地图** — main 分支代码实况：页面/API/Service/表/断链全地图 |
+| 2 | [`00_governance/02_naming_glossary.md`](00_governance/02_naming_glossary.md) | **命名词典** — 术语边界、命名问题、禁止混用 |
+| 3 | [`00_governance/03_target_product_map.md`](00_governance/03_target_product_map.md) | **目标产品蓝图** — 产品目标能力，不描述当前实现 |
+| 4 | [`00_governance/04_roadmap_and_change_log.md`](00_governance/04_roadmap_and_change_log.md) | **阶段路线图** — Phase A-I 目标、地图状态变更、文档更新要求 |
+| 5 | [`00_governance/00_project_constitution.md`](00_governance/00_project_constitution.md) | **项目宪法** — 冻结原则、不可变规则 |
 
-### 第二步：理解项目（5分钟）
-
-| 序号 | 文件 | 内容 |
-|------|------|------|
-| 4 | [`00_governance/03_scope_and_order.md`](00_governance/03_scope_and_order.md) | 范围边界 + 验收清单 |
-| 5 | [`10_product_design/03_funds_workflow.md`](10_product_design/03_funds_workflow.md) | 资金板块主链路 — 从导入到报表的完整流程 |
-| 6 | [`10_product_design/02_frontend_information_architecture.md`](10_product_design/02_frontend_information_architecture.md) | 前端信息架构 — 页面结构、导航、职责划分 |
-
-### 第三步：了解范围（10分钟）
+### 第二步：理解项目
 
 | 序号 | 文件 | 内容 |
 |------|------|------|
-| 6 | [`00_governance/01_v1_scope_and_order.md`](00_governance/01_v1_scope_and_order.md) | V1范围边界 + 验收清单 |
-| 7 | [`10_product_design/03_funds_v1_workflow.md`](10_product_design/03_funds_v1_workflow.md) | 资金板块主链路 — 从导入到报表的完整流程 |
-| 8 | [`10_product_design/02_frontend_information_architecture.md`](10_product_design/02_frontend_information_architecture.md) | 前端信息架构 — 页面结构、导航、职责划分 |
+| 6 | [`00_governance/10_scope_and_order.md`](00_governance/10_scope_and_order.md) | 范围边界 + 验收清单 |
+| 7 | [`00_governance/11_user_constraints.md`](00_governance/11_user_constraints.md) | 用户画像 — 谁用、习惯、技术能力 |
+| 8 | [`00_governance/12_tech_constraints.md`](00_governance/12_tech_constraints.md) | 技术栈锁定 — Python/FastAPI/Vue/SQLite |
+| 9 | [`10_product_design/03_funds_workflow.md`](10_product_design/03_funds_workflow.md) | 资金板块主链路 — 从导入到报表的完整流程 |
+| 10 | [`10_product_design/02_frontend_information_architecture.md`](10_product_design/02_frontend_information_architecture.md) | 前端信息架构 — 页面结构、导航、职责划分 |
 
-### 第四步：查契约（按需查阅）
+### 第三步：查契约（按需查阅）
 
 | 文件 | 内容 |
 |------|------|
-| [`30_contracts/20_database_schema.md`](30_contracts/20_database_schema.md) | 数据库DDL — 当前需修订，以项目地图 24 张业务 ORM 表为准 |
+| [`30_contracts/20_database_schema.md`](30_contracts/20_database_schema.md) | 数据库 DDL — 24 张业务 ORM 表的完整建表语句 |
 | [`30_contracts/21_field_dictionary.md`](30_contracts/21_field_dictionary.md) | 字段字典 — 字段编码、中文名、类型、验证规则 |
 | [`30_contracts/22_manual_field_pool.md`](30_contracts/22_manual_field_pool.md) | 手工字段池 — 核心字段/可选字段/系统字段 |
-| [`30_contracts/23_api_contracts.md`](30_contracts/23_api_contracts.md) | API契约 — 当前需修订，42 上限为历史设计 |
+| [`30_contracts/23_api_contracts.md`](30_contracts/23_api_contracts.md) | API 契约 — 端点清单 + 错误码 |
 | [`30_contracts/24_page_states_and_exceptions.md`](30_contracts/24_page_states_and_exceptions.md) | 页面状态 + 异常码 |
-| [`30_contracts/25_primitives_whitelist.md`](30_contracts/25_primitives_whitelist.md) | 基元库白名单 — Agent产物可调用的函数 |
+| [`30_contracts/25_primitives_whitelist.md`](30_contracts/25_primitives_whitelist.md) | 基元库白名单 — Agent 产物可调用的函数 |
 
-### 第五步：看规则（开发前必读）
+### 第四步：看规则（开发前必读）
 
 | 文件 | 内容 |
 |------|------|
-| [`00_governance/06_coding_conventions.md`](00_governance/06_coding_conventions.md) | 编码规范 — 命名、分层、响应格式、错误处理 |
-| [`00_governance/07_testing_strategy.md`](00_governance/07_testing_strategy.md) | 测试策略 — 分层、覆盖率、fixture、现有测试清单 |
-| [`00_governance/08_anti_drift.md`](00_governance/08_anti_drift.md) | 防跑偏六层机制 — 契约冻结、guards、DoD、Kickoff |
-| [`00_governance/09_ai_capability.md`](00_governance/09_ai_capability.md) | Agent能力体系 — 架构、工具、记忆、技能、隐私三档 |
+| [`00_governance/13_coding_conventions.md`](00_governance/13_coding_conventions.md) | 编码规范 — 命名、分层、响应格式、错误处理 |
+| [`00_governance/14_testing_strategy.md`](00_governance/14_testing_strategy.md) | 测试策略 — 分层、覆盖率、fixture、现有测试清单 |
+| [`00_governance/18_anti_drift.md`](00_governance/18_anti_drift.md) | 防跑偏六层机制 — 契约冻结、guards、DoD、Kickoff |
+| [`00_governance/19_ai_capability.md`](00_governance/19_ai_capability.md) | Agent 能力体系 — 架构、工具、记忆、技能、隐私三档 |
 
-### 第六步：查执行细节（开发时按需）
+### 第五步：查执行细节（开发时按需）
 
 | 文件 | 内容 |
 |------|------|

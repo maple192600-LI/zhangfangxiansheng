@@ -1,6 +1,6 @@
 # 18 · 部署与打包指南
 
-> 配合 [05_tech_constraints.md](../00_governance/05_tech_constraints.md) 使用。
+> 配合 [12_tech_constraints.md](../00_governance/12_tech_constraints.md) 使用。
 
 ---
 

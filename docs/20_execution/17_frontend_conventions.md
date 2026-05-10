@@ -1,6 +1,6 @@
 # 17 · 前端开发规范
 
-> 配合 [06_coding_conventions.md](../00_governance/06_coding_conventions.md)、[02_frontend_information_architecture.md](../10_product_design/02_frontend_information_architecture.md) 使用。
+> 配合 [13_coding_conventions.md](../00_governance/13_coding_conventions.md)、[02_frontend_information_architecture.md](../10_product_design/02_frontend_information_architecture.md) 使用。
 
 ---
 

@@ -71,7 +71,7 @@
 
 **必须更新的文档**：
 - [ ] `00_project_constitution.md` — PR #6
-- [ ] `08_anti_drift.md` — PR #6
+- [ ] `18_anti_drift.md` — PR #6
 - [ ] `20_database_schema.md` — PR #6
 - [ ] `23_api_contracts.md` — PR #6
 - [ ] `docs/README.md` — PR #6

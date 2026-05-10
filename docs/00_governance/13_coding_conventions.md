@@ -1,6 +1,6 @@
-# 04 · 编码规范
+# 13 · 编码规范
 
-> 配合 [00_project_constitution.md](00_project_constitution.md)、[05_tech_constraints.md](05_tech_constraints.md) 使用。
+> 配合 [00_project_constitution.md](00_project_constitution.md)、[12_tech_constraints.md](12_tech_constraints.md) 使用。
 
 ---
 
