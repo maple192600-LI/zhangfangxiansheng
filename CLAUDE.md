@@ -105,6 +105,17 @@ tests/         ← pytest测试
 - API 统一响应格式：`{ "code": 0, "message": "ok", "data": {} }`
 - **增强层不阻断核心功能** — 模板/主题缺失时降级到默认行为
 
+## 单通用 Agent 架构原则
+
+- 本项目只有一个通用 Agent（`backend/agents/runtime.py`），不存在独立的 FundAgent、ReportAgent、ParserAgent、RuleAgent 等领域 Agent 类
+- 不允许新增对 `backend/agents/fund/` 的依赖
+- 不允许新增 `fund_skill_run` 调用
+- 不允许新增 `/api/fund/agent/skills/*/invoke` 路由或调用
+- ParserArtifact / RuleArtifact 由通用 Agent 生成和维护，由 artifact service 管理和审核，由 artifact runtime 确定性执行
+- Artifact 审核必须由用户确认后通过 artifact service 完成
+- 执行阶段不能由 Agent 决策
+- 完整审计基线见 [`docs/00_governance/00_single_agent_cleanup_audit.md`](docs/00_governance/00_single_agent_cleanup_audit.md)
+
 ## V1 Scope
 
 **包含：** 主数据中心、银行导入、手工流水双轨、日报生成、导出打印、基础看板、备份回滚、日志、Agent系统
