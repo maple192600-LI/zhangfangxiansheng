@@ -22,7 +22,9 @@
 
 ---
 
-## §A1 · 42 端点总览
+## §A1 · 端点总览（历史设计 42 上限已失效）
+
+> **口径说明**：原始设计上限为 42 端点。V1.1 阶段因 Agent 系统扩展已追加至 59 个端点。实际代码中注册了更多路由。当前端点口径待重新统计，以下 42 端点清单保留作历史参考。新增和变更的端点见 §A99。
 
 | # | 模块 | 方法 | 路径 | 职责 |
 |---|---|---|---|---|
@@ -69,7 +71,7 @@
 | 41 | 系统 | GET | `/api/system/backup` | 备份下载 |
 | 42 | 系统 | POST | `/api/system/backup/restore` | 恢复 |
 
-**不变量**：端点总数 ≤ 42。新增必须走 §ChangeFlow，并更新 `tools/guards/check_api_inventory.py`。
+**历史设计**：42 端点上限为原始设计约束，现已失效。端点数量以本文档 §A99 当前版本为准。新增必须走 §ChangeFlow，并更新 `23_api_contracts.md`。`tools/guards/check_api_inventory.py` 的 42 上限已过时，不得作为阻断条件。
 
 ---
 
@@ -195,7 +197,7 @@
 
 ## §A99 · 错误码表
 
-> 注意：42 端点上限为历史设计约束。Agent 系统（`/api/agent_v2/*`）和手工流水 AI 解析端点（`/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent V2 智能体系统，不占用 Fund Agent 端点配额。银行导入旧端点（`/api/bank-import/ai-parse`、`/api/bank-import/commit-by-mapping`、`/api/bank-import/save-template`）已移除，银行导入统一使用 ParserArtifact 路线（upload → preview → commit）。
+> 注意：42 端点上限为历史设计约束，已失效。Agent 系统（`/api/agent_v2/*`）和手工流水 AI 解析端点（`/api/manual-flow/ai-parse`）为 Round 10-11 新增，基于 Agent 智能体系统，不占用 Fund Agent 端点配额。银行导入旧端点（`/api/bank-import/ai-parse`、`/api/bank-import/commit-by-mapping`、`/api/bank-import/save-template`）已移除，**禁止恢复**。银行导入统一使用 ParserArtifact 路线（upload → preview → commit）。
 
 ### Round 10-11 新增端点
 
@@ -282,6 +284,7 @@
 ---
 
 **版本**
+- v4.2 · 2026-05-10 · §A1 标记 42 上限已失效；§A99 标记旧端点禁止恢复；口径待重新统计
 - v4.1 · 2026-05-10 · 移除银行导入旧端点（ai-parse / commit-by-mapping / save-template），N14-N17 改为 ParserArtifact 路线
 - v4.0 · 2026-05-02 · 承认端点数从 42 扩展至 59，更新标题和说明
 - v3.2 · 2026-04-28 · Round 11：新增 Agent V2 + AI 解析端点（§A99 扩展）
