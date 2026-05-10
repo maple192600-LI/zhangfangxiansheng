@@ -59,7 +59,7 @@ A manual scheme must support:
 - export empty template
 - direct use in quick-entry page
 
-## 4. Scheme presets to create in V1
+## 4. Scheme presets to create
 
 - `manual_simple_cash`
 - `manual_multi_subject_basic`

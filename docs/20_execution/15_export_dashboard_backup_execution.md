@@ -2,7 +2,7 @@
 
 ## 1. Module goal
 
-Finish the V1 closing loop:
+Finish the closing loop:
 
 - export
 - print
@@ -52,7 +52,7 @@ Finish the V1 closing loop:
   }
   ```
 - **打印内容**：仅保留面包屑+表格区域，隐藏导航、按钮和筛选器
-- **页眉页脚**：浏览器默认，V1 不做自定义
+- **页眉页脚**：浏览器默认，不做自定义
 
 ### basic dashboard
 - total income

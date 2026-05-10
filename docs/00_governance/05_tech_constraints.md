@@ -44,7 +44,7 @@
 
 | 组件 | 技术 | 约束 |
 |------|------|------|
-| 数据库 | SQLite | V1 阶段唯一数据库 |
+| 数据库 | SQLite | 唯一数据库 |
 | 模式 | WAL | 启用 write-ahead logging（database.py 自动配置） |
 | 外键 | 启用 | 每次连接自动 `PRAGMA foreign_keys=ON` |
 | 连接 | 单线程 | `check_same_thread=False`（FastAPI 异步场景） |
@@ -178,7 +178,7 @@ Agent 可调用的工具通过 `tool_registry.py` 注册，包含：
 
 ### §4.3 · Fund Agent 专用约束
 
-- V1 阶段 5 个 skill 冻结（§C4）
+- 5 个 skill 冻结（§C4）
 - 产物必须通过 AST 扫描（基元库白名单 §C5）
 - 运行时禁止调 LLM（§C8）
 - 隐私三档：standard / strict / offline

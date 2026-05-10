@@ -2,7 +2,7 @@
 
 ## 1. Module goal
 
-Build the V1 home page as a work control board.
+Build the home page as a work control board.
 
 It is not a boss BI page.
 It is the first screen a cashier opens every day.
@@ -19,7 +19,7 @@ Top-level left navigation:
 - AI智能体
 - 系统设置
 
-V1 coding only needs to fully implement:
+Coding only needs to fully implement:
 
 - 首页
 - 资金板块
