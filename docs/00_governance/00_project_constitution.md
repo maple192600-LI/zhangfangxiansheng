@@ -5,9 +5,9 @@
 > **修改流程**：本文档只有用户本人书面同意才能修改。任何 AI 修改本文件 = 立即回滚 + 作废当次会话产出。修改后必须更新 `contracts.lock`（SHA256）并触发 `tools/guards/` 全量回归。
 >
 > 相关文档：
-> - [03_scope_and_order.md](03_scope_and_order.md) · 范围与执行顺序
-> - [08_anti_drift.md](08_anti_drift.md) · 防跑偏六层机制
-> - [09_ai_capability.md](09_ai_capability.md) · Agent 能力体系
+> - [10_scope_and_order.md](10_scope_and_order.md) · 范围与执行顺序
+> - [18_anti_drift.md](18_anti_drift.md) · 防跑偏六层机制
+> - [19_ai_capability.md](19_ai_capability.md) · Agent 能力体系
 > - [30_contracts/](../30_contracts/) · 数据库 / 字段 / API 契约
 
 ---
@@ -121,7 +121,7 @@ CHECK 约束：
 - 技能存放在 `agents/{agent_code}/skills/` 或 `agents/system/skills/` 目录
 - 技能通过 `SkillRegistry` 自动发现、热加载、匹配触发
 
-详细能力配置见 [09_ai_capability.md](09_ai_capability.md)。
+详细能力配置见 [19_ai_capability.md](19_ai_capability.md)。
 
 ---
 

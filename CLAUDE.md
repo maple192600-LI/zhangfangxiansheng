@@ -56,11 +56,15 @@ docs/
 ├── README.md                        ← 文档主入口（必读）
 ├── 00_governance/                   ← 核心契约层（最高优先级）
 │   ├── 00_project_constitution.md   ← 项目宪法（冻结）
-│   ├── 03_scope_and_order.md     ← 范围与顺序
-│   ├── 04_user_constraints.md       ← 用户约束
-│   ├── 05_tech_constraints.md       ← 技术约束
-│   ├── 08_anti_drift.md             ← 防跑偏机制
-│   └── 09_ai_capability.md       ← Agent能力配置
+│   ├── 01_project_map.md            ← 当前实现地图
+│   ├── 02_naming_glossary.md        ← 命名词典
+│   ├── 03_target_product_map.md     ← 目标产品蓝图
+│   ├── 04_roadmap_and_change_log.md ← 阶段路线图
+│   ├── 10_scope_and_order.md        ← 范围与顺序
+│   ├── 11_user_constraints.md       ← 用户约束
+│   ├── 12_tech_constraints.md       ← 技术约束
+│   ├── 18_anti_drift.md             ← 防跑偏机制
+│   └── 19_ai_capability.md          ← Agent能力配置
 ├── 10_product_design/               ← 产品设计
 ├── 20_execution/                    ← 模块执行文档
 └── 30_contracts/                    ← 数据库/API/字段契约

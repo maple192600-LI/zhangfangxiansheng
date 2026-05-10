@@ -1,6 +1,6 @@
-# 03 · 范围与执行顺序
+# 10 · 范围与执行顺序
 
-> 配合 [00_project_constitution.md](00_project_constitution.md)、[05_tech_constraints.md](05_tech_constraints.md) 使用。
+> 配合 [00_project_constitution.md](00_project_constitution.md)、[12_tech_constraints.md](12_tech_constraints.md) 使用。
 > 本文档定义功能边界、当前进度、剩余工作及开发顺序。
 
 ---

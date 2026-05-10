@@ -1,8 +1,8 @@
-# 09 · AI 能力配置（v4 · Agent 能力体系）
+# 19 · AI 能力配置（Agent 能力体系）
 
 > 本文件定义账房先生的完整 Agent 能力体系。包含通用 Agent 架构、Fund Agent 专用约束、执行模式、记忆系统、技能生命周期。
 >
-> 配合 [00_project_constitution.md](00_project_constitution.md)、[08_anti_drift.md](08_anti_drift.md)、[../30_contracts/25_primitives_whitelist.md](../30_contracts/25_primitives_whitelist.md) 使用。
+> 配合 [00_project_constitution.md](00_project_constitution.md)、[18_anti_drift.md](18_anti_drift.md)、[../30_contracts/25_primitives_whitelist.md](../30_contracts/25_primitives_whitelist.md) 使用。
 
 ---
 
