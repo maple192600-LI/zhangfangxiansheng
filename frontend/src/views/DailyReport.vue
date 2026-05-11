@@ -6,19 +6,16 @@
         <span>按单位汇总：期初/收入/支出/净变动/期末</span>
       </div>
       <div class="filters-bar">
-        <input v-model="startDate" type="date" class="filter" />
+        <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable style="width:160px" />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <input v-model="endDate" type="date" class="filter" />
-        <select v-model="entityId" class="filter">
-          <option :value="null">全部单位</option>
-          <option v-for="e in entities" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
-        </select>
+        <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable style="width:160px" />
+        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable style="min-width:160px" />
         <div style="flex:1"></div>
-        <div class="btn-row">
-          <button class="btn btn-secondary" @click="doExport">导出</button>
-          <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="loadReport">生成报表</button>
-        </div>
+        <NSpace>
+          <NButton @click="doExport">导出</NButton>
+          <NButton @click="window.print()">打印</NButton>
+          <NButton type="primary" @click="loadReport">生成报表</NButton>
+        </NSpace>
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成日报...</p></div>
@@ -52,6 +49,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect, NButton, NSpace } from 'naive-ui'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -67,6 +65,31 @@ const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('daily_report')
+
+function dateStringToTs(s) {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+function tsToDateString(ts) {
+  if (ts == null) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const startDateTs = computed({
+  get: () => dateStringToTs(startDate.value),
+  set: (v) => { startDate.value = tsToDateString(v) }
+})
+const endDateTs = computed({
+  get: () => dateStringToTs(endDate.value),
+  set: (v) => { endDate.value = tsToDateString(v) }
+})
+
+const entityOptions = computed(() => [
+  { label: '全部单位', value: null },
+  ...entities.value.map(e => ({ label: e.entity_name, value: e.entity_id }))
+])
 
 const DEFAULT_COLUMNS = [
   { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
