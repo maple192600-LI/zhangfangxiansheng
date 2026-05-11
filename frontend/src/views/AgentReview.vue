@@ -56,10 +56,10 @@
       </div>
 
       <div class="action-bar">
-        <button class="btn btn-secondary" @click="goBack">返回</button>
-        <button class="btn btn-primary" :disabled="approving || artifact.status === 'active'" @click="approve">
+        <NButton secondary @click="goBack">返回</NButton>
+        <NButton type="primary" :disabled="approving || artifact.status === 'active'" @click="approve">
           {{ approving ? '正在接受...' : artifact.status === 'active' ? '已接受' : '接受并继续' }}
-        </button>
+        </NButton>
       </div>
     </template>
   </div>
@@ -67,6 +67,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import * as artifacts from '@/api/artifacts'
 import * as bank from '@/api/bank'

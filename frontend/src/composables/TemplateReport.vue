@@ -21,9 +21,9 @@
         <NSelect v-model:value="entityId" :options="entityFilterOptions" placeholder="全部单位" clearable style="min-width:140px" />
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary" @click="doExport">导出</button>
-          <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="loadData">生成报表</button>
+          <NButton secondary @click="doExport">导出</NButton>
+          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton type="primary" @click="loadData">生成报表</NButton>
         </div>
       </div>
       <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载...</p></div>
@@ -64,7 +64,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect } from 'naive-ui'
+import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import * as reportApi from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'

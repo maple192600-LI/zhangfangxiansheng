@@ -14,11 +14,11 @@
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button v-if="selectedIds.length" class="btn btn-danger" @click="doBatchDelete">删除选中 ({{ selectedIds.length }})</button>
-          <button class="btn btn-secondary" @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</button>
-          <button class="btn btn-secondary" @click="doExport('base_data')">导出</button>
-          <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="page = 1; loadData()">生成报表</button>
+          <NButton v-if="selectedIds.length" type="error" @click="doBatchDelete">删除选中 ({{ selectedIds.length }})</NButton>
+          <NButton secondary @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</NButton>
+          <NButton secondary @click="doExport('base_data')">导出</NButton>
+          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
         </div>
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
@@ -84,15 +84,15 @@
 
     <div class="bottom-bar" v-if="total > 0">
       <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
-      <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="page--; loadData()">上一页</button>
-      <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="page++; loadData()">下一页</button>
+      <NButton secondary size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
+      <NButton secondary size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect } from 'naive-ui'
+import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'

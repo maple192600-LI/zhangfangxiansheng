@@ -2,9 +2,9 @@
   <div class="section">
     <div class="section-title">
       <h3>数据清理</h3>
-      <button class="btn btn-secondary" @click="loadPreview" :disabled="loading">
+      <NButton secondary @click="loadPreview" :disabled="loading">
         {{ loading ? '扫描中...' : '扫描残留数据' }}
-      </button>
+      </NButton>
     </div>
 
     <div v-if="error" class="error-bar">{{ error }}</div>
@@ -52,9 +52,9 @@
         </div>
 
         <div class="cleanup-actions">
-          <button class="btn btn-warn" @click="confirming = true" :disabled="executing">
+          <NButton type="warning" @click="confirming = true" :disabled="executing">
             {{ executing ? '清理中...' : '彻底清除以上数据' }}
-          </button>
+          </NButton>
         </div>
       </template>
     </div>
@@ -72,8 +72,8 @@
       </ul>
       <p class="confirm-warn">活跃的智能体和数据不受影响。</p>
       <div class="btn-row">
-        <button class="btn btn-secondary" @click="confirming = false">取消</button>
-        <button class="btn btn-warn" @click="doCleanup">确认清理</button>
+        <NButton secondary @click="confirming = false">取消</NButton>
+        <NButton type="warning" @click="doCleanup">确认清理</NButton>
       </div>
     </div>
   </div>
@@ -81,6 +81,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { NButton } from 'naive-ui'
 import { getCleanupPreview, executeCleanup } from '@/api/backup'
 
 const data = ref(null)

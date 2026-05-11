@@ -2,9 +2,9 @@
   <div class="section">
     <div class="section-title">
       <h3>备份恢复</h3>
-      <button class="btn btn-primary" @click="doCreate" :disabled="creating">
+      <NButton type="primary" @click="doCreate" :disabled="creating">
         {{ creating ? '创建中...' : '创建备份' }}
-      </button>
+      </NButton>
     </div>
 
     <div v-if="error" class="error-bar">{{ error }}</div>
@@ -25,9 +25,9 @@
           <td>{{ b.size_mb }} MB</td>
           <td>{{ b.created_at }}</td>
           <td>
-            <button class="btn btn-warn btn-sm" @click="confirmRestore(b.filename)" :disabled="restoring">
+            <NButton type="warning" size="small" @click="confirmRestore(b.filename)" :disabled="restoring">
               {{ restoring === b.filename ? '恢复中...' : '恢复' }}
-            </button>
+            </NButton>
           </td>
         </tr>
       </tbody>
@@ -42,9 +42,9 @@
     <div class="factory-section">
       <h4 style="margin: 0 0 6px; color: var(--text);">恢复出厂设置</h4>
       <p style="margin: 0 0 12px; font-size: 13px; color: var(--text-light);">清空所有业务数据（流水、报表、日志），保留主数据配置。执行前自动创建备份。</p>
-      <button class="btn btn-warn" @click="confirmingFactory = true" :disabled="resetting">
+      <NButton type="warning" @click="confirmingFactory = true" :disabled="resetting">
         {{ resetting ? '执行中...' : '恢复出厂设置' }}
-      </button>
+      </NButton>
     </div>
   </div>
 
@@ -55,8 +55,8 @@
       <p>将从 <strong>{{ confirming }}</strong> 恢复数据，当前数据库将被替换。</p>
       <p style="color: var(--warn-text); font-weight: 600;">此操作不可撤销，请确认！</p>
       <div class="btn-row" style="justify-content: flex-end; margin-top: 20px;">
-        <button class="btn btn-secondary" @click="confirming = null">取消</button>
-        <button class="btn btn-warn" @click="doRestore(confirming)">确认恢复</button>
+        <NButton secondary @click="confirming = null">取消</NButton>
+        <NButton type="warning" @click="doRestore(confirming)">确认恢复</NButton>
       </div>
     </div>
   </div>
@@ -74,8 +74,8 @@
       </ul>
       <p style="color: var(--warn-text); font-weight: 600;">主数据（单位、账户、模板等）将被保留。执行前自动创建备份。</p>
       <div class="btn-row" style="justify-content: flex-end; margin-top: 20px;">
-        <button class="btn btn-secondary" @click="confirmingFactory = false">取消</button>
-        <button class="btn btn-warn" @click="doFactoryReset">确认恢复出厂</button>
+        <NButton secondary @click="confirmingFactory = false">取消</NButton>
+        <NButton type="warning" @click="doFactoryReset">确认恢复出厂</NButton>
       </div>
     </div>
   </div>
@@ -83,6 +83,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { NButton } from 'naive-ui'
 import { listBackups, createBackup, restoreBackup, factoryReset } from '@/api/backup'
 
 const backups = ref([])

@@ -8,9 +8,9 @@
       <div class="filters-bar">
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary" @click="doExportTemplate">下载录入模板</button>
-          <button class="btn" :class="tab==='quick'?'btn-primary':'btn-secondary'" @click="tab='quick'">快速录入</button>
-          <button class="btn" :class="tab==='upload'?'btn-primary':'btn-secondary'" @click="tab='upload'">Excel 上传</button>
+          <NButton secondary @click="doExportTemplate">下载录入模板</NButton>
+          <NButton :type="tab==='quick'?'primary':'default'" @click="tab='quick'">快速录入</NButton>
+          <NButton :type="tab==='upload'?'primary':'default'" @click="tab='upload'">Excel 上传</NButton>
         </div>
       </div>
 
@@ -44,7 +44,7 @@
                     <input v-model="row[col.field_code]" class="cell-input" :placeholder="col.field_name_cn" />
                   </template>
                 </td>
-                <td><button class="btn btn-secondary btn-sm" @click="editableRows.splice(idx, 1)" title="删除行">x</button></td>
+                <td><NButton secondary size="small" @click="editableRows.splice(idx, 1)" title="删除行">x</NButton></td>
               </tr>
               <tr v-if="!editableRows.length">
                 <td :colspan="visibleColumns.length + 1" style="text-align:center;color:var(--muted);padding:30px">点击下方"添加行"开始录入</td>
@@ -54,9 +54,9 @@
         </div>
 
         <div class="bottom-bar">
-          <button class="btn btn-secondary" @click="addRow()">+ 添加行</button>
-          <button class="btn btn-secondary" @click="addRows(5)">+ 添加5行</button>
-          <button class="btn btn-primary" @click="doSave" :disabled="saving">{{ saving ? '保存中...' : '保存到暂存区' }}</button>
+          <NButton secondary @click="addRow()">+ 添加行</NButton>
+          <NButton secondary @click="addRows(5)">+ 添加5行</NButton>
+          <NButton type="primary" @click="doSave" :disabled="saving">{{ saving ? '保存中...' : '保存到暂存区' }}</NButton>
           <span class="count-info">共 {{ editableRows.length }} 行</span>
         </div>
       </div>
@@ -71,7 +71,7 @@
         <div v-if="uploadFile" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 14px;background:var(--ok-bg);border:1px solid var(--ok-border);border-radius:var(--radius-sm)">
           <span>{{ uploadFile.name }} ({{ (uploadFile.size/1024).toFixed(1) }}KB)</span>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-primary" @click="doUpload" :disabled="uploading">{{ uploading ? '上传中...' : '上传预览' }}</button>
+            <NButton type="primary" @click="doUpload" :disabled="uploading">{{ uploading ? '上传中...' : '上传预览' }}</NButton>
           </div>
         </div>
       </div>
@@ -81,7 +81,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect } from 'naive-ui'
+import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import * as master from '@/api/master'
