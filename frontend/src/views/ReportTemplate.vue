@@ -125,7 +125,6 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/reportTemplate'
-import * as fund from '@/api/fund'
 
 const router = useRouter()
 const reportTypes = ref([])

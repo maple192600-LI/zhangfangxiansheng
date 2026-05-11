@@ -2,7 +2,7 @@
   <div class="review-page">
     <div class="review-header">
       <div>
-        <p class="eyebrow">Fund Agent 审核</p>
+        <p class="eyebrow">产物审核</p>
         <h2>{{ title }}</h2>
       </div>
       <div class="confidence" :class="confidenceClass">
@@ -68,7 +68,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import * as fund from '@/api/fund'
+import * as artifacts from '@/api/artifacts'
 import * as bank from '@/api/bank'
 import * as manual from '@/api/manual'
 
@@ -126,8 +126,8 @@ async function loadArtifact() {
   loading.value = true
   try {
     artifact.value = artifactType.value === 'parser'
-      ? await fund.getParserArtifact(artifactId.value)
-      : await fund.getRuleArtifact(artifactId.value)
+      ? await artifacts.getParserArtifact(artifactId.value)
+      : await artifacts.getRuleArtifact(artifactId.value)
   } catch (e) {
     alert(e.message || '读取草稿失败')
   } finally {
@@ -141,7 +141,7 @@ async function approve() {
   commitResult.value = null
   try {
     if (artifactType.value === 'parser') {
-      await fund.approveParserArtifact(artifactId.value)
+      await artifacts.approveParserArtifact(artifactId.value)
       if (flow.value === 'bank' && route.query.batch_code) {
         commitResult.value = await bank.commitBankImport({
           batch_code: route.query.batch_code,
@@ -158,7 +158,7 @@ async function approve() {
         resultMessage.value = '已接受 Parser。'
       }
     } else {
-      await fund.approveRuleArtifact(artifactId.value)
+      await artifacts.approveRuleArtifact(artifactId.value)
       resultMessage.value = '已接受 Rule，后续生成报表将走 Runtime。'
     }
     await loadArtifact()
