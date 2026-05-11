@@ -85,13 +85,19 @@ def run_parser(
 
     Preconditions:
         - artifact.status == 'active'
-        - artifact.code passes AST whitelist scan (§C5)
+        - artifact.code passes AST whitelist scan (artifact_ast_guard.validate_artifact_code)
         - file_path points to a readable .xlsx/.xls file
 
     Runtime constraints:
         - Execution runs inside core.runtime_guard.no_ai_runtime()
         - No LLM / network calls allowed (§C8)
-        - Single execution timeout: 60 seconds
+        - Single execution timeout: 60 seconds (artifact_sandbox.DEFAULT_TIMEOUT_SECONDS)
+        - Only active artifacts may execute
+        - Output rows must conform to db.schemas.ParserRuntimeRow
+        - Errors must be returned as structured ArtifactRuntimeError subclasses
+
+    Implementation status:
+        Contract placeholder only. Phase E1 will deliver the first working executor.
 
     Raises:
         ArtifactNotFoundError    — artifact_id does not exist
@@ -102,7 +108,7 @@ def run_parser(
     """
     raise NotImplementedError(
         "ParserArtifact runtime 尚未实现。"
-        "完整执行器将在后续 Phase E 中交付。"
+        "完整执行器将在后续 Phase E1 中交付。"
     )
 
 
@@ -128,10 +134,14 @@ def run_rule(
     Preconditions:
         - artifact.status == 'active'
         - artifact.placeholder_bindings covers all §TEMPLATE_18 placeholders
-        - artifact.code passes AST whitelist scan (§C5)
+        - artifact.code passes AST whitelist scan (artifact_ast_guard.validate_artifact_code)
 
     Runtime constraints:
         - Same as run_parser (no_ai_runtime, 60s timeout, §C8)
+        - Only active artifacts may execute
+
+    Implementation status:
+        Contract placeholder only. Phase H1 will deliver the first working executor.
 
     Raises:
         ArtifactNotFoundError    — artifact_id does not exist
@@ -142,5 +152,5 @@ def run_rule(
     """
     raise NotImplementedError(
         "RuleArtifact runtime 尚未实现。"
-        "完整执行器将在后续 Phase H 中交付。"
+        "完整执行器将在后续 Phase H1 中交付。"
     )

@@ -316,8 +316,8 @@ AI 智能体预留（7）：
 
 | 断链 | 位置 | 调用方 |
 |------|------|--------|
-| `artifact_runtime.run_parser` | `core/artifact_runtime.py:29-32` | `bank_import_service.preview` (L130), `bank_import_service.commit` (L157), `manual_flow_service.commit_manual` |
-| `artifact_runtime.run_rule` | `core/artifact_runtime.py:35-39` | `report_service.generate_report` (L511) |
+| `artifact_runtime.run_parser` | `core/artifact_runtime.py` — contract placeholder（Runtime R0 已建立 AST guard + Schema） | `bank_import_service.preview`, `bank_import_service.commit`, `manual_flow_service.commit_manual` |
+| `artifact_runtime.run_rule` | `core/artifact_runtime.py` — contract placeholder（Runtime R0 已建立 AST guard + Schema） | `report_service.generate_report` |
 | BankRule 无后端 | `BankRule.vue` → 无 API | 前端页面 |
 | `/reports/generate` 前端无入口 | `api/reports.py:236` | 无前端调用 |
 
