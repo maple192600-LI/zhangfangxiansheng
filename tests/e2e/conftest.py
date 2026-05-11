@@ -59,7 +59,20 @@ def e2e_env(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
 
     with engine.begin() as conn:
-        for table in ["template_inference_job", "rule_artifacts", "parser_artifacts", "fund_events"]:
+        for table in [
+            "template_inference_job",
+            "rule_artifacts",
+            "parser_artifacts",
+            "fund_events",
+            # 004 migration 创建的表，Base.metadata.create_all() 会提前创建，
+            # 测试需要从旧 schema 跑 Alembic upgrade，因此必须先 drop
+            "agent_memories",
+            "agent_runs",
+            "agent_messages",
+            "agent_sessions",
+            "skills_v2",
+            "agents_v2",
+        ]:
             conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
 
     from alembic import command
