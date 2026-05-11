@@ -244,41 +244,6 @@ def skill_check_deps(skill_code: str, ctx: ToolContext = None) -> dict:
     }
 
 
-# DEPRECATED: fund_skill_run bridges the generic Agent tool layer to the legacy FundAgent harness.
-# Do not add new callers.
-# This function must be removed after artifact service and generic Agent skill paths are established.
-@register_tool(read_only=False, toolset="database")
-def fund_skill_run(skill_name: str, payload: dict = None, ctx: ToolContext = None) -> dict:
-    """运行 Fund Agent 的确定性财务技能（直接执行 Python 代码，不经过 LLM）。
-
-    可用技能：
-    - parser.bank: 解析银行流水文件。payload 需含 file_path, account_code, template_id
-    - parser.manual: 解析手工流水。payload 需含 records（流水记录列表）
-    - rule.template_fill: 填充报表模板。payload 需含 template_id, data
-    - rule.maintain: 维护规则。payload 需含 rule_id, changes
-    - template.inference: 推断模板结构。payload 需含 file_path
-    """
-    from agents.fund.harness import FundAgent
-
-    allowed = {"parser.bank", "parser.manual", "rule.template_fill", "rule.maintain", "template.inference"}
-    if skill_name not in allowed:
-        return {"ok": False, "error": f"未知的 Fund 技能: {skill_name}，可用: {', '.join(sorted(allowed))}"}
-
-    ok = False
-    try:
-        agent = FundAgent(ctx.db)
-        result = agent.run_skill(skill_name, payload or {})
-        ok = True
-        return {"ok": True, "result": result.payload}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
-        try:
-            _record_fund_skill_experience(skill_name, ok)
-        except Exception:
-            pass
-
-
 @register_tool(read_only=True)
 def skill_step_report(
     skill_code: str,
@@ -564,38 +529,3 @@ def _update_meta_last_used(skill_dir: str) -> None:
             json.dump(meta, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
-
-
-def _find_fund_skill_dir(skill_name: str) -> str | None:
-    """根据 code_entry 自动查找对应的系统技能目录"""
-    from config import AGENTS_ROOT
-    from agents.skill_registry import skill_registry, load_skill_l1
-
-    system_dir = os.path.join(AGENTS_ROOT, "system", "skills")
-    if not os.path.isdir(system_dir):
-        return None
-
-    # 优先从已加载的 registry 查找
-    for skill in skill_registry.list_skills():
-        if getattr(skill, "code_entry", "") == skill_name:
-            return skill.skill_dir
-
-    # fallback：扫描 system skills 目录
-    for name in os.listdir(system_dir):
-        path = os.path.join(system_dir, name)
-        if not os.path.isdir(path):
-            continue
-        meta = load_skill_l1(path)
-        if meta and getattr(meta, "code_entry", "") == skill_name:
-            return path
-    return None
-
-
-def _record_fund_skill_experience(skill_name: str, ok: bool) -> None:
-    """fund_skill_run 执行后，记录到对应系统技能的 experience.json"""
-    from agents.skill_executor import _record_execution
-
-    skill_dir = _find_fund_skill_dir(skill_name)
-    if skill_dir and os.path.isdir(skill_dir):
-        _record_execution(skill_dir, ok=ok, duration_ms=0)
-        _update_meta_last_used(skill_dir)

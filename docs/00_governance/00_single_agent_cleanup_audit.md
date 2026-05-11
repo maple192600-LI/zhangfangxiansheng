@@ -1,7 +1,7 @@
-# 单通用 Agent 架构清理审计报告 v3.2
+# 单通用 Agent 架构清理审计报告 v3.3
 
-> **本文档是清理审计基线，不是功能实现文档，不代表清理已完成。**
-> 本文档记录仓库中与"单通用 Agent 架构原则"不一致的所有对象，按分类和 Phase 给出清理建议。实际清理需按 Phase 顺序执行，每 Phase 完成后验收再进入下一 Phase。
+> **本文档是清理审计基线。Phase 2-5 已完成，旧 FundAgent 体系残留已删除。**
+> 本文档记录仓库中与"单通用 Agent 架构原则"不一致的所有对象，按分类和 Phase 给出清理建议。
 
 **审计日期：** 2026-05-10
 **审计范围：** 仓库全部文件，聚焦"单通用 Agent 架构原则"一致性
@@ -38,14 +38,12 @@
 
 ### 3.1 生产死链路
 
-`backend/api/fund_agent.py` 定义了 9 个 API 端点（`/api/fund/*`），但 `backend/main.py` 未注册该 router。这意味着：
+`backend/api/fund_agent.py` 定义了 9 个 API 端点（`/api/fund/*`），但 `backend/main.py` 未注册该 router。**已在 Phase 5（2026-05-11）删除**。
 
-- 生产环境中 `/api/fund/*` 的 9 个端点全部 404
-- 前端 `fund.js` 的 9 个 API 调用全部不通
-- 依赖这些端点的 `AgentReview.vue`、`ManualFlow.vue`、`ReportTemplate.vue` 功能不可用
-- `tests/fund/test_phase6_api.py` 在测试中手动注册 router 才能通过，生产从未生效
-
-这是最高优先级问题：旧体系声称有 5 个 fund skill 和完整的 API 端点，但生产从未跑通。
+- 旧 `/api/fund/*` 端点和 `backend/api/fund_agent.py` 已删除
+- 旧 `frontend/src/api/fund.js` 已删除，前端已迁移到 `api/artifacts.js`
+- `fund_skill_run` 工具已从所有文件中清除
+- `backend/agents/fund/` 目录已整体删除
 
 ### 3.2 引用不存在的文件
 
@@ -97,19 +95,19 @@
 
 | 文件 | 分类 | 问题 | 处理建议 |
 |------|------|------|----------|
-| `backend/agents/fund/__init__.py` | A | "Fund Agent 账房先生核心财务智能体" — 旧 Agent 声明 | Phase 5 删除 |
-| `backend/agents/fund/harness.py` | B | `FundAgent` 类（第 35 行）、`ALLOWED_SKILLS`（第 20-26 行）— 旧调度器，但 `_stage_a_parse` / `_stage_b_map` 可复用 | Phase 3 提取可复用逻辑 → Phase 5 删除 |
-| `backend/agents/fund/memory.py` | B | Artifact CRUD（第 13-148 行）和字段字典加载（第 151-199 行）可复用 | Phase 3 迁移 → Phase 5 删除 |
-| `backend/agents/fund/schemas.py` | B | Pydantic Schema 全部可复用 | Phase 3 迁移 → Phase 5 删除 |
-| `backend/agents/fund/skills/*.py` | A | 5 个空壳文件 | Phase 5 删除 |
+| `backend/agents/fund/__init__.py` | A | ~~Phase 5 已删除~~ |
+| `backend/agents/fund/harness.py` | B | ~~Phase 3 提取可复用逻辑 → Phase 5 已删除~~ |
+| `backend/agents/fund/memory.py` | B | ~~Phase 3 迁移 → Phase 5 已删除~~ |
+| `backend/agents/fund/schemas.py` | B | ~~Phase 3 迁移 → Phase 5 已删除~~ |
+| `backend/agents/fund/skills/*.py` | A | ~~Phase 5 已删除~~ |
 
 ### 4.6 后端代码 — 桥接工具
 
 | 文件 | 分类 | 问题 | 处理建议 |
 |------|------|------|----------|
-| `skill_ops.py` — `fund_skill_run`（第 248-276 行） | A | 直接调用 FundAgent 绕过 runtime。该函数本身必须删除，不迁移。不得将其调度结构迁移为新的通用 Agent 工具 | Phase 5 删除 |
-| `skill_ops.py` — `_find_fund_skill_dir`（第 566-588 行） | A | 定位旧 skill 目录 | Phase 5 删除 |
-| `skill_ops.py` — `_record_fund_skill_experience`（第 591-598 行） | B | 旧经验记录。仅其中的经验记录思路，如确认有价值，可迁移到通用技能经验系统 | Phase 3 评估并迁移 → Phase 5 删除旧函数 |
+| `skill_ops.py` — `fund_skill_run` | A | ~~Phase 5 已删除~~ |
+| `skill_ops.py` — `_find_fund_skill_dir` | A | ~~Phase 5 已删除~~ |
+| `skill_ops.py` — `_record_fund_skill_experience` | B | ~~Phase 3 评估 → Phase 5 已删除旧函数~~ |
 
 ### 4.7 后端代码 — API 路由（死链路）
 
@@ -117,7 +115,7 @@
 |------|------|------|----------|
 | `backend/api/fund_agent.py` 整体 | B（部分迁移后全部 A） | 9 个端点，main.py 未注册，生产死链路 | 见下方细分 |
 | ↳ ParserArtifact / RuleArtifact / TemplateInferenceJob 的 CRUD、审核、查询端点 | B | 产物管理逻辑可复用 | Phase 3 迁移到新 artifact API |
-| ↳ `/api/fund/agent/skills/*/invoke` 等 skill 调用端点 | A | 直接调用旧 FundAgent，属于旧调度体系。必须删除，不迁移，不得改名后保留 | Phase 5 删除 |
+| ↳ `/api/fund/agent/skills/*/invoke` 等 skill 调用端点 | A | ~~Phase 5 已删除~~ |
 | `backend/main.py` | C | 无 fund_agent 注册，共 20 个路由模块 | Phase 2 注册新路由（通用 Agent 产物管理 API） |
 
 ### 4.8 后端代码 — 产物执行基础设施
@@ -129,7 +127,7 @@
 | `backend/fund/artifacts/parsers/`（15 个 .py 产物文件） | C | §C5 白名单，确定性解析产物 | 保留 |
 | `backend/fund/__init__.py` | C | primitives 和 artifacts 包入口 | 保留 |
 
-重要区别：`backend/fund/`（产物确定性执行基础设施）≠ `backend/agents/fund/`（FundAgent 调度器）。前者保留，后者迁移后删除。
+重要区别：`backend/fund/`（产物确定性执行基础设施）≠ `backend/agents/fund/`（已删除的 FundAgent 调度器）。前者保留，后者已删除。
 
 ### 4.9 SKILL.md 技能文件
 
@@ -138,7 +136,7 @@
 | 文件 | 分类 | 核心问题 | 处理建议 |
 |------|------|----------|----------|
 | `fund_parser_bank/SKILL.md` | B | 含 `code_entry` 绑定到 harness key；含 `db_insert_fund_event`（直接写业务表） | Phase 3 改为通用 Agent 技能：移除 code_entry，移除 db_insert_fund_event，保留解析逻辑描述 |
-| `fund_parser_manual/SKILL.md` | A | 根本性问题：不是生成解析器，而是绕过 ParserArtifact 直接录入手工流水。违反原则 3 和 7 | Phase 5 删除旧 `fund_parser_manual/SKILL.md`，不得直接迁移。后续如需手工流水相关技能，应新建 `manual_parser` 或 `manual_entry_assistant`，并明确其职责：生成手工模板解析规则或辅助用户录入，不得直接写入 `fund_events`，不得绕过预览、确认和确定性服务层 |
+| `fund_parser_manual/SKILL.md` | A | ~~Phase 5 已删除~~。后续如需手工流水相关技能，应新建并明确职责 |
 | `fund_rule_template_fill/SKILL.md` | B | 含 `code_entry`；含 `db_insert_fund_event` | Phase 3 移除 code_entry 和 db_insert_fund_event，保留规则填充逻辑描述 |
 | `fund_rule_maintain/SKILL.md` | B | 含 `code_entry` | Phase 3 移除 code_entry，保留规则维护逻辑描述 |
 | `fund_template_inference/SKILL.md` | B | 含 `code_entry` | Phase 3 移除 code_entry，保留模板推断逻辑描述 |
@@ -157,11 +155,11 @@
 
 | 文件 | 分类 | 问题 | 处理建议 |
 |------|------|------|----------|
-| `tests/fund/conftest.py` | A | 引用 `agents.fund.skills._shared`（不存在） | Phase 5 删除 |
-| `tests/fund/test_phase6_api.py` | A | 手动注册 fund_agent router，测试旧体系端点 | Phase 5 删除（新端点在 Phase 2-3 后写新测试） |
-| `tests/fund/test_artifact_runtime.py` | A | 引用 `_shared`（不存在） | Phase 5 删除 |
-| `tests/fund/test_sandbox.py` | A | 引用 `agents.fund.sandbox`（不存在） | Phase 5 删除 |
-| `tests/fund/test_phase7_privacy.py` | A | 直接实例化 FundAgent | Phase 5 删除 |
+| `tests/fund/conftest.py` | A | ~~Phase 5 清理了 agents.fund.skills 导入，保留了 primitives_db fixture~~ |
+| `tests/fund/test_phase6_api.py` | A | ~~Phase 5 已删除~~ |
+| `tests/fund/test_artifact_runtime.py` | A | ~~Phase 5 已删除~~ |
+| `tests/fund/test_sandbox.py` | A | ~~Phase 5 已删除~~ |
+| `tests/fund/test_phase7_privacy.py` | A | ~~Phase 5 已删除~~ |
 | `tests/fund/primitives/`（7 个文件） | C | 基元函数测试，不含 FundAgent 概念 | 保留 |
 | `tests/e2e/test_full_flow.py` | D | 调用 `/api/fund/` 端点 | Phase 4 更新为新端点路径 |
 | `tests/e2e/conftest.py` | D | 引用 fund_agent | Phase 4 更新引用 |
@@ -322,7 +320,7 @@
 
 ---
 
-### Phase 5：删除旧体系（风险：低，前置条件已满足）
+### Phase 5：删除旧体系 — ✅ 已完成（2026-05-11）
 
 **目标：** 删除所有被标记为 A 类的文件和已完成迁移的 B 类源文件。
 
@@ -378,4 +376,4 @@
 
 ---
 
-**审计结论：** 仓库中 FundAgent 旧体系的代码在生产环境从未生效（main.py 未注册路由），文档层面的冲突是主要问题。清理应按 Phase 0-5 顺序执行，每个 Phase 有明确的回滚点和验收标准。`fund_skill_run` 和 skill 调用端点必须删除不得迁移；产物 CRUD/审核/查询端点可迁移到新 artifact API。最关键的交付物是 Phase 2（建立新契约）和 Phase 3（迁移可复用逻辑），Phase 5（删除）只是收尾。
+**审计结论（v3.3 更新）：** Phase 2-5 已完成。旧 FundAgent 体系（`backend/agents/fund/`、`backend/api/fund_agent.py`、`frontend/src/api/fund.js`、`fund_skill_run`）已全部删除。新体系（`/api/artifacts`、`artifact_service`、`template_analysis`、`field_dictionary_service`）已建立。`backend/fund/` 作为确定性执行基础设施保留。后续任务是 Phase D/E/H：实现 `artifact_runtime` 的 `run_parser` 和 `run_rule`。

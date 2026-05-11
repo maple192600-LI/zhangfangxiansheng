@@ -480,7 +480,7 @@ def _build_skill_hints(skills: list, pre_exec_results: dict = None) -> str:
 
     根据技能的 execution_mode 决定注入策略：
     - instruction: 注入完整工作流指令
-    - code (有 code_entry): 注入简短指令引导调用 fund_skill_run
+    - code (有 code_entry): 注入简短指令引导调用 skill_run
     - code (无 code_entry, 预执行成功): 注入执行结果摘要
     - code (无 code_entry, 预执行失败): 注入简短指令引导调用 skill_run
     - hybrid: 同时注入代码指令和工作流补充

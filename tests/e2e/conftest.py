@@ -54,13 +54,6 @@ def e2e_env(tmp_path, monkeypatch):
     _bq.SessionLocal = SessionLocal
     _mm.SessionLocal = SessionLocal
 
-    from agents.fund.skills import _shared as _skill_shared
-    from agents.fund.skills import rule_maintain as _rule_maintain
-    from agents.fund.skills import template_inference as _template_inference
-    _skill_shared.SessionLocal = SessionLocal
-    _rule_maintain.SessionLocal = SessionLocal
-    _template_inference.SessionLocal = SessionLocal
-
     from database import Base
     import db.tables  # noqa: F401
     Base.metadata.create_all(engine)
@@ -76,10 +69,9 @@ def e2e_env(tmp_path, monkeypatch):
     command.upgrade(cfg, "head")
 
     from services import bank_import_service, manual_flow_service
-    from api import fund_agent, reports
+    from api import reports
     monkeypatch.setattr(bank_import_service, "DATA_DIR", str(data_dir))
     monkeypatch.setattr(manual_flow_service, "DATA_DIR", str(data_dir))
-    monkeypatch.setattr(fund_agent, "DATA_DIR", str(data_dir))
     monkeypatch.setattr(reports, "DATA_DIR", str(data_dir))
 
     _seed_master_data(SessionLocal)
@@ -142,7 +134,6 @@ def e2e_client(e2e_env):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from api.bank_import import router as bank_router
-    from api.fund_agent import router as fund_router
     from api.manual_flow import router as manual_router
     from api.reports import router as reports_router
     from api.events import router as events_router
@@ -151,7 +142,6 @@ def e2e_client(e2e_env):
     app = FastAPI()
     app.include_router(bank_router, prefix="/api")
     app.include_router(manual_router, prefix="/api")
-    app.include_router(fund_router, prefix="/api")
     app.include_router(reports_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
 

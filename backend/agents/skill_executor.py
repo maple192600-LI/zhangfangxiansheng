@@ -65,7 +65,7 @@ def format_skill_instruction(skill: SkillMeta) -> str:
     """instruction/hybrid 模式：将技能格式化为 LLM 强制执行的指令"""
     body = skill.load_l2()
 
-    # code 模式：生成简短指令引导调用 fund_skill_run 或 skill_run
+    # code 模式：生成简短指令引导调用 skill_run
     if skill.execution_mode == "code" and skill.code_entry:
         return _format_code_directive(skill)
 
@@ -139,10 +139,9 @@ def _format_code_directive(skill: SkillMeta) -> str:
                 arg_parts.append(f'{name}="<{info}>"')
         args_example = ", ".join(arg_parts)
 
-    # 如果有 code_entry，走 fund_skill_run
     if skill.code_entry:
-        tool_name = "fund_skill_run"
-        call_args = f'skill_name="{skill.code_entry}", payload={{{args_example}}}'
+        tool_name = "skill_run"
+        call_args = f'skill_code="{skill.code_entry}", {args_example}'
     else:
         tool_name = "skill_run"
         call_args = f'skill_code="{skill.code}", {args_example}'
