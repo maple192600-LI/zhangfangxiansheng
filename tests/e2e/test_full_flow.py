@@ -65,8 +65,3 @@ def test_manual_excel_e2e(e2e_client, e2e_env):
 @pytest.mark.skip(reason="Requires artifact runtime (Phase H). Re-enable after run_rule is implemented.")
 def test_template_report_e2e(e2e_client, e2e_env):
     pass
-
-
-@pytest.mark.skip(reason="Requires legacy FundAgent skill invoke path. Deprecated in Phase 2.")
-def test_privacy_offline_blocks_skill_before_artifact(e2e_client, e2e_env):
-    pass

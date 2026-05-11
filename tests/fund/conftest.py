@@ -77,12 +77,6 @@ def primitives_db(tmp_db_path):
     _bq.SessionLocal = new_sess
     _ag.SessionLocal = new_sess
 
-    from agents.fund.skills import _shared as _skill_shared
-    from agents.fund.skills import rule_maintain as _rule_maintain
-    from agents.fund.skills import template_inference as _template_inference
-    _skill_shared.SessionLocal = new_sess
-    _rule_maintain.SessionLocal = new_sess
-    _template_inference.SessionLocal = new_sess
 
     # 3) 建 v2 辅助表（create_all）
     from database import Base  # noqa: F401

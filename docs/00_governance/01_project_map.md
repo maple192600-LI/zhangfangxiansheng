@@ -8,14 +8,14 @@
 
 ## 0. Phase 0 冻结标记（当前仓库状态说明）
 
-> 本节标记旧 FundAgent 体系的当前状态，不改变任何运行时行为。
+> 本节记录旧 FundAgent 体系的清理状态。
 > 完整审计基线见 [`00_single_agent_cleanup_audit.md`](00_single_agent_cleanup_audit.md)。
 
-- `backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。不得新增对此目录的依赖。
-- `backend/api/fund_agent.py` 定义的 `/api/fund/*` 路由未注册到 `main.py`，生产环境不可用（全部 404）。
-- 前端中任何 `/api/fund/*` 调用都是死链路，不得作为目标实现依据。
-- `backend/fund/`（含 `primitives/` 和 `artifacts/parsers/`）是产物确定性执行基础设施，必须保留，不等于 `backend/agents/fund/`。
-- 本文件中旧 FundAgent 相关内容（§7 三层架构、§9 半成品链路等）仅表示当前仓库状态，不代表目标架构。目标架构见 [`03_target_product_map.md`](03_target_product_map.md) 和审计基线。
+- `backend/agents/fund/` 已在 Phase 5 删除（2026-05-11）。旧 FundAgent 调度器、harness、schemas、skills 不再存在。
+- `backend/api/fund_agent.py` 已在 Phase 5 删除（2026-05-11）。旧 `/api/fund/*` 路由不再存在。
+- `frontend/src/api/fund.js` 已在 Phase 5 删除（2026-05-11）。前端无 `/api/fund/*` 调用。
+- `backend/fund/`（含 `primitives/` 和 `artifacts/`）是产物确定性执行基础设施，必须保留。**不等于**已删除的 `backend/agents/fund/`。
+- `fund_skill_run` 工具已从 `skill_ops.py`、`tool_registry.py`、`permission.py`、`prompt_builder.py`、`runtime.py`、`skill_executor.py` 中清除。
 
 ## 1. 项目总览
 
@@ -38,7 +38,7 @@
 | `/home/quick` | `HomeQuick.vue` | `home` | `/api/home/quick-links` | 可用 — 快捷入口 |
 | `/home/system` | `HomeSystem.vue` | `home` | `/api/home/system-status` | 可用 — 系统状态 |
 | `/bank-import` | `BankImport.vue` | `bank` | `/api/bank-import` | **断链** — upload 可上传文件，preview/commit 依赖 `artifact_runtime.run_parser` 抛异常 |
-| `/manual-flow` | `ManualFlow.vue` | `manual` + `fund` + `master` | `/api/manual-flow` + `/api/fund` | **部分可用** — 快速录入可用；Excel 上传可上传文件，但预览/提交依赖 ParserArtifact runtime，闭环不完整 |
+| `/manual-flow` | `ManualFlow.vue` | `manual` + `artifacts` + `master` | `/api/manual-flow` + `/api/artifacts` | **部分可用** — 快速录入可用；Excel 上传可上传文件，但预览/提交依赖 ParserArtifact runtime，闭环不完整 |
 | `/manual-maintenance` | `ManualMaintenance.vue` | `manual` + `master` | `/api/manual-flow` + `/api/master` | 可用 — 方案管理 + 字段池 |
 | `/upload-preview` | `UploadPreview.vue` | `manual` | `/api/manual-flow` | **断链** — 调用 `manual-flow/preview`，对 `manual_excel` 类型不完整 |
 | `/daily-report` | `DailyReport.vue` | `report` + `master` + `export` | `/api/reports` | 可用 — 日报展示 + 模板列 + 导出 |
@@ -53,9 +53,9 @@
 | `/month-report` | `MonthReport.vue` | `TemplateReport.vue` composable | `/api/reports/month-report` | 可用 |
 | `/year-report` | `YearReport.vue` | `TemplateReport.vue` composable | `/api/reports/year-report` | 可用 |
 | `/rule/bank` | `BankRule.vue` | 无 | 无后端 | **占位** — 纯提示页，提示"规则中心将在后续阶段重建" |
-| `/agent/review/:type/:id` | `AgentReview.vue` | `fund` + `bank` + `manual` | `/api/fund` | **半成品** — 可审批 Parser/Rule artifact，但审批后 artifact_runtime 仍无法执行 |
+| `/agent/review/:type/:id` | `AgentReview.vue` | `artifacts` + `bank` + `manual` | `/api/artifacts` | **半成品** — 可审批 Parser/Rule artifact，但审批后 artifact_runtime 仍无法执行 |
 | `/agents/:id` | `AgentDetail.vue` | `stores/agents` → `/api/agent` | `/api/agent` | 可用 — 完整 Agent 聊天/文件/记忆/技能面板 |
-| `/data/report-tpl` | `ReportTemplate.vue` | `reportTemplate` + `fund` | `/api/report-templates` + `/api/fund` | 可用 — 模板 CRUD + Excel 上传识别 |
+| `/data/report-tpl` | `ReportTemplate.vue` | `reportTemplate` + `artifacts` | `/api/report-templates` + `/api/artifacts` | 可用 — 模板 CRUD + Excel 上传识别 |
 | `/account-manage` | `AccountManage.vue` | `master` | `/api/master` | 可用 — 完整主数据管理（板块/法人/银行/账户/别名） |
 | `/ai-config` | `AIConfig.vue` | `ai` | `/api/ai-configs` | 可用 — AI 配置管理 |
 | `/exception/receipt` | `ExceptionCenter.vue` | `events` | `/api/events` | 可用 — 异常事件处理 |
@@ -98,7 +98,8 @@ AI 智能体预留（7）：
 | `api/manual.js` | `/api/manual-flow` | `api/manual_flow.py` | `manual_flow_service` + `manual_scheme_service` | `import_batches`, `fund_events`, `manual_field_pool`, `manual_template_schemes` |
 | `api/report.js` | `/api/base-data` `/api/reports` | `api/base_data.py` + `api/reports.py` | `base_data_service` + `report_service` | `fund_events` |
 | `api/reportTemplate.js` | `/api/report-templates` | `api/report_template.py` | `report_template_service` | `report_templates` |
-| `api/fund.js` | `/api/fund` | `api/fund_agent.py` | `agents.fund.harness` + `agents.fund.memory` | `parser_artifacts`, `rule_artifacts`, `template_inference_job` |
+| `api/fund.js` | ~~已删除~~ | ~~已删除~~ | — | Phase 5 已删除，无消费方 |
+| `api/artifacts.js` | `/api/artifacts` | `api/artifacts.py` | `artifact_service` | `parser_artifacts`, `rule_artifacts`, `template_inference_job` |
 | `api/agent.js` | `/api/agent` | `api/agent.py` | `agent_init` + `agents.runtime` | `agents_v2`, `skills_v2`, `agent_sessions`, `agent_messages`, `agent_memories`, `agent_runs` |
 | `api/ai.js` | `/api/ai-configs` | `api/ai_config.py` + `api/agent_config.py` | `ai_config_service` | `ai_configs` |
 | `api/home.js` | `/api/home` | `api/home.py` | `home_service` | `fund_events`, `accounts` |
@@ -133,7 +134,8 @@ AI 智能体预留（7）：
 | `api/ai_config.py` | `/api/ai-configs` | 9 | `ai.js` | 可用 |
 | `api/agent_config.py` | `/api/agent-workspaces` | 1 | `ai.js` | 可用 |
 | `api/agent.py` | `/api/agent` | 30 | `agent.js` + `stores/agents.js` | 可用 — 完整 Agent 管理和聊天 |
-| `api/fund_agent.py` | `/api/fund` | 9 | `fund.js` | **半成品** — skill invoke 创建占位 artifact（confidence=0），无法实际执行解析 |
+| `api/fund_agent.py` | ~~已删除~~ | — | — | Phase 5 已删除 |
+| `api/artifacts.py` | `/api/artifacts` | 12 | `artifacts.js` | 可用 — Artifact CRUD + 审核流转 |
 
 ## 5. Service 地图
 
@@ -251,11 +253,7 @@ AI 智能体预留（7）：
 ├── memory_store.py     — 记忆存储
 ├── tool_registry.py    — 工具注册
 ├── tools/              — 工具集（file_parse, db_ops, shell_ops, skill_ops 等）
-└── fund/               — 旧 FundAgent 中间态（待迁移后删除）
-    ├── harness.py      — FundAgent 调度器（旧体系，待迁移后删除）
-    ├── schemas.py      — Pydantic 输入/输出 Schema（待迁移）
-    ├── memory.py       — Artifact CRUD + 别名库（待迁移）
-    └── skills/         — 5 个空壳 skill 文件（待删除）
+└── (无 fund/ 子目录)   — 旧 FundAgent 目录已在 Phase 5 删除
 ```
 
 > **注意**：`backend/fund/`（含 `primitives/` 和 `artifacts/parsers/`）是产物确定性执行基础设施，必须保留，不等于 `backend/agents/fund/`。
@@ -266,18 +264,18 @@ AI 智能体预留（7）：
 
 | Skill 目录 | SKILL.md 描述 | code_entry | 经验文件 | 状态 |
 |-----------|-------------|-----------|---------|------|
-| `fund_parser_bank` | 银行流水解析器 | `parser.bank` | 有（0 成功 / 4 次运行） | 占位 — harness 只创建 draft artifact，code 为占位注释 |
-| `fund_parser_manual` | 手工流水解析器 | `parser.manual` | 有（0 成功 / 3 次运行） | 占位 — 同上 |
-| `fund_rule_template_fill` | 报表填充规则生成 | `rule.template_fill` | 无 | 占位 — harness 创建空 binding |
-| `fund_rule_maintain` | 规则维护/迭代 | `rule.maintain` | 无 | 占位 — harness 复制旧版配置 |
-| `fund_template_inference` | 模板自动推断 | `template.inference` | 无 | 部分可用 — Stage A（结构解析）实际工作，Stage B（映射）为简单字符串匹配 |
+| `fund_parser_bank` | 银行流水解析器 | `parser.bank` | 有（0 成功 / 4 次运行） | 占位 — harness 已删除，需 Phase E 重建 |
+| ~~`fund_parser_manual`~~ | ~~手工流水解析器~~ | — | — | **Phase 5 已删除** — 绕过 ParserArtifact，不得恢复 |
+| `fund_rule_template_fill` | 报表填充规则生成 | `rule.template_fill` | 无 | 占位 — harness 已删除 |
+| `fund_rule_maintain` | 规则维护/迭代 | `rule.maintain` | 无 | 占位 — harness 已删除 |
+| `fund_template_inference` | 模板自动推断 | `template.inference` | 无 | 部分可用 — Stage A 实际工作 |
 
 ### Skill 目录名 vs code_entry 对照
 
 | 目录名 | SKILL.md name | harness key | 一致性 |
 |--------|-------------|-------------|-------|
 | `fund_parser_bank` | `fund_parser_bank` | `parser.bank` | 不一致 — 目录用下划线，内部用点分 |
-| `fund_parser_manual` | `fund_parser_manual` | `parser.manual` | 同上 |
+| ~~`fund_parser_manual`~~ | — | — | **Phase 5 已删除** |
 | `fund_rule_template_fill` | `fund_rule_template_fill` | `rule.template_fill` | 同上 |
 | `fund_rule_maintain` | `fund_rule_maintain` | `rule.maintain` | 同上 |
 | `fund_template_inference` | `fund_template_inference` | `template.inference` | 同上 |
@@ -307,9 +305,9 @@ AI 智能体预留（7）：
 |------|------|------|---------|
 | **银行导入 preview/commit** | `BankImport.vue` → `bank-import/preview` | `artifact_runtime.run_parser` 直接抛异常 (`core/artifact_runtime.py:31`) | 需要实际的 ParserArtifact 执行器：读取 Excel → 用 artifact.code 解析 → 输出 CANONICAL_12 行 |
 | **手工 Excel preview/commit** | `ManualFlow.vue` → `manual-flow/preview` → `commit` | `commit_manual` 需要 `parser_artifact_id`，调用 `artifact_runtime.run_parser` 抛异常 | 同上 |
-| **ParserArtifact 创建** | Agent 聊天 + `fund/agent/skills/*/invoke` | `harness._parser_bank` 只创建占位 draft（code 为注释，confidence=0） | 需要让 Agent 生成可执行的解析代码 |
-| **RuleArtifact 创建** | Agent 聊天 + `fund/agent/skills/*/invoke` | `harness._rule_template_fill` 只创建空 binding | 需要真实的 AI 映射能力 |
-| **模板推断 Stage B** | `ReportTemplate.vue` → `fund/templates/upload` | Stage A 可用，Stage B 为简单字符串匹配 | 完整的 Stage B 需要 AI 语义映射 |
+| **ParserArtifact 创建** | Agent 聊天 + `/api/artifacts/parsers/drafts` | Agent 需生成可执行的解析代码（harness 已删除） | 需要让 Agent 生成可执行的解析代码 |
+| **RuleArtifact 创建** | Agent 聊天 + `/api/artifacts/rules/drafts` | Agent 需生成有效的占位符绑定（harness 已删除） | 需要真实的 AI 映射能力 |
+| **模板推断 Stage B** | `ReportTemplate.vue` → `artifacts/template-inference-jobs` | Stage A 可用，Stage B 为简单字符串匹配 | 完整的 Stage B 需要 AI 语义映射 |
 | **BankRule 规则中心** | `/rule/bank` 路由存在 | `BankRule.vue` 纯提示页，无后端 API | 需要 ParserArtifact 列表+编辑 UI + 后端 CRUD |
 | **AgentReview 审批后执行** | `/agent/review/:type/:id` | 可审批 Parser/Rule artifact，但审批后 artifact_runtime 仍无法执行 | 与银行导入同一卡点 |
 | **报表 generate** | 后端 `/reports/generate` 存在，前端无入口 | `artifact_runtime.run_rule` 直接抛异常 (`core/artifact_runtime.py:38`) | 需要实际的 RuleArtifact 执行器 |
@@ -330,6 +328,11 @@ AI 智能体预留（7）：
 | `ParserTemplate` / `parser_templates` 表 | 已完全清理 — PR #2 删除，代码零残留，文档标注为 `[已移除]`，禁止恢复 |
 | 旧 `agents` 表 | 从未存在，从一开始就是 `agents_v2` |
 | 旧 `skills` 表 | 从未存在，从一开始就是 `skills_v2` |
+| `backend/agents/fund/` | Phase 5 已删除（2026-05-11）— 旧 FundAgent 调度器、harness、schemas、skills 全部移除 |
+| `backend/api/fund_agent.py` | Phase 5 已删除 — 旧 `/api/fund/*` 路由全部移除 |
+| `frontend/src/api/fund.js` | Phase 5 已删除 — 前端已迁移到 `artifacts.js` |
+| `fund_skill_run` 工具 | Phase 5 已删除 — 从 skill_ops/tool_registry/permission/prompt_builder/runtime/skill_executor 中清除 |
+| `agents/system/skills/fund_parser_manual/` | Phase 5 已删除 — 绕过 ParserArtifact 的旧技能 |
 
 ## 12. 关键命名误导
 

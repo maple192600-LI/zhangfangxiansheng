@@ -40,17 +40,17 @@
 | 10 | AI 配置 | POST | `/api/ai/configs/:id/test` | 连接测试 |
 | 11 | AI 配置 | GET | `/api/agents` | Agent 配置 |
 | 12 | AI 配置 | PUT | `/api/agents/:name/binding` | 绑定 Provider |
-| 13 | Fund Agent | POST | `/api/fund/agent/skills/parser.bank/invoke` | 生成银行 Parser（**旧体系死链路，未注册到 main.py，必须删除，不迁移**） |
-| 14 | Fund Agent | POST | `/api/fund/agent/skills/parser.manual/invoke` | 生成手工 Parser（**旧体系死链路，必须删除**） |
-| 15 | Fund Agent | POST | `/api/fund/agent/skills/rule.template_fill/invoke` | 生成 Rule（**旧体系死链路，必须删除**） |
-| 16 | Fund Agent | POST | `/api/fund/agent/skills/rule.maintain/invoke` | 维护 Rule（**旧体系死链路，必须删除**） |
-| 17 | Fund Agent | POST | `/api/fund/agent/skills/template.inference/invoke` | 模板识别（**旧体系死链路，必须删除**） |
-| 18 | Artifacts | GET | `/api/fund/parsers` | Parser artifact 列表（**旧体系死链路，后续迁移到 `/api/artifacts/*`**） |
-| 19 | Artifacts | GET | `/api/fund/parsers/:id` | 详情 + 代码（**旧体系死链路，后续迁移**） |
-| 20 | Artifacts | POST | `/api/fund/parsers/:id/approve` | 审批 draft → approved（**旧体系死链路，后续迁移**） |
-| 21 | Artifacts | GET | `/api/fund/rules` | Rule artifact 列表（**旧体系死链路，后续迁移**） |
-| 22 | Artifacts | GET | `/api/fund/rules/:id` | 详情 + bindings（**旧体系死链路，后续迁移**） |
-| 23 | Artifacts | POST | `/api/fund/rules/:id/approve` | 审批（**旧体系死链路，后续迁移**） |
+| 13 | ~~Fund Agent~~ | POST | `/api/fund/agent/skills/parser.bank/invoke` | ~~Phase 5 已删除（2026-05-11）~~ |
+| 14 | ~~Fund Agent~~ | POST | `/api/fund/agent/skills/parser.manual/invoke` | ~~Phase 5 已删除~~ |
+| 15 | ~~Fund Agent~~ | POST | `/api/fund/agent/skills/rule.template_fill/invoke` | ~~Phase 5 已删除~~ |
+| 16 | ~~Fund Agent~~ | POST | `/api/fund/agent/skills/rule.maintain/invoke` | ~~Phase 5 已删除~~ |
+| 17 | ~~Fund Agent~~ | POST | `/api/fund/agent/skills/template.inference/invoke` | ~~Phase 5 已删除~~ |
+| 18 | ~~Artifacts~~ | GET | `/api/fund/parsers` | ~~Phase 5 已删除，已迁移到 `/api/artifacts/parsers`~~ |
+| 19 | ~~Artifacts~~ | GET | `/api/fund/parsers/:id` | ~~Phase 5 已删除，已迁移到 `/api/artifacts/parsers/{id}`~~ |
+| 20 | ~~Artifacts~~ | POST | `/api/fund/parsers/:id/approve` | ~~Phase 5 已删除，已迁移到 `/api/artifacts/parsers/{id}/approve`~~ |
+| 21 | ~~Artifacts~~ | GET | `/api/fund/rules` | ~~Phase 5 已删除，已迁移到 `/api/artifacts/rules`~~ |
+| 22 | ~~Artifacts~~ | GET | `/api/fund/rules/:id` | ~~Phase 5 已删除，已迁移到 `/api/artifacts/rules/{id}`~~ |
+| 23 | ~~Artifacts~~ | POST | `/api/fund/rules/:id/approve` | ~~Phase 5 已删除，已迁移到 `/api/artifacts/rules/{id}/approve`~~ |
 | 24 | 流水导入 | POST | `/api/bank/import` | 上传银行流水（触发 Parser） |
 | 25 | 流水导入 | GET | `/api/bank/batches` | 批次列表 |
 | 26 | 流水导入 | GET | `/api/bank/batches/:id` | 批次详情 |
@@ -286,7 +286,7 @@
 ## §A3 · 通用 Agent Artifact 管理 API
 
 > Phase 2 新增。路由前缀 `/api/artifacts`，独立于旧 `/api/fund/*` 体系。
-> 旧 `/api/fund/*` 端点（§A1 #13-23）为死链路，Phase 5 删除。
+> 旧 `/api/fund/*` 端点（§A1 #13-23）已在 Phase 5（2026-05-11）删除。
 > 本节定义的端点是产物管理的唯一生产路径。
 
 ### 端点清单
@@ -429,6 +429,7 @@ ORM CHECK 约束：`status IN ('draft','active','retired')`。
 ---
 
 **版本**
+- v4.4 · 2026-05-11 · §A1 #13-23 旧 `/api/fund/*` 端点标记为 Phase 5 已删除
 - v4.3 · 2026-05-11 · §A3 新增通用 Agent Artifact 管理 API（12 端点，Phase 2）
 - v4.2 · 2026-05-10 · §A1 标记 42 上限已失效；§A99 标记旧端点禁止恢复；口径待重新统计
 - v4.1 · 2026-05-10 · 移除银行导入旧端点（ai-parse / commit-by-mapping / save-template），N14-N17 改为 ParserArtifact 路线

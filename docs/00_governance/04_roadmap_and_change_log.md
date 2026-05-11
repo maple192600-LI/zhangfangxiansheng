@@ -12,6 +12,10 @@
 | Phase A | 旧路线清理 | ✅ 已完成 |
 | Phase B | 项目地图与命名词典 | ✅ 已完成 |
 | Phase C | 文档口径修复 | 待合并 |
+| Phase 2 | 通用 Artifact API + Service | ✅ 已完成（PR #11） |
+| Phase 3 | 复用逻辑迁移 | ✅ 已完成（PR #12） |
+| Phase 4 | 前端迁移到 /api/artifacts | ✅ 已完成（PR #13） |
+| Phase 5 | 删除旧 FundAgent 体系残留 | ✅ 已完成 |
 | Phase D | ParserArtifact runtime 契约 | 待做 |
 | Phase E | 最小 run_parser | 待做 |
 | Phase F | account_resolver | 待做 |
@@ -52,6 +56,39 @@
 **必须更新的文档**：
 - [x] `01_project_map.md` — 本阶段产物
 - [x] `02_naming_glossary.md` — 本阶段产物
+
+---
+
+## Phase 5：删除旧 FundAgent 体系残留
+
+**状态**：✅ 已完成
+
+**目标**：删除旧 FundAgent 体系的所有残留文件和引用，完成单通用 Agent 架构清理。
+
+**删除的文件/目录**：
+- `backend/agents/fund/` — 旧 FundAgent 调度器、harness、schemas、skills
+- `backend/api/fund_agent.py` — 旧 `/api/fund/*` 路由
+- `frontend/src/api/fund.js` — 旧前端 API（无消费方）
+- `agents/system/skills/fund_parser_manual/` — 绕过 ParserArtifact 的旧技能
+- `tests/fund/test_phase6_api.py`、`test_artifact_runtime.py`、`test_sandbox.py`、`test_phase7_privacy.py` — 旧测试
+- `tests/e2e/test_security_regression.py` — 依赖已删除的 sandbox
+
+**清理的引用**：
+- `fund_skill_run` 从 skill_ops.py、tool_registry.py、permission.py、prompt_builder.py、runtime.py、skill_executor.py 中清除
+- `agents.fund.skills` 导入从 tests/fund/conftest.py 和 tests/e2e/conftest.py 中清除
+- `fund_agent` router 从 tests/e2e/conftest.py 中清除
+
+**保留的新体系**：
+- `backend/fund/`（primitives + artifacts）— 确定性执行基础设施
+- `backend/core/artifact_runtime.py` — 新 Artifact Runtime 契约
+- `backend/api/artifacts.py` — 通用 Artifact API
+- `backend/services/artifact_service.py`、`template_analysis.py`、`field_dictionary_service.py`
+
+**必须更新的文档**：
+- [x] `01_project_map.md` — 旧体系标记已删除
+- [x] `04_roadmap_and_change_log.md` — Phase 5 标记完成
+- [x] `23_api_contracts.md` — 旧端点标记已删除
+- [x] `00_single_agent_cleanup_audit.md` — Phase 5 删除项更新
 
 ---
 
@@ -198,6 +235,7 @@
 
 | 日期 | 变更 | 涉及文档 |
 |------|------|---------|
+| 2026-05-11 | Phase 5 完成：删除旧 FundAgent 体系残留 | `01_project_map.md`, `04_roadmap_and_change_log.md`, `23_api_contracts.md`, `00_single_agent_cleanup_audit.md` |
 | 2026-05-10 | 新增路线图与变更记录文档 | `04_roadmap_and_change_log.md` |
 | 2026-05-10 | 新增目标产品地图 | `03_target_product_map.md` |
 | 2026-05-10 | 项目地图增加定位说明 | `01_project_map.md` |
