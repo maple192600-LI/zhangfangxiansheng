@@ -1,10 +1,9 @@
 ---
 name: fund_template_inference
-description: "自动识别空白模板中的占位符并推断数据映射"
+description: "自动识别空白模板中的占位符并推断数据映射，生成 RuleArtifact 草稿"
 when_to_use: "当用户上传空白报表模板、需要自动识别模板结构、或创建新报表模板时"
-version: "3.0.0"
+version: "4.0.0"
 execution_mode: instruction
-code_entry: "template.inference"
 allowed-tools:
   - file_parse
   - openpyxl_read
@@ -70,21 +69,11 @@ arguments:
 
 为每个推断给出置信度（high/medium/low）。
 
-## 第五步：生成映射规则
+## 第五步：生成映射规则草稿
 
-将推断结果整理为结构化 JSON：
-```json
-{
-  "Sheet1!B3": {
-    "placeholder": "${本月收入合计}",
-    "source": "fund_events",
-    "field": "amount_in",
-    "aggregate": "sum",
-    "filter": {"business_date": "当月"},
-    "confidence": "high"
-  }
-}
-```
+将推断结果整理为 RuleArtifact 的 placeholder_bindings 和 loop_config。
+通过 `artifact_service.create_rule_draft` 保存草稿，状态为 draft。
+草稿需要用户审批后才能变为 active。
 
 ## 第六步：向用户确认
 
@@ -93,7 +82,7 @@ arguments:
 2. 中置信度映射（黄色）— 需要用户确认
 3. 低置信度映射（红色）— 需要用户指定
 
-用户确认后，产出 RuleArtifact（placeholder_bindings + loop_config），通过 Fund Agent 技能 `template.inference` 保存。
+用户确认后，通过 artifact approve/reject 流程完成审核。
 
 ## 第七步：记录经验
 

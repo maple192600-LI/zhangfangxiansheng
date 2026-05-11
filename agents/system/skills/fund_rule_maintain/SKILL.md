@@ -1,13 +1,11 @@
 ---
 name: fund_rule_maintain
-description: "维护和迭代现有的报表填充规则"
+description: "维护和迭代现有的报表填充 RuleArtifact 草稿"
 when_to_use: "当用户需要修改报表规则、调整填充逻辑、或更新已有规则时"
-version: "3.0.0"
+version: "4.0.0"
 execution_mode: instruction
-code_entry: "rule.maintain"
 allowed-tools:
   - db_query_business
-  - db_insert_fund_event
   - memory_save
   - memory_search
   - skill_step_report
@@ -55,11 +53,12 @@ arguments:
 
 在当前规则基础上修改（保留未修改的部分），生成新的规则配置。
 
-## 第五步：保存新版本
+## 第五步：保存新版本草稿
 
-规则迭代通过 Agent 技能 `rule.maintain` 执行。新版本作为新的 RuleArtifact 保存，旧版本保留供回溯。
-
-注意：不要删除旧版本。保留旧版本供回溯。
+通过 `artifact_service.create_rule_draft` 保存新版本 RuleArtifact 草稿。
+旧版本保留供回溯（不删除）。
+新版本继承旧版本的未修改配置。
+新版本作为 draft 状态，需要用户审批后才能变为 active。
 
 ## 第六步：记录修改历史
 

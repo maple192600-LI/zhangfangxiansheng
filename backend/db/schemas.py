@@ -648,3 +648,34 @@ class TemplateInferenceJobResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+# ──────────────────────────────────────────
+# Template analysis & field mapping
+# ──────────────────────────────────────────
+
+class TemplateAnalysisRequest(BaseModel):
+    template_file: str = Field(..., description="模板文件路径")
+
+
+class PlaceholderBindingItem(BaseModel):
+    primitive: str = Field(default="const", description="基元类型: field / const")
+    value: Optional[str] = None
+
+
+class TemplateAnalysisResponse(BaseModel):
+    placeholders: list[str] = Field(default_factory=list)
+    merged_cells: list[dict] = Field(default_factory=list)
+    header_rows: list[int] = Field(default_factory=list)
+
+
+class FieldMappingResponse(BaseModel):
+    placeholder_bindings: dict[str, PlaceholderBindingItem] = Field(default_factory=dict)
+    confidence: float = 0.0
+    matched_count: int = 0
+    total_placeholders: int = 0
+
+
+class ArtifactVersionQuery(BaseModel):
+    name: str = Field(..., max_length=100)
+    kind: Optional[str] = None
