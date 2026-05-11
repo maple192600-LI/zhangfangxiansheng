@@ -17,10 +17,11 @@
 | Phase 4 | 前端迁移到 /api/artifacts | ✅ 已完成（PR #13） |
 | Phase 5 | 删除旧 FundAgent 体系残留 | ✅ 已完成 |
 | Phase D | ParserArtifact runtime 契约 | 待做 |
-| Phase E | 最小 run_parser | 待做 |
+| Phase 6 / Runtime R0 | Artifact Runtime 守护与测试骨架 | ✅ 已完成 |
+| Phase E1 | 最小 run_parser | 待做 |
 | Phase F | account_resolver | 待做 |
 | Phase G | BankRule 规则中心重建 | 待做 |
-| Phase H | RuleArtifact runtime | 待做 |
+| Phase H1 | RuleArtifact runtime | 待做 |
 | Phase I | 企业初始化向导 | 待做 |
 
 ---
@@ -89,6 +90,34 @@
 - [x] `04_roadmap_and_change_log.md` — Phase 5 标记完成
 - [x] `23_api_contracts.md` — 旧端点标记已删除
 - [x] `00_single_agent_cleanup_audit.md` — Phase 5 删除项更新
+
+---
+
+## Phase 6 / Runtime R0：Artifact Runtime 守护与测试骨架
+
+**状态**：✅ 已完成
+
+**目标**：为 ParserArtifact / RuleArtifact runtime 实现建立守护基础设施——Schema、AST 白名单、沙箱配置、测试骨架。
+
+**新增文件：**
+- `backend/core/artifact_ast_guard.py` — AST 白名单验证，禁止 os/subprocess/eval/exec 等
+- `backend/core/artifact_sandbox.py` — 沙箱配置（超时、白名单、最大行数）
+- `tests/test_artifact_ast_guard.py` — 29 个 AST 守护测试
+- `tests/test_artifact_runtime_guard.py` — 13 个 runtime 守护测试
+
+**修改文件：**
+- `backend/core/artifact_runtime.py` — 加固 docstring，明确 Phase E1/H1 计划
+- `backend/db/schemas.py` — 新增 ParserRuntimeRow/Input/Result、RuleRuntimeInput/Result
+
+**未做：**
+- 未实现 run_parser / run_rule（仍抛 NotImplementedError）
+- 未执行 artifact.code
+- 未写 fund_events
+- 未修改前端
+
+**必须更新的文档：**
+- [x] `01_project_map.md` — 断链状态更新
+- [x] `04_roadmap_and_change_log.md` — Phase 6 标记完成
 
 ---
 
@@ -235,6 +264,7 @@
 
 | 日期 | 变更 | 涉及文档 |
 |------|------|---------|
+| 2026-05-11 | Phase 6 / Runtime R0 完成：AST guard + Schema + 测试骨架 | `01_project_map.md`, `04_roadmap_and_change_log.md` |
 | 2026-05-11 | Phase 5 完成：删除旧 FundAgent 体系残留 | `01_project_map.md`, `04_roadmap_and_change_log.md`, `23_api_contracts.md`, `00_single_agent_cleanup_audit.md` |
 | 2026-05-10 | 新增路线图与变更记录文档 | `04_roadmap_and_change_log.md` |
 | 2026-05-10 | 新增目标产品地图 | `03_target_product_map.md` |

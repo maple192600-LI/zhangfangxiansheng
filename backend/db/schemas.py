@@ -679,3 +679,49 @@ class FieldMappingResponse(BaseModel):
 class ArtifactVersionQuery(BaseModel):
     name: str = Field(..., max_length=100)
     kind: Optional[str] = None
+
+
+# ──────────────────────────────────────────
+# Artifact Runtime input / output
+# ──────────────────────────────────────────
+
+class ParserRuntimeRow(BaseModel):
+    """CANONICAL_12 — 每一行的标准输出格式。"""
+    business_date: Optional[str] = None
+    entity_code: str = ""
+    entity_name: str = ""
+    account_code: str = ""
+    account_name: str = ""
+    summary: str = ""
+    counterparty: str = ""
+    amount_in: float = 0.0
+    amount_out: float = 0.0
+    rolling_balance: Optional[float] = None
+    state: str = "正常"
+    source: str = ""
+
+
+class ParserRuntimeInput(BaseModel):
+    artifact_id: int
+    file_path: str
+    ctx: dict = {}
+
+
+class ParserRuntimeResult(BaseModel):
+    rows: list[ParserRuntimeRow] = []
+    row_count: int = 0
+    warnings: list[str] = []
+    errors: list[str] = []
+
+
+class RuleRuntimeInput(BaseModel):
+    artifact_id: int
+    ctx: dict = {}
+    template_path: str = ""
+
+
+class RuleRuntimeResult(BaseModel):
+    output_path: Optional[str] = None
+    placeholder_filled: int = 0
+    warnings: list[str] = []
+    errors: list[str] = []
