@@ -1,6 +1,6 @@
 # 账房先生 ZhangFang V1
 
-面向中国财务人员的本地部署财务工作台。当前版本聚焦 V1 最小可用闭环：主数据中心、银行流水导入、手工流水录入、基础数据表、资金日报、导出、备份、AI 配置与 Agent 预留骨架。
+面向中国财务人员的本地部署通用 Agent 驱动财务工作台。Agent 负责生成和维护解析器、规则、模板等可审核产物；用户负责上传、查看、确认和审核；确定性执行由 artifact runtime 完成。
 
 ## 技术栈
 
@@ -116,7 +116,7 @@ backend\venv\Scripts\pyinstaller.exe --onefile --name zhangfang --paths backend 
 
 | 目录 | 用途 |
 | --- | --- |
-| `backend/` | FastAPI 后端、服务层、数据库模型、Agent 骨架 |
+| `backend/` | FastAPI 后端、服务层、数据库模型、Agent 运行时 |
 | `frontend/` | Vue 前端 |
 | `alembic/` | SQLite schema 迁移 |
 | `tests/` | 后端、端到端、样本测试 |
@@ -126,5 +126,5 @@ backend\venv\Scripts\pyinstaller.exe --onefile --name zhangfang --paths backend 
 ## 当前边界
 
 - V1 只交付本地单机财务工作台，不包含多人协作和集中部署。
-- AI 只做辅助识别与配置建议，不决定账户归属和汇总正确性。
+- AI 辅助识别、规则生成与配置建议，不决定账户归属和汇总正确性。核心数据操作由通用 Agent 通过工具完成，不直接写业务表。
 - `backend/data/zhangfang.db` 是本地业务数据核心文件，发送或备份前需要确认是否包含真实财务数据与本地明文 API Key。

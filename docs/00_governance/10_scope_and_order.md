@@ -14,7 +14,7 @@
 - **银行流水导入**：上传样本 → Agent 生成 Parser → 用户审核 → Runtime 执行入库
 - **手工流水双轨**：快速录入直接写结构化数据；多主体 Excel 上传走 Agent 解析
 - **报表系统**：资金日报、现金日记账、账户余额表、收支明细、周/月/年报
-- **Fund Agent**：5 个 skill（parser.bank / parser.manual / rule.template_fill / rule.maintain / template.inference）
+- **通用 Agent 初始技能**：银行解析器生成、手工解析器生成、报表填充规则生成、规则维护、模板推断等财务相关能力（技能由通用 Agent 统一调度，不绑定领域专用调度器）
 - **Agent 通用能力**：会话管理、记忆系统、工具注册、技能创建、文件解析、上下文构建
 - **AI 配置**：多 Provider 支持、Agent 绑定、调用审计、隐私三档
 - **首页总控台**：待办、进度、关键账户、收支趋势
@@ -33,7 +33,8 @@
 - 用户在 UI 中直接编辑字段映射 / 正则 / JSON
 - Runtime 阶段调用 LLM（§C8）
 - Agent 产物绕过 AST 扫描入库
-- 新增第 6 个 skill（§C4，需走 ChangeFlow）
+- 新增领域 Agent 或领域专用调度器（§C4，通用 Agent 统一调度）
+- 新增 `fund_skill_run` 调用或 `/api/fund/agent/skills/*/invoke` 路由
 
 ---
 
@@ -58,7 +59,7 @@
 | 报表模板 | ✅ 完成 | 3 条 report_templates |
 | 后端服务层 | ✅ 完成 | 20 个 service 文件 |
 | API 路由 | ✅ 完成 | 23 个路由模块 |
-| Fund Agent 骨架 | ✅ 完成 | harness / schemas / memory / 5 个 skill 文件 |
+| Fund Agent 骨架 | ✅ 完成（旧中间态） | harness / schemas / memory / 5 个空壳 skill 文件。待迁移后删除 |
 
 ### §2.2 · 关键缺口
 

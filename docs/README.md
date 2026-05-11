@@ -53,6 +53,7 @@
 | [`00_governance/14_testing_strategy.md`](00_governance/14_testing_strategy.md) | 测试策略 — 分层、覆盖率、fixture、现有测试清单 |
 | [`00_governance/18_anti_drift.md`](00_governance/18_anti_drift.md) | 防跑偏六层机制 — 契约冻结、guards、DoD、Kickoff |
 | [`00_governance/19_ai_capability.md`](00_governance/19_ai_capability.md) | Agent 能力体系 — 架构、工具、记忆、技能、隐私三档 |
+| [`00_governance/00_single_agent_cleanup_audit.md`](00_governance/00_single_agent_cleanup_audit.md) | **清理审计基线** — 旧 FundAgent 体系审计报告与 Phase 0-5 清理计划 |
 
 ### 第五步：查执行细节（开发时按需）
 
@@ -138,7 +139,7 @@ cd frontend && npm run build
 §C1  · CANONICAL_12 基础数据表（12列冻结）
 §C2  · TEMPLATE_18 模板占位符（18个冻结）
 §C3  · MASTER_20 账户主数据（20列冻结）
-§C4  · Agent 技能体系（预置5个 + 动态创建）
+§C4  · Agent 技能体系（通用 Agent 初始技能与动态技能体系）
 §C5  · 基元库白名单（37函数）
 §C6  · 数据库（当前真实业务 ORM 表为 24 张，sqlite_sequence 不计入业务表）
 §C7  · API（端点数量以 23_api_contracts.md 为准，旧 42 上限已失效）

@@ -197,7 +197,7 @@ AI 智能体预留（7）：
 | `import_batches` | `ImportBatch` | 导入批次 |
 | `fund_events` | `FundEvent` | **核心事实表**，CANONICAL_12 标准行 |
 
-### Fund Agent 产物（3 张）
+### Agent 产物（3 张）
 
 | 表名 | ORM 类 | 说明 |
 |------|--------|------|
@@ -251,16 +251,15 @@ AI 智能体预留（7）：
 ├── memory_store.py     — 记忆存储
 ├── tool_registry.py    — 工具注册
 ├── tools/              — 工具集（file_parse, db_ops, shell_ops, skill_ops 等）
-└── fund/               — 财务专用子系统
-    ├── harness.py      — FundAgent 确定性调度器（5 个固定 skill）
-    ├── schemas.py      — Pydantic 输入/输出 Schema
-    ├── memory.py       — Artifact CRUD + 别名库
-    └── skills/         — 5 个确定性 skill 的代码实现
-        ├── parser_bank.py
-        ├── parser_manual.py
-        ├── rule_maintain.py
-        ├── rule_template_fill.py
-        └── template_inference.py
+└── fund/               — 旧 FundAgent 中间态（待迁移后删除）
+    ├── harness.py      — FundAgent 调度器（旧体系，待迁移后删除）
+    ├── schemas.py      — Pydantic 输入/输出 Schema（待迁移）
+    ├── memory.py       — Artifact CRUD + 别名库（待迁移）
+    └── skills/         — 5 个空壳 skill 文件（待删除）
+```
+
+> **注意**：`backend/fund/`（含 `primitives/` 和 `artifacts/parsers/`）是产物确定性执行基础设施，必须保留，不等于 `backend/agents/fund/`。
+
 ```
 
 ### Skills（agents/system/skills/）

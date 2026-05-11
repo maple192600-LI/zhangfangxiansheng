@@ -125,10 +125,10 @@
 
 **状态**：待做
 
-**目标**：让 FundAgent harness 能真正生成包含可执行代码的 ParserArtifact，替代当前只创建占位 draft 的行为。
+**目标**：让通用 Agent 通过工具和技能生成包含可执行代码的 ParserArtifact 草稿，并由 artifact service 管理审核，由 artifact runtime 确定性执行。替代旧 FundAgent harness 只创建占位 draft 的行为。
 
 **将改变的地图状态**：
-- `fund_agent` 5 个 skill：从"占位"→"可用"
+- 通用 Agent 初始财务技能：从"占位"→"可用"
 - `parser_artifacts` 表：从"0 条"→"有真实产物"
 - AgentReview 页面：从"半成品"→"可用"
 

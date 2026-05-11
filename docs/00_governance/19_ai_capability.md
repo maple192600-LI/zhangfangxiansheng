@@ -1,6 +1,6 @@
 # 19 · AI 能力配置（Agent 能力体系）
 
-> 本文件定义账房先生的完整 Agent 能力体系。包含通用 Agent 架构、Fund Agent 专用约束、执行模式、记忆系统、技能生命周期。
+> 本文件定义账房先生的完整 Agent 能力体系。包含通用 Agent 架构、确定性 Artifact 执行约束、执行模式、记忆系统、技能生命周期。
 >
 > 配合 [00_project_constitution.md](00_project_constitution.md)、[18_anti_drift.md](18_anti_drift.md)、[../30_contracts/25_primitives_whitelist.md](../30_contracts/25_primitives_whitelist.md) 使用。
 
@@ -212,48 +212,35 @@ arguments:
 
 ---
 
-## §5 · Fund Agent 专用约束
+## §5 · 通用 Agent 财务能力约束
 
-Fund Agent 是核心财务 Agent，处理所有财务相关任务。它在通用 Agent 架构基础上增加了严格的约束。
+通用 Agent 是唯一的 Agent 实体，不存在独立的 FundAgent。所有财务相关能力由通用 Agent 通过工具和技能完成。
 
-### §5.1 · 5 个基础 Skill（§C4 冻结）
+### §5.1 · Artifact 生成与审核边界
 
-| # | Skill | 职责 | 输入 | 输出 |
-|---|-------|------|------|------|
-| 1 | `parser.bank` | 生成银行流水解析器 | 流水样本 + 账户上下文 | Parser artifact |
-| 2 | `parser.manual` | 生成手工流水解析器 | 手工表单字段映射 | Parser artifact |
-| 3 | `rule.template_fill` | 生成报表填充规则 | 模板 + 字段字典 | Rule artifact |
-| 4 | `rule.maintain` | 维护/迭代现有规则 | 原 Rule + 修改需求 | 新版 Rule artifact |
-| 5 | `template.inference` | 自动识别模板占位符 | 空白 Excel 模板 | 占位符绑定 + 置信度 |
+- ParserArtifact / RuleArtifact 的创建草稿由通用 Agent 通过工具层发起
+- Artifact 的管理、版本、状态流转由 artifact service 负责
+- Artifact 的审核必须由用户确认后通过 artifact service 完成
+- Agent 不得运行期直接做账务判断
+- Agent 不得直接写 `fund_events` 表
+- 执行由 artifact runtime 确定性完成，不需要专用调度器
 
-> 基础 5 skill 冻结于 §C4。新增 skill 走 §ChangeFlow。
-> 用户通过 `skill_creator` 创建的技能不受 §C4 限制。
+### §5.2 · 确定性 Artifact 执行约束
 
-### §5.2 · 执行模式 · harness_strict
-
-Fund Agent 对准确性关键任务采用 harness_strict 模式：
+通用 Agent 对准确性关键任务采用确定性执行模式：
 
 | 约束 | 说明 |
 |------|------|
-| 工具白名单 | 只能调 `backend/fund/primitives/` 白名单函数（§C5） |
+| 工具白名单 | 产物代码只能调 `backend/fund/primitives/` 白名单函数（§C5） |
 | 产物模板 | 输出必须符合 Pydantic Schema |
-| 步骤固定 | 每个 skill 的执行步骤在代码中写死，AI 只填参数 |
 | 沙箱执行 | 生成的 Python 代码必须通过 AST 扫描再入库 |
+| 执行禁止 AI | artifact runtime 执行阶段禁止调用 LLM（§C8） |
 
-### §5.3 · Fund Agent 物理位置
+### §5.3 · 旧体系说明
 
-```
-backend/agents/fund/
-├── harness.py        ← harness_strict 调度器
-├── schemas.py        ← 输入/输出 Pydantic Schema
-├── memory.py         ← 样本库/字段字典/别名库访问层
-└── skills/
-    ├── parser_bank.py
-    ├── parser_manual.py
-    ├── rule_template_fill.py
-    ├── rule_maintain.py
-    └── template_inference.py
-```
+> **注意**：以下内容描述旧 FundAgent 中间态的当前仓库状态，不代表目标架构。完整清理计划见 [00_single_agent_cleanup_audit.md](00_single_agent_cleanup_audit.md)。
+
+`backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。`fund_skill_run` 是旧桥接工具，后续删除，不得迁移成新的通用 Agent 调度结构。`backend/fund/`（含 `primitives/` 和 `artifacts/parsers/`）是产物确定性执行基础设施，必须保留。
 
 ---
 

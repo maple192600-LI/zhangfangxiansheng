@@ -134,18 +134,16 @@ async def run_turn(agent, session_id, user_text, db):
 | 技能列表 | `skill_ops.py` | `skill_list` | 列出可用技能 |
 | 询问用户 | `ask_user.py` | `ask_user` | 请求用户确认 |
 
-### §2.3 · Fund Agent 专用模块（backend/agents/fund/）
+### §2.3 · 旧 FundAgent 模块（backend/agents/fund/，旧中间态，待迁移后删除）
+
+> **注意**：`backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。可复用逻辑迁移到 `backend/services/` 和 `backend/schemas/`。`backend/fund/` 是产物确定性执行基础设施，必须保留。
 
 | 模块 | 职责 |
 |------|------|
-| `harness.py` | harness_strict 模式调度器（脚本编排专用） |
-| `schemas.py` | Parser/Rule artifact 的 Pydantic Schema |
-| `memory.py` | 样本库/字段字典/别名库访问层 |
-| `skills/parser_bank.py` | 银行流水解析器生成 |
-| `skills/parser_manual.py` | 手工流水解析器生成 |
-| `skills/rule_template_fill.py` | 报表填充规则生成 |
-| `skills/rule_maintain.py` | 规则迭代维护 |
-| `skills/template_inference.py` | 模板占位符识别 |
+| `harness.py` | 旧 FundAgent 调度器（待迁移后删除） |
+| `schemas.py` | Parser/Rule artifact 的 Pydantic Schema（待迁移） |
+| `memory.py` | 样本库/字段字典/别名库访问层（待迁移） |
+| `skills/*.py` | 5 个空壳 skill 文件（待删除） |
 
 ---
 
@@ -434,7 +432,7 @@ Agent → 调用 skill_creator → 生成 SKILL.md → 保存到 agents/{code}/s
 | 技能管理 | skill_manage 工具 + Curator 自动维护 | skill_creator + SkillRegistry |
 | 记忆 | MemoryProvider（可插拔，支持 Honcho/Mem0） | DBMemoryProvider（SQLite 内置） |
 | 上下文 | ContextEngine（可插拔，支持 LCM） | ContextEngine（内置压缩） |
-| 脚本编排 | 无 | Fund Agent harness_strict 模式 |
+| 脚本编排 | 无 | 通用 Agent + artifact runtime 确定性执行 |
 | 安全 | AST 扫描 + skills_guard + file_safety | AST 扫描（Parser/Rule） + permission.py |
 | 对话输出 | 终端渲染 / Markdown / 平台适配 | SSE 流式 → 前端渲染 |
 
