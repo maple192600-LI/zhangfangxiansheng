@@ -33,9 +33,9 @@
           <span class="user-name">{{ auth.user?.username || '未知用户' }}</span>
         </div>
         <div class="user-actions">
-          <button class="user-btn skin-btn" @click="toggleSkin" :title="'当前皮肤: ' + skinLabel">{{ skinLabel }}</button>
-          <button class="user-btn" @click="showPwdDialog = true">修改密码</button>
-          <button class="user-btn user-btn-logout" @click="handleLogout">退出登录</button>
+          <NButton class="user-btn skin-btn" quaternary @click="toggleSkin" :title="'当前皮肤: ' + skinLabel">{{ skinLabel }}</NButton>
+          <NButton class="user-btn" quaternary @click="showPwdDialog = true">修改密码</NButton>
+          <NButton class="user-btn user-btn-logout" quaternary @click="handleLogout">退出登录</NButton>
         </div>
       </div>
     </NLayoutSider>
@@ -85,15 +85,16 @@
       <!-- 全屏页面：有 tabs 无 shell -->
       <template v-else-if="isFullPage">
         <div class="right-tabs" v-if="currentTabs.length">
-          <button
+          <NButton
             v-for="(tab, idx) in currentTabs"
             :key="idx"
             class="right-tab"
             :class="{ active: nav.currentTab === idx }"
+            quaternary
             @click="selectTab(idx)"
           >
             {{ tab.name }}
-          </button>
+          </NButton>
         </div>
         <div class="content-full">
           <router-view v-slot="{ Component }">
@@ -106,15 +107,16 @@
       <!-- 普通 页面：有 shell + tabs -->
       <div v-else class="shell">
         <div class="right-tabs" v-if="currentTabs.length">
-          <button
+          <NButton
             v-for="(tab, idx) in currentTabs"
             :key="idx"
             class="right-tab"
             :class="{ active: nav.currentTab === idx }"
+            quaternary
             @click="selectTab(idx)"
           >
             {{ tab.name }}
-          </button>
+          </NButton>
         </div>
         <div class="content">
           <router-view v-slot="{ Component }">

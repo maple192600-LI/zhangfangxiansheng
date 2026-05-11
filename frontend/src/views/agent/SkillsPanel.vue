@@ -6,7 +6,7 @@
           <h3>技能列表</h3>
           <div class="block-actions">
             <span class="block-count">{{ skills.length }} 个技能</span>
-            <button class="btn-teach" @click="showTeachModal = true">教 agent 学新手艺</button>
+            <NButton class="btn-teach" quaternary @click="showTeachModal = true">教 agent 学新手艺</NButton>
           </div>
         </div>
 
@@ -15,7 +15,7 @@
           <div class="teach-box">
             <div class="teach-head">
               <span>教 agent 学新手艺</span>
-              <button class="btn-close" @click="showTeachModal = false">关闭</button>
+              <NButton class="btn-close" quaternary @click="showTeachModal = false">关闭</NButton>
             </div>
             <div class="teach-body">
               <div class="teach-field">
@@ -31,7 +31,7 @@
                   placeholder="例如：识别中行流水的字段，输出标准 fund_event 行" />
               </div>
               <div class="teach-actions">
-                <button class="btn-save" @click="startTeach" :disabled="!teachFile || !teachDesc.trim()">开始学习</button>
+                <NButton class="btn-save" quaternary @click="startTeach" :disabled="!teachFile || !teachDesc.trim()">开始学习</NButton>
               </div>
             </div>
           </div>
@@ -62,8 +62,8 @@
             <div class="skill-meta">
               <span class="skill-code">{{ sk.skill_code }}</span>
               <div class="skill-btns">
-                <button class="btn-run" @click="handleRun(sk)" :disabled="runningCode === sk.skill_code">运行</button>
-                <button class="btn-test" @click="handleTest(sk)" :disabled="testingCode === sk.skill_code">测试</button>
+                <NButton class="btn-run" quaternary @click="handleRun(sk)" :disabled="runningCode === sk.skill_code">运行</NButton>
+                <NButton class="btn-test" quaternary @click="handleTest(sk)" :disabled="testingCode === sk.skill_code">测试</NButton>
               </div>
             </div>
           </div>
@@ -92,7 +92,7 @@
           <div class="result-box">
             <div class="result-head">
               <span>{{ resultModal.title }}</span>
-              <button class="btn-close" @click="resultModal = null">关闭</button>
+              <NButton class="btn-close" quaternary @click="resultModal = null">关闭</NButton>
             </div>
             <pre class="result-body" :class="{ 'result-ok': resultModal.ok, 'result-err': !resultModal.ok }">{{ resultModal.content }}</pre>
           </div>
@@ -116,6 +116,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { NButton } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
 import http from '@/api'
 

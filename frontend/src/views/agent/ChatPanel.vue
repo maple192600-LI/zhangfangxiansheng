@@ -30,17 +30,17 @@
 
           <!-- 消息操作按钮 -->
           <div v-if="msg.content && !streaming" class="msg-actions" :class="'actions-' + msg.role">
-            <button v-if="msg.role === 'user'" class="msg-btn" @click="editMsg(msg)" title="编辑">✏️ 编辑</button>
-            <button class="msg-btn" @click="copyMsg(msg)" title="复制">📋 {{ copyLabel }}</button>
-            <button v-if="msg.role === 'assistant'" class="msg-btn" @click="regenerate(msg)" title="重新生成">🔄 重新生成</button>
+            <NButton v-if="msg.role === 'user'" class="msg-btn" quaternary @click="editMsg(msg)" title="编辑">✏️ 编辑</NButton>
+            <NButton class="msg-btn" quaternary @click="copyMsg(msg)" title="复制">📋 {{ copyLabel }}</NButton>
+            <NButton v-if="msg.role === 'assistant'" class="msg-btn" quaternary @click="regenerate(msg)" title="重新生成">🔄 重新生成</NButton>
           </div>
 
           <!-- 编辑框 -->
           <div v-if="editingMsgId === msg.id" class="msg-edit-box">
             <textarea v-model="editText" class="msg-edit-textarea" rows="3"></textarea>
             <div class="msg-edit-btns">
-              <button class="msg-btn" @click="cancelEdit">取消</button>
-              <button class="msg-btn msg-btn-ok" @click="submitEdit">发送</button>
+              <NButton class="msg-btn" quaternary @click="cancelEdit">取消</NButton>
+              <NButton class="msg-btn msg-btn-ok" quaternary @click="submitEdit">发送</NButton>
             </div>
           </div>
 
@@ -86,12 +86,12 @@
       <div v-for="(ref, i) in workspaceRefs" :key="'ws-'+i" class="attach-item attach-ws">
         <svg class="attach-ws-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7f9b7a" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
         <span class="attach-name">{{ ref.name }}</span>
-        <button class="attach-del" @click="removeWsRef(i)">✕</button>
+        <NButton class="attach-del" quaternary @click="removeWsRef(i)">✕</NButton>
       </div>
       <div v-for="(f, i) in attachFiles" :key="'f-'+i" class="attach-item">
         <span class="attach-icon">{{ fileIcon(f.name) }}</span>
         <span class="attach-name">{{ f.name }}</span>
-        <button class="attach-del" @click="removeAttach(i)">✕</button>
+        <NButton class="attach-del" quaternary @click="removeAttach(i)">✕</NButton>
       </div>
     </div>
 
@@ -109,7 +109,7 @@
               placeholder="请输入回复..."
               @keydown.enter.prevent="submitAskUser"
             />
-            <button class="confirm-approve" @click="submitAskUser">发送回复</button>
+            <NButton class="confirm-approve" quaternary @click="submitAskUser">发送回复</NButton>
           </div>
         </template>
         <template v-else>
@@ -118,8 +118,8 @@
           <div class="confirm-msg">{{ confirmData.message }}</div>
           <div class="confirm-tool">工具: {{ confirmData.name }}</div>
           <div class="confirm-btns">
-            <button class="confirm-reject" @click="rejectConfirm">拒绝</button>
-            <button class="confirm-approve" @click="approveConfirm">允许执行</button>
+            <NButton class="confirm-reject" quaternary @click="rejectConfirm">拒绝</NButton>
+            <NButton class="confirm-approve" quaternary @click="approveConfirm">允许执行</NButton>
           </div>
         </template>
       </div>
@@ -142,19 +142,20 @@
         @keydown="handleKey"
         @paste="handlePaste"
       ></textarea>
-      <button v-if="streaming" class="btn-stop" @click="stopStream">
+      <NButton v-if="streaming" class="btn-stop" quaternary @click="stopStream">
         ■ 停止
-      </button>
-      <button v-else class="btn-send" :disabled="!inputText.trim()" @click="send">
+      </NButton>
+      <NButton v-else class="btn-send" quaternary :disabled="!inputText.trim()" @click="send">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         <span>发送</span>
-      </button>
+      </NButton>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, nextTick, onMounted, watch } from 'vue'
+import { NButton } from 'naive-ui'
 import { sendMessageStream, toolConfirm } from '@/api/agent'
 import { useAgentsStore } from '@/stores/agents'
 

@@ -12,13 +12,14 @@
         </div>
       </div>
       <div class="agent-tabs">
-        <button
+        <NButton
           v-for="tab in tabs"
           :key="tab.key"
           class="agent-tab-btn"
           :class="{ active: activeTab === tab.key }"
+          quaternary
           @click="activeTab = tab.key"
-        >{{ tab.label }}</button>
+        >{{ tab.label }}</NButton>
       </div>
     </div>
 
@@ -64,6 +65,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentsStore } from '@/stores/agents'
 import ChatPanel from './agent/ChatPanel.vue'

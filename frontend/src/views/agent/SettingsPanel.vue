@@ -42,11 +42,11 @@
         <div class="row">
           <label>最大输出 Token</label>
           <div class="token-presets">
-            <button v-for="p in tokenPresets" :key="p.value"
+            <NButton v-for="p in tokenPresets" :key="p.value"
               class="preset-btn" :class="{ active: form.llm_max_tokens === p.value }"
-              @click="form.llm_max_tokens = p.value" :title="p.desc">
+              quaternary @click="form.llm_max_tokens = p.value" :title="p.desc">
               {{ p.label }}
-            </button>
+            </NButton>
           </div>
           <input v-model.number="form.llm_max_tokens" type="number" class="inp" min="1024" max="524288" />
           <span class="hint">单次回复的最大输出 token 数（非上下文窗口）。值太小会导致回复被截断（Agent 半路断掉）。请根据所选用模型的支持范围合理设置。</span>
@@ -80,12 +80,12 @@
         <div class="sep"></div>
 
         <div class="actions">
-          <button class="btn btn-del" @click="handleDelete">🗑 删除此智能体</button>
+          <NButton class="btn btn-del" quaternary @click="handleDelete">🗑 删除此智能体</NButton>
           <div style="flex:1"></div>
-          <button class="btn btn-ghost" @click="resetForm">重置</button>
-          <button class="btn btn-ok" :disabled="saving" @click="handleSave">
+          <NButton class="btn btn-ghost" quaternary @click="resetForm">重置</NButton>
+          <NButton class="btn btn-ok" quaternary :disabled="saving" @click="handleSave">
             {{ saving ? '保存中...' : '保存修改' }}
-          </button>
+          </NButton>
         </div>
       </div>
     </div>
@@ -136,7 +136,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { NSelect } from 'naive-ui'
+import { NSelect, NButton } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
 import http from '@/api'
 

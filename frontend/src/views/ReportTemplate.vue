@@ -69,7 +69,7 @@
       <div class="modal-content">
         <div class="modal-header">
           <h3>{{ editingId ? '编辑模板' : '新建模板' }}</h3>
-          <button class="modal-close" @click="showForm = false">&times;</button>
+          <NButton class="modal-close" quaternary @click="showForm = false">&times;</NButton>
         </div>
         <div class="modal-body">
           <div class="form-row">
