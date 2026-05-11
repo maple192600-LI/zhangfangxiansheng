@@ -86,7 +86,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/manual'
-import * as fund from '@/api/fund'
 import * as master from '@/api/master'
 
 const router = useRouter()
@@ -174,21 +173,7 @@ function onDrop(e) {
 
 async function doUpload() {
   if (!uploadFile.value) { alert('请先选择文件'); return }
-  uploading.value = true
-  try {
-    const result = await api.uploadManualWorkbook(uploadFile.value, currentSchemeCode.value)
-    const draft = await fund.invokeFundSkill('parser.manual', {
-      batch_code: result.batch_code,
-      scheme_code: currentSchemeCode.value,
-      privacy_mode: 'standard',
-    })
-    router.push({
-      name: 'agent-review',
-      params: { type: 'parser', id: draft.artifact_id },
-      query: { flow: 'manual', batch_code: result.batch_code },
-    })
-  } catch (e) { alert('上传失败: ' + (e.message || e)) }
-  uploading.value = false
+  alert('手工 Excel 解析器生成将在后续阶段接入通用 Agent，目前请使用快速录入或模板导出。')
 }
 
 function doExportTemplate() {
