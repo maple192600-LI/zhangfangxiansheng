@@ -1,80 +1,29 @@
 <template>
-  <div class="app-layout">
+  <NLayout has-sider class="app-layout">
     <!-- 左侧导航 -->
-    <aside class="sidebar">
+    <NLayoutSider
+      bordered
+      :width="280"
+      :collapsed-width="0"
+      :collapsed="false"
+      class="sidebar"
+    >
       <div class="brand">
         <h1>账房先生</h1>
         <div class="subtitle">面向中国财务人员的本地部署资金工作台</div>
       </div>
 
-      <div class="nav-group">
-        <div class="nav-list">
-          <template v-for="(item, key) in navData" :key="key">
-            <!-- AI智能体动态导航 -->
-            <template v-if="item._dynamic && key === 'AI智能体'">
-              <button
-                class="nav-main"
-                :class="{ active: nav.currentPrimary === key }"
-                @click="toggleSection(key)"
-              >
-                <span class="nav-icon">{{ item.icon }}</span>
-                <span class="nav-label">{{ key }}</span>
-                <span class="caret">{{ openState[key] ? '▾' : '▸' }}</span>
-              </button>
-              <div class="subnav" :class="{ open: openState[key] }">
-                <button
-                  v-for="agent in agentsStore.list"
-                  :key="agent.id"
-                  class="subnav-item"
-                  :class="{ active: nav.currentPrimary === key && Number(route.params.id) === agent.id }"
-                  @click="goToAgent(agent)"
-                >
-                  {{ agent.display_name }}
-                </button>
-                <button
-                  class="subnav-item add-agent-btn"
-                  @click="showCreateAgentModal = true"
-                >
-                  ＋ 新建 agent
-                </button>
-              </div>
-            </template>
-            <!-- 有二级导航 -->
-            <template v-else-if="item.secondary">
-              <button
-                class="nav-main"
-                :class="{ active: nav.currentPrimary === key }"
-                @click="toggleSection(key)"
-              >
-                <span class="nav-icon">{{ item.icon }}</span>
-                <span class="nav-label">{{ key }}</span>
-                <span class="caret">{{ openState[key] ? '▾' : '▸' }}</span>
-              </button>
-              <div class="subnav" :class="{ open: openState[key] }">
-                <button
-                  v-for="(_, sec) in item.secondary"
-                  :key="sec"
-                  class="subnav-item"
-                  :class="{ active: nav.currentPrimary === key && nav.currentSecondary === sec }"
-                  @click="selectSecondary(key, sec)"
-                >
-                  {{ sec }}
-                </button>
-              </div>
-            </template>
-            <!-- 无二级导航 -->
-            <template v-else>
-              <button
-                class="nav-main"
-                :class="{ active: nav.currentPrimary === key }"
-                @click="selectPrimary(key)"
-              >
-                <span class="nav-icon">{{ item.icon }}</span>
-                <span class="nav-label">{{ key }}</span>
-              </button>
-            </template>
-          </template>
-        </div>
+      <div class="nav-scroll">
+        <NMenu
+          :options="menuOptions"
+          :value="menuActiveKey"
+          :default-expand-all="false"
+          :expanded-keys="menuExpandedKeys"
+          :indent="24"
+          :root-indent="16"
+          @update:value="onMenuSelect"
+          @update:expanded-keys="onMenuExpandedKeysChange"
+        />
       </div>
 
       <!-- 用户区域 -->
@@ -84,11 +33,12 @@
           <span class="user-name">{{ auth.user?.username || '未知用户' }}</span>
         </div>
         <div class="user-actions">
+          <button class="user-btn skin-btn" @click="toggleSkin" :title="'当前皮肤: ' + skinLabel">{{ skinLabel }}</button>
           <button class="user-btn" @click="showPwdDialog = true">修改密码</button>
           <button class="user-btn user-btn-logout" @click="handleLogout">退出登录</button>
         </div>
       </div>
-    </aside>
+    </NLayoutSider>
 
     <!-- 修改密码弹窗 -->
     <div v-if="showPwdDialog" class="modal-overlay" @click.self="showPwdDialog = false">
@@ -125,7 +75,7 @@
     />
 
     <!-- 右侧内容区 -->
-    <main class="main-area" :class="{ 'main-area--full': isAgentPage || isFullPage }">
+    <NLayoutContent class="main-area" :class="{ 'main-area--full': isAgentPage || isFullPage }">
       <!-- Agent 页面：无 shell 包裹，直接全屏 -->
       <div v-if="isAgentPage" class="agent-page-wrap">
         <router-view v-slot="{ Component }">
@@ -174,31 +124,43 @@
           </router-view>
         </div>
       </div>
-    </main>
-  </div>
+    </NLayoutContent>
+  </NLayout>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, computed, watch, onMounted, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { NLayout, NLayoutSider, NLayoutContent, NMenu } from 'naive-ui'
 import { useNavStore } from '@/stores/nav'
 import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
 import { changePassword } from '@/api/auth'
 import AgentCreateModal from '@/components/agent/AgentCreateModal.vue'
+import { useSkin, SKINS } from '@/styles/skins'
 
 const nav = useNavStore()
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const agentsStore = useAgentsStore()
+const { setSkin, getSkinName, getSkinLabel } = useSkin()
+
+const skinLabel = computed(() => getSkinLabel())
+const skinNames = Object.keys(SKINS)
+
+function toggleSkin() {
+  const current = getSkinName()
+  const idx = skinNames.indexOf(current)
+  const next = skinNames[(idx + 1) % skinNames.length]
+  setSkin(next)
+}
 
 // 首次登录强制改密码检测
 onMounted(() => {
   if (route.query.forceChangePwd === '1' || auth.user?.must_change_password) {
     showPwdDialog.value = true
   }
-  // 加载 agent 列表
   agentsStore.fetchAll()
 })
 
@@ -319,7 +281,7 @@ const navData = {
   },
   'AI智能体': {
     icon: '🤖',
-    _dynamic: true  // 标记为动态渲染
+    _dynamic: true
   },
   '系统设置': {
     icon: '⚙️',
@@ -366,14 +328,11 @@ const navData = {
   }
 }
 
-const openState = ref({
-  '资金板块': true,
-  '票据中心': true,
-  'AI智能体': true,
-  '系统设置': true
-})
+// 默认展开的菜单
+const defaultExpandedKeys = ['资金板块', 'AI智能体', '系统设置']
+const menuExpandedKeys = ref([...defaultExpandedKeys])
 
-// Agent 页面检测 — 不套 shell，全屏渲染
+// Agent 页面检测
 const isAgentPage = computed(() => route.name === 'agent-detail')
 const isFullPage = computed(() => route.name === 'ai-config')
 
@@ -387,9 +346,10 @@ function goToAgent(agent) {
 
 async function onAgentCreated(agent) {
   showCreateAgentModal.value = false
-  // store 已在 createAgent 中刷新
   goToAgent(agent)
 }
+
+// 当前 tabs
 const currentTabs = computed(() => {
   const node = navData[nav.currentPrimary]
   if (!node) return []
@@ -399,25 +359,116 @@ const currentTabs = computed(() => {
   return node.tabs || []
 })
 
-function toggleSection(key) {
-  openState.value[key] = !openState.value[key]
-}
+// n-menu 的 active key：优先用 agent 的 key，否则用当前路由反查
+const menuActiveKey = computed(() => {
+  // 如果在 agent 页面，用 agent nav key
+  if (isAgentPage.value) {
+    return `agent-${route.params.id}`
+  }
+  // 否则用 primary-secondary 或 primary
+  if (nav.currentSecondary) {
+    return `${nav.currentPrimary}-${nav.currentSecondary}`
+  }
+  return nav.currentPrimary
+})
 
-function selectPrimary(key) {
-  nav.navigate(key, null, 0)
-  const node = navData[key]
-  const tabs = node?.tabs || []
-  if (tabs.length > 0) {
-    router.push({ name: tabs[0].route })
+// 将 navData 转换为 n-menu options
+const menuOptions = computed(() => {
+  const options = []
+  for (const [key, node] of Object.entries(navData)) {
+    // AI智能体 — 动态
+    if (node._dynamic) {
+      const children = agentsStore.list.map(agent => ({
+        key: `agent-${agent.id}`,
+        label: agent.display_name,
+        __agentId: agent.id
+      }))
+      children.push({
+        key: 'agent-create',
+        label: '＋ 新建 agent',
+        __isCreate: true
+      })
+      options.push({
+        key,
+        label: () => h('span', {}, [
+          h('span', { class: 'nav-icon-inline' }, node.icon + ' '),
+          h('span', {}, key)
+        ]),
+        children
+      })
+    } else if (node.secondary) {
+      // 有二级导航
+      options.push({
+        key,
+        label: () => h('span', {}, [
+          h('span', { class: 'nav-icon-inline' }, node.icon + ' '),
+          h('span', {}, key)
+        ]),
+        children: Object.entries(node.secondary).map(([secKey, secData]) => ({
+          key: `${key}-${secKey}`,
+          label: secKey
+        }))
+      })
+    } else {
+      // 无二级导航
+      options.push({
+        key,
+        label: () => h('span', {}, [
+          h('span', { class: 'nav-icon-inline' }, node.icon + ' '),
+          h('span', {}, key)
+        ])
+      })
+    }
+  }
+  return options
+})
+
+// n-menu 选中处理
+function onMenuSelect(key) {
+  // 新建 agent
+  if (key === 'agent-create') {
+    showCreateAgentModal.value = true
+    return
+  }
+
+  // agent 子项
+  if (key.startsWith('agent-')) {
+    const agentId = Number(key.replace('agent-', ''))
+    const agent = agentsStore.list.find(a => a.id === agentId)
+    if (agent) {
+      goToAgent(agent)
+    }
+    return
+  }
+
+  // 二级导航项：格式 "primary-secondary"
+  for (const [primary, node] of Object.entries(navData)) {
+    if (node.secondary) {
+      for (const sec of Object.keys(node.secondary)) {
+        if (key === `${primary}-${sec}`) {
+          nav.navigate(primary, sec, 0)
+          const tabs = navData[primary]?.secondary[sec]?.tabs || []
+          if (tabs.length > 0) {
+            router.push({ name: tabs[0].route })
+          }
+          return
+        }
+      }
+    }
+  }
+
+  // 一级导航
+  if (navData[key]) {
+    nav.navigate(key, null, 0)
+    const tabs = navData[key]?.tabs || []
+    if (tabs.length > 0) {
+      router.push({ name: tabs[0].route })
+    }
   }
 }
 
-function selectSecondary(key, sec) {
-  nav.navigate(key, sec, 0)
-  const tabs = navData[key]?.secondary[sec]?.tabs || []
-  if (tabs.length > 0) {
-    router.push({ name: tabs[0].route })
-  }
+function onMenuExpandedKeysChange(keys) {
+  menuExpandedKeys.value = keys
 }
 
 function selectTab(idx) {
@@ -430,7 +481,6 @@ function selectTab(idx) {
 
 // 路由变化时同步导航状态
 watch(() => router.currentRoute.value, (route) => {
-  // 根据路由名反查导航位置
   const name = route.name
   for (const [key, node] of Object.entries(navData)) {
     if (node.tabs) {
@@ -445,6 +495,9 @@ watch(() => router.currentRoute.value, (route) => {
         const idx = secData.tabs.findIndex(t => t.route === name)
         if (idx >= 0) {
           nav.navigate(key, sec, idx)
+          if (!menuExpandedKeys.value.includes(key)) {
+            menuExpandedKeys.value = [...menuExpandedKeys.value, key]
+          }
           return
         }
       }
@@ -454,24 +507,36 @@ watch(() => router.currentRoute.value, (route) => {
 </script>
 
 <style scoped>
+/* n-layout 外层需要撑满视口 */
 .app-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
   min-height: 100vh;
 }
 
-/* ── 左侧导航 ── */
+/* ── 左侧导航 Sider ── */
 .sidebar {
-  background: rgba(251, 250, 247, 0.92);
-  border-right: 1px solid var(--line);
-  backdrop-filter: blur(8px);
-  padding: 18px 16px;
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: rgba(251, 250, 247, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+/* NLayoutSider 内部滚动容器：禁止其滚动，让 nav-scroll 独立滚动 */
+.sidebar :deep(.n-layout-sider-scroll-container) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .brand {
@@ -495,102 +560,37 @@ watch(() => router.currentRoute.value, (route) => {
   line-height: 1.7;
 }
 
-.nav-group {
-  margin-top: 10px;
-}
-
-.nav-main {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
-  cursor: pointer;
-  color: var(--text);
-  font-size: var(--font-size-md);
-  text-align: left;
-  transition: background .18s ease, box-shadow .18s ease;
-  font-family: inherit;
-}
-
-.nav-icon {
-  width: 20px;
-  text-align: center;
-  flex: 0 0 20px;
+/* n-menu icon 内联样式 */
+.nav-icon-inline {
+  margin-right: 6px;
   font-size: 15px;
-  margin-right: 8px;
-  opacity: .7;
+  opacity: 0.7;
 }
 
-.nav-main.active .nav-icon { opacity: 1; }
-
-.nav-label { flex: 1; }
-
-.nav-main:hover {
-  background: #f3f0e8;
+/* 让 n-menu 在 nav-scroll 中正常渲染 */
+.nav-scroll :deep(.n-menu) {
+  --n-item-text-color: var(--text-secondary);
+  --n-item-text-color-hover: var(--text);
+  --n-item-text-color-active: var(--text);
+  --n-item-text-color-child-active: var(--text);
+  --n-item-color-active: var(--green-2);
+  --n-item-color-hover: var(--bg, #f3f0e8);
+  --n-item-color-active-hover: var(--green-2);
+  --n-item-icon-color: var(--text-tertiary);
+  --n-item-icon-color-hover: var(--text);
+  --n-item-icon-color-active: var(--text);
+  --n-item-icon-color-child-active: var(--text);
+  --n-arrow-color: var(--muted);
+  --n-font-size: var(--font-size-base);
+  --n-item-height: 42px;
+  --n-border-radius: var(--radius-md);
+  --n-divider-color: transparent;
 }
 
-.nav-main.active {
-  background: var(--green-2);
-  color: #30422f;
-  box-shadow: inset 0 0 0 1px rgba(127, 155, 122, 0.22);
+/* agent 新建按钮特殊样式 */
+.nav-scroll :deep(.n-menu .n-menu-item-content--child-active),
+.nav-scroll :deep(.n-menu .n-menu-item-content--selected) {
   font-weight: 600;
-}
-
-.caret {
-  font-size: 12px;
-  color: #889286;
-  width: 14px;
-  text-align: center;
-  flex: 0 0 14px;
-}
-
-.subnav {
-  display: none;
-  margin: 6px 0 4px 10px;
-  padding-left: 10px;
-  border-left: 2px solid #e5e0d6;
-}
-
-.subnav.open {
-  display: block;
-}
-
-.subnav-item {
-  width: 100%;
-  background: transparent;
-  border: none;
-  padding: 10px 12px;
-  margin: 2px 0;
-  border-radius: 12px;
-  text-align: left;
-  cursor: pointer;
-  color: #465048;
-  font-size: 14px;
-}
-
-.subnav-item:hover {
-  background: #f4f1ea;
-}
-
-.subnav-item.active {
-  background: #eef3ec;
-  color: #2f4330;
-  font-weight: 600;
-}
-
-.add-agent-btn {
-  color: var(--green) !important;
-  font-weight: 500;
-  border-top: 1px dashed #ddd8ce;
-  margin-top: 4px;
-  padding-top: 12px;
-}
-
-.add-agent-btn:hover {
-  background: #eef3ec;
 }
 
 /* ── 右侧内容区 ── */
@@ -668,9 +668,6 @@ watch(() => router.currentRoute.value, (route) => {
 }
 
 @media (max-width: 1200px) {
-  .app-layout {
-    grid-template-columns: 1fr;
-  }
   .sidebar {
     height: auto;
     position: relative;
@@ -713,7 +710,8 @@ watch(() => router.currentRoute.value, (route) => {
 
 .user-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .user-btn {
@@ -726,6 +724,12 @@ watch(() => router.currentRoute.value, (route) => {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all .15s;
+}
+
+.skin-btn {
+  color: var(--green);
+  border-color: var(--green-2);
+  font-weight: 500;
 }
 
 .user-btn:hover {
