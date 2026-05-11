@@ -1,15 +1,13 @@
 ---
 name: fund_rule_template_fill
-description: "根据模板生成报表填充规则，将数据映射到报表模板的占位符"
+description: "根据模板生成报表填充规则 RuleArtifact 草稿，将数据映射到报表模板的占位符"
 when_to_use: "当用户需要生成报表、填充报表模板、或创建报表生成规则时"
-version: "3.0.0"
+version: "4.0.0"
 execution_mode: instruction
-code_entry: "rule.template_fill"
 allowed-tools:
   - file_parse
   - db_query_business
   - openpyxl_read
-  - openpyxl_write
   - memory_save
   - memory_search
   - skill_step_report
@@ -71,10 +69,11 @@ arguments:
 
 无法自动匹配的占位符标记为 `"source": "manual", "reason": "需要用户指定数据源"`。
 
-## 第五步：产出 RuleArtifact
+## 第五步：产出 RuleArtifact 草稿
 
 将占位符映射整理为 RuleArtifact 的 placeholder_bindings 和 loop_config。
-RuleArtifact 通过 Fund Agent 技能 `rule.template_fill` 产出，状态为 draft，需要用户审批后变为 active。
+通过 `artifact_service.create_rule_draft` 保存，状态为 draft，需要用户审批后变为 active。
+不得直接写入业务表。
 
 ## 第六步：向用户报告结果
 

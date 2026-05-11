@@ -194,6 +194,40 @@ def get_template_inference_job(db: Session, job_id: int) -> Optional[dict[str, A
     return job_to_dict(job)
 
 
+def get_active_parser(db: Session, account_code: str, kind: str = "bank") -> Optional[dict[str, Any]]:
+    """Get the currently active parser for an account."""
+    row = db.query(ParserArtifact).filter(
+        ParserArtifact.account_code == account_code,
+        ParserArtifact.kind == kind,
+        ParserArtifact.status == "active",
+    ).first()
+    if row is None:
+        return None
+    return parser_to_dict(row, include_code=True)
+
+
+def list_parser_versions(db: Session, name: str) -> list[dict[str, Any]]:
+    """List all versions of a parser artifact by name."""
+    rows = (
+        db.query(ParserArtifact)
+        .filter(ParserArtifact.name == name)
+        .order_by(ParserArtifact.version.desc())
+        .all()
+    )
+    return [parser_to_dict(r, include_code=False) for r in rows]
+
+
+def list_rule_versions(db: Session, name: str) -> list[dict[str, Any]]:
+    """List all versions of a rule artifact by name."""
+    rows = (
+        db.query(RuleArtifact)
+        .filter(RuleArtifact.name == name)
+        .order_by(RuleArtifact.version.desc())
+        .all()
+    )
+    return [rule_to_dict(r, include_bindings=False) for r in rows]
+
+
 # ── Serialization helpers ──
 
 def parser_to_dict(row: ParserArtifact, *, include_code: bool = False) -> dict[str, Any]:

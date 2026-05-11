@@ -1,14 +1,12 @@
 ---
 name: fund_parser_bank
-description: "解析银行流水文件，生成银行流水解析器"
+description: "解析银行流水文件，生成银行流水 ParserArtifact 草稿"
 when_to_use: "当用户需要解析银行流水、创建银行流水解析规则、或上传了银行流水文件时"
-version: "3.0.0"
+version: "4.0.0"
 execution_mode: instruction
-code_entry: "parser.bank"
 allowed-tools:
   - file_parse
   - db_query_business
-  - db_insert_fund_event
   - memory_save
   - memory_search
   - skill_step_report
@@ -32,7 +30,7 @@ dependencies:
     - "openpyxl>=3.0"
 ---
 
-# 银行流水解析器
+# 银行流水解析器生成
 
 ## 第一步：获取文件内容
 
@@ -67,9 +65,11 @@ dependencies:
 - 产出 CANONICAL_12 标准行（entity_code, entity_name, account_code, account_name, summary, counterparty, amount_in, amount_out, rolling_balance, state, source）
 - 不调用任何 LLM（§C8 确定性原则）
 
-## 第六步：保存解析器
+## 第六步：保存解析器草稿
 
-产出 ParserArtifact（kind="bank", status="draft"）。用户审批后变为 active。
+通过 `artifact_service.create_parser_draft` 产出 ParserArtifact（kind="bank", status="draft"）。
+草稿必须经用户审批（approve）后才能变为 active。
+不得直接写入 fund_events。
 
 ## 第七步：记录经验
 
@@ -82,4 +82,4 @@ dependencies:
 - 余额列做校验：当前余额 ≈ 上一条余额 + 收入 - 支出（允许0.01误差）
 - 去重：相同日期+金额+摘要的记录不重复导入
 - 每条记录的 entity_code 和 entity_name 从账户信息中获取，不是从流水文件中读取
-- 解析器只产出 ParserArtifact，不得写入 ParserTemplate
+- 解析器只产出 ParserArtifact 草稿，不直接写入业务表
