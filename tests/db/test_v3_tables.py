@@ -85,6 +85,14 @@ def migrated_engine(tmp_db_path):
         "rule_artifacts",
         "parser_artifacts",
         "fund_events",
+        # 004 migration 创建的表，Base.metadata.create_all() 会提前创建，
+        # 测试需要从旧 schema 跑 Alembic upgrade，因此必须先 drop
+        "agent_memories",
+        "agent_runs",
+        "agent_messages",
+        "agent_sessions",
+        "skills_v2",
+        "agents_v2",
     ]
     with engine.begin() as conn:
         for t in v3_tables:

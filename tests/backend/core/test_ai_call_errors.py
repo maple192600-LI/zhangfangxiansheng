@@ -1,32 +1,67 @@
 import json
-import socket
 import sys
 from pathlib import Path
-from urllib.error import URLError
+
+import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "backend"))
 
 from core import ai_call
 
 
-class _Response:
-    def __init__(self, payload):
-        self.payload = payload
+class _FakeResponse:
+    def __init__(self, payload, status_code=200):
+        self.payload = payload.encode() if isinstance(payload, str) else payload
+        self.status_code = status_code
+        self.content = self.payload
 
-    def read(self):
-        return self.payload
+    def json(self):
+        return json.loads(self.payload)
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError(
+                f"{self.status_code}",
+                request=httpx.Request("POST", "https://test"),
+                response=httpx.Response(self.status_code),
+            )
+
+
+class _FakeClient:
+    def __init__(self, response_or_factory):
+        self._resp = response_or_factory
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
+
+    def post(self, *a, **kw):
+        resp = self._resp() if callable(self._resp) else self._resp
+        if isinstance(resp, Exception):
+            raise resp
+        return resp
+
+
+def _make_client(response_or_factory):
+    return lambda **kwargs: _FakeClient(response_or_factory)
+
+
+def _ok_response():
+    return _FakeResponse(json.dumps({"choices": [{"message": {"content": "ok"}}]}))
 
 
 def test_chat_retries_connection_error_once(monkeypatch):
     calls = {"count": 0}
 
-    def fake_urlopen(_req, timeout):
+    def _flaky_post(*a, **kw):
         calls["count"] += 1
         if calls["count"] == 1:
-            raise URLError("temporary down")
-        return _Response(json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode())
+            raise httpx.ConnectError("temporary down")
+        return _ok_response()
 
-    monkeypatch.setattr(ai_call, "urlopen", fake_urlopen)
+    monkeypatch.setattr("core.ai_call.httpx.Client", _make_client(_flaky_post))
 
     result = ai_call.chat("zhipu", "key", "https://example.test", "model", [{"role": "user", "content": "hi"}])
 
@@ -35,11 +70,10 @@ def test_chat_retries_connection_error_once(monkeypatch):
 
 
 def test_chat_classifies_timeout(monkeypatch):
-    monkeypatch.setattr(
-        ai_call,
-        "urlopen",
-        lambda _req, timeout: (_ for _ in ()).throw(URLError(socket.timeout("timed out"))),
-    )
+    def _timeout_post(*a, **kw):
+        raise httpx.TimeoutException("timed out")
+
+    monkeypatch.setattr("core.ai_call.httpx.Client", _make_client(_timeout_post))
 
     result = ai_call.chat("zhipu", "key", "https://example.test", "model", [], timeout=1)
 
@@ -49,7 +83,7 @@ def test_chat_classifies_timeout(monkeypatch):
 
 
 def test_chat_classifies_bad_response_json(monkeypatch):
-    monkeypatch.setattr(ai_call, "urlopen", lambda _req, timeout: _Response(b"not-json"))
+    monkeypatch.setattr("core.ai_call.httpx.Client", _make_client(_FakeResponse(b"not-json")))
 
     result = ai_call.chat("zhipu", "key", "https://example.test", "model", [])
 
@@ -61,11 +95,7 @@ def test_chat_classifies_bad_response_json(monkeypatch):
 def test_chat_writes_audit_log_on_success(monkeypatch):
     records = []
     monkeypatch.setattr(ai_call, "_write_ai_call_log", lambda **kwargs: records.append(kwargs))
-    monkeypatch.setattr(
-        ai_call,
-        "urlopen",
-        lambda _req, timeout: _Response(json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode()),
-    )
+    monkeypatch.setattr("core.ai_call.httpx.Client", _make_client(_ok_response()))
 
     result = ai_call.chat("zhipu", "key", "https://example.test", "model", [{"role": "user", "content": "hi"}])
 
@@ -81,11 +111,11 @@ def test_chat_writes_audit_log_on_success(monkeypatch):
 def test_chat_writes_audit_log_on_failure(monkeypatch):
     records = []
     monkeypatch.setattr(ai_call, "_write_ai_call_log", lambda **kwargs: records.append(kwargs))
-    monkeypatch.setattr(
-        ai_call,
-        "urlopen",
-        lambda _req, timeout: (_ for _ in ()).throw(URLError(socket.timeout("timed out"))),
-    )
+
+    def _timeout_post(*a, **kw):
+        raise httpx.TimeoutException("timed out")
+
+    monkeypatch.setattr("core.ai_call.httpx.Client", _make_client(_timeout_post))
 
     result = ai_call.chat("zhipu", "key", "https://example.test", "model", [], timeout=1)
 

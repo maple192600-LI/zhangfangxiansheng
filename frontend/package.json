@@ -9,9 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "ant-design-vue": "^4.2.6",
+    "@vicons/ionicons5": "^0.13.0",
     "axios": "^1.15.0",
     "echarts": "^6.0.0",
+    "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",
     "vue-router": "^4.6.4"
