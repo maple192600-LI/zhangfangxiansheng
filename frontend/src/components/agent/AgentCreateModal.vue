@@ -1,75 +1,76 @@
 <template>
-  <div class="modal-mask" @click.self="$emit('close')">
-    <div class="modal" style="max-width:520px">
-      <div class="modal-header">
-        <div class="modal-title">
-          <span class="modal-icon">🤖</span>
-          <h3>新建智能体</h3>
-        </div>
-        <p class="modal-desc">创建一个专属 AI 智能体，自定义名字、岗位职责和 AI 模型</p>
+  <NModal
+    :show="show"
+    preset="card"
+    title="新建智能体"
+    style="width: 580px"
+    :mask-closable="false"
+    @update:show="handleUpdateShow"
+  >
+    <template #header>
+      <div class="modal-title">
+        <span class="modal-icon">🤖</span>
+        <h3>新建智能体</h3>
       </div>
+      <p class="modal-desc">创建一个专属 AI 智能体，自定义名字、岗位职责和 AI 模型</p>
+    </template>
 
-      <div v-if="errMsg" class="error-bar">{{ errMsg }}</div>
+    <NForm label-placement="top">
+      <NFormItem label="快速模板">
+        <NSelect
+          v-model:value="selectedTemplate"
+          :options="templateOptions"
+          @update:value="applyTemplate"
+        />
+      </NFormItem>
 
-      <div class="form-group">
-        <label class="form-label">快速模板</label>
-        <select v-model="selectedTemplate" class="filter" style="display:block" @change="applyTemplate">
-          <option value="">自定义（空白）</option>
-          <option value="cashier">出纳助手</option>
-          <option value="analyst">报表分析师</option>
-        </select>
-        <p class="field-tip">选择模板自动填充名称和岗位职责</p>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">智能体名称 <span class="required">*</span></label>
-        <input
-          v-model="form.display_name"
-          class="filter"
+      <NFormItem label="智能体名称" required>
+        <NInput
+          v-model:value="form.display_name"
           placeholder="如：财务总监、出纳助手、报表分析师"
           @keyup.enter="handleCreate"
         />
-        <p class="field-tip">中文名称，将显示在左侧导航栏</p>
-      </div>
+      </NFormItem>
 
-      <div class="form-group">
-        <label class="form-label">岗位职责</label>
-        <textarea
-          v-model="form.role_prompt"
-          class="filter"
-          style="height:90px;resize:vertical;display:block"
+      <NFormItem label="岗位职责">
+        <NInput
+          v-model:value="form.role_prompt"
+          type="textarea"
+          :rows="4"
           placeholder="描述这个智能体应该做什么，如：&#10;你是公司的财务总监，负责审核资金日报、分析资金异常，提供专业的财务建议。"
-        ></textarea>
-        <p class="field-tip">作为智能体的系统提示词，决定其行为和回复风格</p>
-      </div>
+        />
+      </NFormItem>
 
-      <div class="form-group">
-        <label class="form-label">AI 模型配置 <span class="required">*</span></label>
-        <select v-model="form.ai_config_id" class="filter" style="display:block">
-          <option value="">— 请选择 AI 配置 —</option>
-          <option v-for="cfg in aiConfigs" :key="cfg.id" :value="cfg.id">
-            {{ cfg.display_name }}（{{ cfg.provider }}{{ cfg.model_name ? ' · ' + cfg.model_name : '' }}）
-          </option>
-        </select>
-        <p class="field-tip">选择已配置的 AI 模型，可在「系统设置 → 模型配置」中添加</p>
-      </div>
+      <NFormItem label="AI 模型配置" required>
+        <NSelect
+          v-model:value="form.ai_config_id"
+          :options="aiConfigOptions"
+          placeholder="请选择 AI 配置"
+        />
+      </NFormItem>
+    </NForm>
 
-      <div class="modal-footer">
-        <button class="btn btn-secondary" @click="$emit('close')">取消</button>
-        <button class="btn btn-primary" :disabled="loading" @click="handleCreate">
-          {{ loading ? '创建中...' : '确认创建' }}
-        </button>
-      </div>
-    </div>
-  </div>
+    <template #footer>
+      <NSpace justify="end">
+        <NButton @click="emit('close')">取消</NButton>
+        <NButton type="primary" :loading="loading" @click="handleCreate">确认创建</NButton>
+      </NSpace>
+    </template>
+  </NModal>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { NModal, NForm, NFormItem, NInput, NSelect, NButton, NSpace, useMessage } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
+
+const props = defineProps({
+  show: { type: Boolean, default: false }
+})
 
 const emit = defineEmits(['close', 'created'])
 const agentsStore = useAgentsStore()
+const message = useMessage()
 
 const form = ref({
   display_name: '',
@@ -79,7 +80,6 @@ const form = ref({
 const selectedTemplate = ref('')
 const aiConfigs = ref([])
 const loading = ref(false)
-const errMsg = ref('')
 
 const TEMPLATES = {
   cashier: {
@@ -92,33 +92,51 @@ const TEMPLATES = {
   },
 }
 
-function applyTemplate() {
-  const tpl = TEMPLATES[selectedTemplate.value]
+const templateOptions = [
+  { label: '自定义（空白）', value: '' },
+  { label: '出纳助手', value: 'cashier' },
+  { label: '报表分析师', value: 'analyst' },
+]
+
+const aiConfigOptions = computed(() =>
+  aiConfigs.value.map(cfg => ({
+    label: `${cfg.display_name}（${cfg.provider}${cfg.model_name ? ' · ' + cfg.model_name : ''}）`,
+    value: cfg.id,
+  }))
+)
+
+function applyTemplate(value) {
+  const tpl = TEMPLATES[value]
   if (tpl) {
     form.value.display_name = tpl.display_name
     form.value.role_prompt = tpl.role_prompt
   }
 }
 
-onMounted(async () => {
-  try {
-    aiConfigs.value = await agentsStore.fetchAIConfigs()
-    if (aiConfigs.value.length > 0) {
-      form.value.ai_config_id = aiConfigs.value[0].id
+function handleUpdateShow(val) {
+  if (!val) emit('close')
+}
+
+watch(() => props.show, async (newVal) => {
+  if (newVal && aiConfigs.value.length === 0) {
+    try {
+      aiConfigs.value = await agentsStore.fetchAIConfigs()
+      if (aiConfigs.value.length > 0) {
+        form.value.ai_config_id = aiConfigs.value[0].id
+      }
+    } catch (e) {
+      message.error('加载 AI 配置失败: ' + (e.message || ''))
     }
-  } catch (e) {
-    errMsg.value = '加载 AI 配置失败: ' + (e.message || '')
   }
 })
 
 async function handleCreate() {
-  errMsg.value = ''
   if (!form.value.display_name.trim()) {
-    errMsg.value = '请填写智能体名称'
+    message.error('请填写智能体名称')
     return
   }
   if (!form.value.ai_config_id) {
-    errMsg.value = '请选择 AI 配置'
+    message.error('请选择 AI 配置')
     return
   }
   loading.value = true
@@ -130,7 +148,7 @@ async function handleCreate() {
     })
     emit('created', agent)
   } catch (e) {
-    errMsg.value = e.message || '创建失败'
+    message.error(e.message || '创建失败')
   } finally {
     loading.value = false
   }
@@ -138,25 +156,6 @@ async function handleCreate() {
 </script>
 
 <style scoped>
-@import '@/views/common.css';
-
-.modal-mask {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.35);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000;
-}
-.modal {
-  background: #faf8f3;
-  border-radius: var(--radius-lg, 16px);
-  padding: 28px 32px;
-  width: 90%;
-  max-width: 520px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-}
-.modal-header {
-  margin-bottom: 20px;
-}
 .modal-title {
   display: flex; align-items: center; gap: 10px;
 }
@@ -173,35 +172,5 @@ async function handleCreate() {
   font-size: var(--font-size-sm, 13px);
   color: var(--muted);
   line-height: 1.6;
-}
-.form-group {
-  margin-bottom: 16px;
-}
-.form-group label {
-  display: block;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-secondary);
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.form-group .filter {
-  width: 100%;
-  box-sizing: border-box;
-}
-.required {
-  color: var(--warn-text, #9b3d2f);
-}
-.field-tip {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.modal-footer {
-  display: flex; gap: 10px;
-  justify-content: flex-end;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line-soft, #e7e0d5);
 }
 </style>
