@@ -39,11 +39,9 @@ LOCKED_FILES = [
 
 
 def sha256_of(path: Path) -> str:
-    """以字节流计算 SHA256。换行与编码差异不做标准化：字面内容即契约。"""
+    """以字节流计算 SHA256，统一用 LF 换行，避免 CRLF/LF 平台差异导致 lock 不匹配。"""
     h = hashlib.sha256()
-    with path.open("rb") as fp:
-        for chunk in iter(lambda: fp.read(65536), b""):
-            h.update(chunk)
+    h.update(path.read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
 
