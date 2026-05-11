@@ -45,8 +45,8 @@
             <span class="fp-name" :title="item.path">{{ item.name }}</span>
             <span v-if="!item.is_dir" class="fp-size">{{ fmtSize(item.size) }}</span>
             <div class="fp-item-btns" v-if="!item.is_dir">
-              <button class="fp-btn-sm" @click.stop="openEditor(item)" title="编辑">✏️</button>
-              <button class="fp-btn-sm fp-btn-del" @click.stop="handleDelete(item)" title="删除">🗑</button>
+              <NButton class="fp-btn-sm" quaternary @click.stop="openEditor(item)" title="编辑">✏️</NButton>
+              <NButton class="fp-btn-sm fp-btn-del" quaternary @click.stop="handleDelete(item)" title="删除">🗑</NButton>
             </div>
           </div>
         </div>
@@ -56,12 +56,12 @@
     <!-- 文件编辑器视图 -->
     <div v-else class="fp-editor">
       <div class="fp-head">
-        <button class="fp-btn" @click="closeEditor">← 返回</button>
+        <NButton class="fp-btn" quaternary @click="closeEditor">← 返回</NButton>
         <span class="fp-path">{{ editingFile.path }}</span>
         <div class="fp-actions">
-          <button class="fp-btn fp-btn-save" @click="handleSave" :disabled="saving">
+          <NButton class="fp-btn fp-btn-save" quaternary @click="handleSave" :disabled="saving">
             {{ saving ? '保存中...' : '💾 保存' }}
-          </button>
+          </NButton>
         </div>
       </div>
       <textarea
@@ -79,6 +79,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { NButton } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
 
 const props = defineProps({ agentId: Number })

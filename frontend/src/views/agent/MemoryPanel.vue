@@ -6,7 +6,7 @@
           <h3>长期记忆</h3>
           <div class="block-actions">
             <span class="block-count">{{ memories.length }} 条记忆</span>
-            <button class="btn-new" @click="startAdd">添加记忆</button>
+            <NButton class="btn-new" quaternary @click="startAdd">添加记忆</NButton>
           </div>
         </div>
 
@@ -15,10 +15,10 @@
           <input v-model="editForm.key" class="add-input" placeholder="记忆标题" />
           <textarea v-model="editForm.content" class="add-textarea" rows="4" placeholder="记忆内容" />
           <div class="add-actions">
-            <button class="btn-save" @click="handleSave" :disabled="saving">
+            <NButton class="btn-save" quaternary @click="handleSave" :disabled="saving">
               {{ saving ? '保存中...' : '保存' }}
-            </button>
-            <button class="btn-cancel" @click="cancelEdit">取消</button>
+            </NButton>
+            <NButton class="btn-cancel" quaternary @click="cancelEdit">取消</NButton>
           </div>
         </div>
 
@@ -34,8 +34,8 @@
             <div class="memory-meta">
               <span v-if="m.source" class="tag">{{ m.source }}</span>
               <span class="memory-time">{{ fmtTime(m.last_used_at || m.created_at) }}</span>
-              <button class="btn-edit" @click="startEdit(m)" title="编辑">✏️</button>
-              <button class="btn-del" @click="handleDelete(m)" title="删除">🗑</button>
+              <NButton class="btn-edit" quaternary @click="startEdit(m)" title="编辑">✏️</NButton>
+              <NButton class="btn-del" quaternary @click="handleDelete(m)" title="删除">🗑</NButton>
             </div>
           </div>
           <div class="memory-content">{{ m.content }}</div>
@@ -58,6 +58,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
+import { NButton } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
 
 const props = defineProps({ agentId: Number })

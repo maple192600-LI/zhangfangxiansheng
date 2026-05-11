@@ -8,10 +8,10 @@
 
       <!-- 子标签页 -->
       <div class="tabs-bar">
-        <button class="tab-btn" :class="{ active: activeTab === 'accounts' }" @click="activeTab = 'accounts'">账户列表</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'divisions' }" @click="activeTab = 'divisions'">核算管理</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'entities' }" @click="activeTab = 'entities'">单位管理</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'banks' }" @click="activeTab = 'banks'">账户管理</button>
+        <NButton class="tab-btn" :class="{ active: activeTab === 'accounts' }" quaternary @click="activeTab = 'accounts'">账户列表</NButton>
+        <NButton class="tab-btn" :class="{ active: activeTab === 'divisions' }" quaternary @click="activeTab = 'divisions'">核算管理</NButton>
+        <NButton class="tab-btn" :class="{ active: activeTab === 'entities' }" quaternary @click="activeTab = 'entities'">单位管理</NButton>
+        <NButton class="tab-btn" :class="{ active: activeTab === 'banks' }" quaternary @click="activeTab = 'banks'">账户管理</NButton>
       </div>
 
       <!-- ==================== 标签页1: 账户列表 ==================== -->
@@ -26,9 +26,9 @@
             <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
               <NButton secondary @click="accDropdownOpen = !accDropdownOpen">批量操作 ({{ selectedAccountIds.length }})</NButton>
               <div class="dropdown-menu">
-                <button @click="batchAccounts('enable'); accDropdownOpen = false">批量启用</button>
-                <button @click="batchAccounts('disable'); accDropdownOpen = false">批量停用</button>
-                <button @click="batchAccounts('delete'); accDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
+                <NButton quaternary @click="batchAccounts('enable'); accDropdownOpen = false">批量启用</NButton>
+                <NButton quaternary @click="batchAccounts('disable'); accDropdownOpen = false">批量停用</NButton>
+                <NButton quaternary @click="batchAccounts('delete'); accDropdownOpen = false" class="dropdown-item-danger">批量删除</NButton>
               </div>
             </div>
             <NButton secondary @click="downloadTemplate">下载导入模板</NButton>
@@ -93,9 +93,9 @@
             <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
               <NButton secondary @click="divDropdownOpen = !divDropdownOpen">批量操作 ({{ selectedDivIds.length }})</NButton>
               <div class="dropdown-menu">
-                <button @click="batchDivisions('enable'); divDropdownOpen = false">批量启用</button>
-                <button @click="batchDivisions('disable'); divDropdownOpen = false">批量停用</button>
-                <button @click="batchDivisions('delete'); divDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
+                <NButton quaternary @click="batchDivisions('enable'); divDropdownOpen = false">批量启用</NButton>
+                <NButton quaternary @click="batchDivisions('disable'); divDropdownOpen = false">批量停用</NButton>
+                <NButton quaternary @click="batchDivisions('delete'); divDropdownOpen = false" class="dropdown-item-danger">批量删除</NButton>
               </div>
             </div>
             <NButton type="primary" @click="openDivForm()">+ 新建核算组织</NButton>
@@ -153,9 +153,9 @@
             <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
               <NButton secondary @click="entDropdownOpen = !entDropdownOpen">批量操作 ({{ selectedEntIds.length }})</NButton>
               <div class="dropdown-menu">
-                <button @click="batchEntities('enable'); entDropdownOpen = false">批量启用</button>
-                <button @click="batchEntities('disable'); entDropdownOpen = false">批量停用</button>
-                <button @click="batchEntities('delete'); entDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
+                <NButton quaternary @click="batchEntities('enable'); entDropdownOpen = false">批量启用</NButton>
+                <NButton quaternary @click="batchEntities('disable'); entDropdownOpen = false">批量停用</NButton>
+                <NButton quaternary @click="batchEntities('delete'); entDropdownOpen = false" class="dropdown-item-danger">批量删除</NButton>
               </div>
             </div>
             <NButton type="primary" @click="openEntForm()">+ 新建单位</NButton>
@@ -214,9 +214,9 @@
             <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">
               <NButton secondary @click="bankDropdownOpen = !bankDropdownOpen">批量操作 ({{ selectedBankIds.length }})</NButton>
               <div class="dropdown-menu">
-                <button @click="batchBanks('enable'); bankDropdownOpen = false">批量启用</button>
-                <button @click="batchBanks('disable'); bankDropdownOpen = false">批量停用</button>
-                <button @click="batchBanks('delete'); bankDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
+                <NButton quaternary @click="batchBanks('enable'); bankDropdownOpen = false">批量启用</NButton>
+                <NButton quaternary @click="batchBanks('disable'); bankDropdownOpen = false">批量停用</NButton>
+                <NButton quaternary @click="batchBanks('delete'); bankDropdownOpen = false" class="dropdown-item-danger">批量删除</NButton>
               </div>
             </div>
             <NButton type="primary" @click="openBankForm()">+ 新建银行账户</NButton>

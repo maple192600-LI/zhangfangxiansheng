@@ -4,7 +4,7 @@
     <div class="provider-sidebar">
       <div class="sidebar-head">
         <h3>模型配置</h3>
-        <button class="btn-add" @click="addProvider" title="添加供应商">+</button>
+        <NButton class="btn-add" quaternary @click="addProvider" title="添加供应商">+</NButton>
       </div>
 
       <div class="provider-list">
@@ -27,12 +27,12 @@
 
         <div v-if="!configs.length" class="empty-sidebar">
           <p>尚未配置供应商</p>
-          <button class="btn-add-inline" @click="addProvider">+ 添加</button>
+          <NButton class="btn-add-inline" quaternary @click="addProvider">+ 添加</NButton>
         </div>
       </div>
 
       <div class="sidebar-footer">
-        <button class="btn-log" @click="loadCallLogs">调用记录</button>
+        <NButton class="btn-log" quaternary @click="loadCallLogs">调用记录</NButton>
       </div>
     </div>
 
@@ -92,7 +92,7 @@
                     class="field-input key-input"
                     placeholder="只需要填这里，下方配置会自动填充"
                   />
-                  <button class="key-toggle" @click="showKey = !showKey">{{ showKey ? '隐藏' : '显示' }}</button>
+                  <NButton class="key-toggle" quaternary @click="showKey = !showKey">{{ showKey ? '隐藏' : '显示' }}</NButton>
                 </div>
                 <span class="field-desc" v-if="selectedId">留空不修改</span>
               </div>

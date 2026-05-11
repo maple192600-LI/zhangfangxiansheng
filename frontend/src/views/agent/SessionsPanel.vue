@@ -6,7 +6,7 @@
           <h3>会话历史</h3>
           <div class="block-actions">
             <span class="block-count">{{ sessions.length }} 个会话</span>
-            <button class="btn-new" @click="handleCreate">新建会话</button>
+            <NButton class="btn-new" quaternary @click="handleCreate">新建会话</NButton>
           </div>
         </div>
 
@@ -24,7 +24,7 @@
               <div class="session-time">{{ fmtTime(s.last_active_at || s.created_at) }}</div>
             </div>
           </div>
-          <button class="btn-del" @click.stop="handleDelete(s)" title="删除会话">删除</button>
+          <NButton class="btn-del" quaternary @click.stop="handleDelete(s)" title="删除会话">删除</NButton>
         </div>
       </div>
     </div>
@@ -33,6 +33,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { NButton } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
 
 const props = defineProps({ agentId: Number })

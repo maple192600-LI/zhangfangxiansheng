@@ -5,8 +5,8 @@
     </div>
 
     <div class="tabs-bar">
-      <button class="tab-btn" :class="{ active: activeTab === 'backup' }" @click="activeTab = 'backup'">备份恢复</button>
-      <button class="tab-btn" :class="{ active: activeTab === 'cleanup' }" @click="activeTab = 'cleanup'">数据清理</button>
+      <NButton class="tab-btn" :class="{ active: activeTab === 'backup' }" quaternary @click="activeTab = 'backup'">备份恢复</NButton>
+      <NButton class="tab-btn" :class="{ active: activeTab === 'cleanup' }" quaternary @click="activeTab = 'cleanup'">数据清理</NButton>
     </div>
 
     <!-- 备份恢复 -->

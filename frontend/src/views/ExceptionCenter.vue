@@ -13,9 +13,9 @@
       </div>
 
       <div class="filters-bar">
-        <button class="filter" :class="{ active: filters.state === '' }" @click="setState('')">全部</button>
-        <button class="filter" :class="{ active: filters.state === '待确认' }" @click="setState('待确认')">待确认</button>
-        <button class="filter" :class="{ active: filters.state === '异常' }" @click="setState('异常')">异常</button>
+        <NButton class="filter" :class="{ active: filters.state === '' }" quaternary @click="setState('')">全部</NButton>
+        <NButton class="filter" :class="{ active: filters.state === '待确认' }" quaternary @click="setState('待确认')">待确认</NButton>
+        <NButton class="filter" :class="{ active: filters.state === '异常' }" quaternary @click="setState('异常')">异常</NButton>
         <input v-model="filters.keyword" class="filter keyword-input" placeholder="搜索摘要/对方" @keyup.enter="reload" />
         <div style="flex:1"></div>
         <NButton secondary @click="reload" :disabled="loading">{{ loading ? '刷新中...' : '刷新' }}</NButton>
