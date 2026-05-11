@@ -59,7 +59,7 @@
 | 报表模板 | ✅ 完成 | 3 条 report_templates |
 | 后端服务层 | ✅ 完成 | 20 个 service 文件 |
 | API 路由 | ✅ 完成 | 23 个路由模块 |
-| Fund Agent 骨架 | ✅ 完成（旧中间态） | harness / schemas / memory / 5 个空壳 skill 文件。待迁移后删除 |
+| ~~Fund Agent 骨架~~ | ~~已删除（Phase 5）~~ | harness / schemas / memory / 5 个空壳 skill 文件已删除 |
 
 ### §2.2 · 关键缺口
 

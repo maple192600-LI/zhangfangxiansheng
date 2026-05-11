@@ -32,7 +32,7 @@ The system must not force one account per file.
 手工流水页面的工具栏增加「调用智能体」下拉框，用于 Excel 上传时的 AI 智能列映射。用户可选择任意已创建的 Agent 智能体来解析手工流水表头。
 
 **Excel 上传两种模式：**
-1. **上传预览** — 走原有 FundAgent `parser.manual` skill 流程
+1. **上传预览** — 需要活跃的 ParserArtifact，由通用 Agent 生成（旧 FundAgent `parser.manual` 已删除）
 2. **AI 智能解析** — 使用选定的 Agent 智能体，基于当前方案的 field_pool 进行列映射分析
 
 ## 4. Track A: quick entry
