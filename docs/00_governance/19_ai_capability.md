@@ -238,9 +238,9 @@ arguments:
 
 ### §5.3 · 旧体系说明
 
-> **注意**：以下内容描述旧 FundAgent 中间态的当前仓库状态，不代表目标架构。完整清理计划见 [00_single_agent_cleanup_audit.md](00_single_agent_cleanup_audit.md)。
+> **注意**：旧 FundAgent 体系已全部删除（Phase 5，2026-05-11）。以下为历史记录。
 
-`backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。`fund_skill_run` 是旧桥接工具，后续删除，不得迁移成新的通用 Agent 调度结构。`backend/fund/`（含 `primitives/` 和 `artifacts/parsers/`）是产物确定性执行基础设施，必须保留。
+`backend/agents/fund/` 和 `fund_skill_run` 已删除。`backend/fund/`（含 `primitives/` 和 `artifacts/`）是产物确定性执行基础设施，必须保留。
 
 ---
 

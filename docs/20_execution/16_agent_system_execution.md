@@ -134,16 +134,16 @@ async def run_turn(agent, session_id, user_text, db):
 | 技能列表 | `skill_ops.py` | `skill_list` | 列出可用技能 |
 | 询问用户 | `ask_user.py` | `ask_user` | 请求用户确认 |
 
-### §2.3 · 旧 FundAgent 模块（backend/agents/fund/，旧中间态，待迁移后删除）
+### ~~§2.3 · 旧 FundAgent 模块（已删除）~~
 
-> **注意**：`backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。可复用逻辑迁移到 `backend/services/` 和 `backend/schemas/`。`backend/fund/` 是产物确定性执行基础设施，必须保留。
+> `backend/agents/fund/` 已在 Phase 5（2026-05-11）全部删除。可复用逻辑已迁移到 `backend/services/`。`backend/fund/` 是产物确定性执行基础设施，保留。
 
-| 模块 | 职责 |
+| 模块 | 状态 |
 |------|------|
-| `harness.py` | 旧 FundAgent 调度器（待迁移后删除） |
-| `schemas.py` | Parser/Rule artifact 的 Pydantic Schema（待迁移） |
-| `memory.py` | 样本库/字段字典/别名库访问层（待迁移） |
-| `skills/*.py` | 5 个空壳 skill 文件（待删除） |
+| `harness.py` | ~~Phase 5 已删除~~ |
+| `schemas.py` | ~~Phase 3 迁移 → Phase 5 已删除~~ |
+| `memory.py` | ~~Phase 3 迁移 → Phase 5 已删除~~ |
+| `skills/*.py` | ~~Phase 5 已删除~~ |
 
 ---
 

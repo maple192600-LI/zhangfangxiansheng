@@ -123,7 +123,7 @@ CHECK 约束：
 | 4 | 规则维护迭代 | 维护/迭代现有规则 | 原 Rule + 修改需求 | 新版 RuleArtifact |
 | 5 | 模板占位符识别 | 识别模板占位符并出规则草稿 | 空白 Excel 模板 | 占位符列表 + RuleArtifact 草稿 + 置信度 |
 
-> **注意**：上述能力方向不代表固定的 5 个 skill 绑定。技能由通用 Agent 统一调度，不得绑定到领域专用调度器。`backend/agents/fund/` 是旧 FundAgent 中间态，待迁移后删除。
+> **注意**：上述能力方向不代表固定的 5 个 skill 绑定。技能由通用 Agent 统一调度，不得绑定到领域专用调度器。`backend/agents/fund/` 已在 Phase 5（2026-05-11）删除。
 
 ### §C4.3 · 技能创建机制
 
