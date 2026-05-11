@@ -29,10 +29,7 @@
               <tr v-for="(row, idx) in editableRows" :key="idx">
                 <td v-for="col in visibleColumns" :key="col.field_code">
                   <template v-if="col.field_code === 'entity_match_key'">
-                    <select v-model="row[col.field_code]" class="cell-input">
-                      <option value="">选择单位简称</option>
-                      <option v-for="e in entities" :key="e.entity_id" :value="e.entity_name">{{ e.entity_name }}</option>
-                    </select>
+                    <NSelect v-model:value="row[col.field_code]" :options="entitySelectOptions" placeholder="选择单位简称" size="tiny" />
                   </template>
                   <template v-else-if="col.field_code === 'account_match_key'">
                     <input v-model="row[col.field_code]" class="cell-input" placeholder="账户编号/名称" />
@@ -41,7 +38,7 @@
                     <input v-model="row[col.field_code]" type="number" step="0.01" class="cell-input" />
                   </template>
                   <template v-else-if="col.field_code === 'business_date'">
-                    <input v-model="row[col.field_code]" type="date" class="cell-input" />
+                    <NDatePicker v-model:value="row[col.field_code]" type="date" value-format="yyyy-MM-dd" size="tiny" style="width:100%" />
                   </template>
                   <template v-else>
                     <input v-model="row[col.field_code]" class="cell-input" :placeholder="col.field_name_cn" />
@@ -84,6 +81,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import * as master from '@/api/master'
@@ -94,6 +92,7 @@ const schemes = ref([])
 const fieldPool = ref([])
 const currentSchemeCode = ref('manual_multi_subject_basic')
 const entities = ref([])
+const entitySelectOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_name })))
 const tab = ref('quick')
 const editableRows = ref([])
 const saving = ref(false)

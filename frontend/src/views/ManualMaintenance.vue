@@ -27,18 +27,10 @@
             <tr v-for="r in abnormalRows" :key="r._row_no" class="abnormal-row">
               <td>{{ r._row_no }}</td>
               <td>
-                <select v-model="r._fix_entity_id" class="cell-input">
-                  <option :value="null">未匹配</option>
-                  <option v-for="e in entityList" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
-                </select>
+                <NSelect v-model:value="r._fix_entity_id" :options="entityFixOptions" placeholder="未匹配" clearable size="tiny" />
               </td>
               <td>
-                <select v-model="r._fix_account_id" class="cell-input">
-                  <option :value="null">未匹配</option>
-                  <optgroup v-for="g in entityGroups" :key="g.entity_id" :label="g.entity_name">
-                    <option v-for="a in g.accounts" :key="a.id" :value="a.id">{{ a.account_code }} {{ a.account_alias }}</option>
-                  </optgroup>
-                </select>
+                <NSelect v-model:value="r._fix_account_id" :options="accountFixOptions" placeholder="未匹配" clearable size="tiny" />
               </td>
               <td>{{ r.business_date || '-' }}</td>
               <td>{{ r.summary_text || '-' }}</td>
@@ -65,6 +57,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NSelect } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import * as master from '@/api/master'
@@ -76,6 +69,15 @@ const router = useRouter()
 const batchCode = ref(route.query.batch_code || '')
 const abnormalRows = ref([])
 const entityList = ref([])
+const entityFixOptions = computed(() => entityList.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
+const accountFixOptions = computed(() => {
+  return entityGroups.value.map(g => ({
+    type: 'group',
+    label: g.entity_name,
+    key: g.entity_id,
+    children: g.accounts.map(a => ({ label: `${a.account_code} ${a.account_alias}`, value: a.id }))
+  }))
+})
 const fixing = ref(false)
 const fixResult = ref(null)
 

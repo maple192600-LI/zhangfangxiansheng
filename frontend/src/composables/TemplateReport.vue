@@ -7,27 +7,18 @@
       </div>
       <div class="filters-bar">
         <template v-if="dateMode === 'range'">
-          <input v-model="startDate" type="date" class="filter" />
+          <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
           <span style="color:var(--muted);font-size:13px">至</span>
-          <input v-model="endDate" type="date" class="filter" />
+          <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
         </template>
         <template v-else-if="dateMode === 'year'">
-          <select v-model.number="selYear" class="filter">
-            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-          </select>
+          <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
         </template>
         <template v-else>
-          <select v-model.number="selYear" class="filter">
-            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-          </select>
-          <select v-model.number="selMonth" class="filter">
-            <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-          </select>
+          <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
+          <NSelect v-model:value="selMonth" :options="monthSelectOptions" style="width:80px" />
         </template>
-        <select v-model="entityId" class="filter">
-          <option :value="null">全部单位</option>
-          <option v-for="e in entities" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
-        </select>
+        <NSelect v-model:value="entityId" :options="entityFilterOptions" placeholder="全部单位" clearable style="min-width:140px" />
         <div style="flex:1"></div>
         <div class="btn-row">
           <button class="btn btn-secondary" @click="doExport">导出</button>
@@ -73,6 +64,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect } from 'naive-ui'
 import * as reportApi from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -103,6 +95,9 @@ const yearOptions = computed(() => {
   const y = today.getFullYear()
   return [y - 2, y - 1, y, y + 1]
 })
+const yearSelectOptions = computed(() => yearOptions.value.map(y => ({ label: `${y}年`, value: y })))
+const monthSelectOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
+const entityFilterOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
 
 const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
 

@@ -6,18 +6,11 @@
         <span>所有后续报表的统一底座</span>
       </div>
       <div class="filters-bar">
-        <input v-model="filters.date_from" type="date" class="filter" />
+        <NDatePicker v-model:value="filters.date_from" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <input v-model="filters.date_to" type="date" class="filter" />
-        <select v-model="filters.entity_id" class="filter">
-          <option :value="null">全部单位</option>
-          <option v-for="e in entities" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
-        </select>
-        <select v-model="filters.direction" class="filter">
-          <option :value="null">全部方向</option>
-          <option value="income">收入</option>
-          <option value="expense">支出</option>
-        </select>
+        <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
+        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable style="min-width:140px" />
+        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable style="width:100px" />
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div style="flex:1"></div>
         <div class="btn-row">
@@ -99,6 +92,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect } from 'naive-ui'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -141,7 +135,12 @@ function cellVal(r, key) {
   return r[key]
 }
 
-const filters = ref({ date_from: '', date_to: '', entity_id: null, direction: null, keyword: '' })
+const directionOptions = [
+  { label: '收入', value: 'income' },
+  { label: '支出', value: 'expense' },
+]
+const entityFilterOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
+const filters = ref({ date_from: null, date_to: null, entity_id: null, direction: null, keyword: '' })
 
 async function loadData() {
   loading.value = true

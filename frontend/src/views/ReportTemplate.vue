@@ -78,9 +78,7 @@
           </div>
           <div class="form-row" v-if="!editingId">
             <label>报表类型</label>
-            <select v-model="form.report_type">
-              <option v-for="t in reportTypes" :key="t.code" :value="t.code">{{ t.name }}</option>
-            </select>
+            <NSelect v-model:value="form.report_type" :options="reportTypeOptions" style="width:100%;padding:6px 10px;border:1px solid #E0D9D0;border-radius:6px;font-size:13px" />
           </div>
           <div class="form-row">
             <label>
@@ -101,11 +99,7 @@
                 <input v-model="col.field_key" placeholder="字段名" class="col-input" style="width:120px" />
                 <input v-model="col.header_name" placeholder="表头名" class="col-input" style="width:120px" />
                 <input v-model.number="col.width" type="number" placeholder="宽度" class="col-input" style="width:70px" />
-                <select v-model="col.align" class="col-input" style="width:70px">
-                  <option value="left">左</option>
-                  <option value="center">中</option>
-                  <option value="right">右</option>
-                </select>
+                <NSelect v-model:value="col.align" :options="alignOptions" size="tiny" style="width:70px" />
                 <label class="col-check"><input type="checkbox" v-model="col.visible" /> 显示</label>
                 <button class="btn-sm danger" @click="removeColumn(idx)" title="删除">x</button>
               </div>
@@ -123,6 +117,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { NSelect } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/reportTemplate'
 
@@ -131,6 +126,12 @@ const reportTypes = ref([])
 const templates = ref([])
 const currentType = ref('')
 const typeDefaultMap = reactive({})
+const reportTypeOptions = computed(() => reportTypes.value.map(t => ({ label: t.name, value: t.code })))
+const alignOptions = [
+  { label: '左', value: 'left' },
+  { label: '中', value: 'center' },
+  { label: '右', value: 'right' },
+]
 const showForm = ref(false)
 const editingId = ref(null)
 const fileInput = ref(null)

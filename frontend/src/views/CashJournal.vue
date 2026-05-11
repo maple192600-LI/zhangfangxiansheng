@@ -6,15 +6,10 @@
         <span>现金类资金载体的结果视图</span>
       </div>
       <div class="filters-bar">
-        <input v-model="startDate" type="date" class="filter" />
+        <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <input v-model="endDate" type="date" class="filter" />
-        <select v-model="accountId" class="filter">
-          <option :value="null">全部账户</option>
-          <optgroup v-for="g in entityGroups" :key="g.entity_id" :label="g.entity_name">
-            <option v-for="a in g.accounts" :key="a.id" :value="a.id">{{ a.account_code }} {{ a.account_alias }}</option>
-          </optgroup>
-        </select>
+        <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
+        <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable style="min-width:180px" />
         <div style="flex:1"></div>
         <div class="btn-row">
           <button class="btn btn-secondary" @click="doExport">导出</button>
@@ -146,6 +141,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect } from 'naive-ui'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -156,6 +152,15 @@ const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
 const endDate = ref(today)
 const accountId = ref(null)
+
+const accountGroupOptions = computed(() => {
+  return entityGroups.value.map(g => ({
+    type: 'group',
+    label: g.entity_name,
+    key: g.entity_id,
+    children: g.accounts.map(a => ({ label: `${a.account_code} ${a.account_alias}`, value: a.id }))
+  }))
+})
 const entities = ref([])
 const blocks = ref([])
 const rows = ref([])

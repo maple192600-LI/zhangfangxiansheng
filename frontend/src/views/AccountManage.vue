@@ -17,20 +17,10 @@
       <!-- ==================== 标签页1: 账户列表 ==================== -->
       <div v-show="activeTab === 'accounts'">
         <div class="filters-bar">
-          <select v-model="filterDivision" class="filter" @change="loadAccounts">
-            <option :value="null">全部核算组织</option>
-            <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
-          <select v-model="filterEntity" class="filter">
-            <option :value="null">全部单位</option>
-            <option v-for="e in filteredEntities" :key="e.id" :value="e.id">{{ e.short_name }}</option>
-          </select>
+          <NSelect v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable style="min-width:130px" @update:value="loadAccounts" />
+          <NSelect v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable style="min-width:130px" />
           <input v-model="keyword" class="filter" placeholder="搜索账户编号/名称/银行/账号" style="width:220px" />
-          <select v-model="filterStatus" class="filter" style="width:90px">
-            <option value="">全部</option>
-            <option value="enabled">启用</option>
-            <option value="disabled">停用</option>
-          </select>
+          <NSelect v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" style="width:90px" />
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
@@ -97,11 +87,7 @@
       <!-- ==================== 标签页2: 核算管理 ==================== -->
       <div v-show="activeTab === 'divisions'">
         <div class="filters-bar">
-          <select v-model="divFilterStatus" class="filter" style="width:90px">
-            <option value="">全部状态</option>
-            <option value="enabled">启用</option>
-            <option value="disabled">停用</option>
-          </select>
+          <NSelect v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
@@ -159,16 +145,9 @@
       <!-- ==================== 标签页3: 单位管理 ==================== -->
       <div v-show="activeTab === 'entities'">
         <div class="filters-bar">
-          <select v-model="entFilterDiv" class="filter">
-            <option :value="null">全部核算组织</option>
-            <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
+          <NSelect v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable style="min-width:130px" />
           <input v-model="entKeyword" class="filter" placeholder="搜索单位编码/名称" style="width:200px" />
-          <select v-model="entFilterStatus" class="filter" style="width:90px">
-            <option value="">全部状态</option>
-            <option value="enabled">启用</option>
-            <option value="disabled">停用</option>
-          </select>
+          <NSelect v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
@@ -229,11 +208,7 @@
       <div v-show="activeTab === 'banks'">
         <div class="filters-bar">
           <input v-model="bankKeyword" class="filter" placeholder="搜索账户编号/开户银行/银行账号" style="width:220px" />
-          <select v-model="bankFilterStatus" class="filter" style="width:90px">
-            <option value="">全部状态</option>
-            <option value="enabled">启用</option>
-            <option value="disabled">停用</option>
-          </select>
+          <NSelect v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">
@@ -301,13 +276,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <select v-model="accountForm.entity_id" class="form-input">
-              <option :value="null" disabled>-- 请选择所属单位 --</option>
-              <optgroup v-for="d in divisions" :key="d.id" :label="d.name">
-                <option v-for="e in getEntitiesForDivision(d.id)" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
-              </optgroup>
-              <option v-for="e in ungroupedEntities" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
-            </select>
+            <NSelect v-model:value="accountForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">账户编号 *</label>
@@ -331,44 +300,19 @@
           </div>
           <div class="form-group">
             <label class="form-label">账户类型 *</label>
-            <select v-model="accountForm.account_type" class="form-input">
-              <option value="" disabled>-- 请选择 --</option>
-              <option value="基本户">基本户</option>
-              <option value="一般户">一般户</option>
-              <option value="临时户">临时户</option>
-              <option value="现金账户">现金账户</option>
-              <option value="农民工工资专用账户">农民工工资专用账户</option>
-              <option value="票据账户">票据账户</option>
-              <option value="信用证账户">信用证账户</option>
-              <option value="贷款账户">贷款账户</option>
-              <option value="其他账户">其他账户</option>
-            </select>
+            <NSelect v-model:value="accountForm.account_type" :options="ACCOUNT_TYPE_OPTIONS" placeholder="-- 请选择 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">资金类型 *</label>
-            <select v-model="accountForm.instrument_type" class="form-input">
-              <option value="" disabled>-- 请选择 --</option>
-              <option value="银行存款">银行存款</option>
-              <option value="现金">现金</option>
-              <option value="票据">票据</option>
-              <option value="信用证">信用证</option>
-              <option value="保证金">保证金</option>
-              <option value="其他">其他</option>
-            </select>
+            <NSelect v-model:value="accountForm.instrument_type" :options="INSTRUMENT_TYPE_OPTIONS" placeholder="-- 请选择 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否网银 *</label>
-            <select v-model="accountForm.has_online_banking" class="form-input">
-              <option :value="true">是</option>
-              <option :value="false">否</option>
-            </select>
+            <NSelect v-model:value="accountForm.has_online_banking" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">录入方式 *</label>
-            <select v-model="accountForm.input_method" class="form-input">
-              <option value="网银导入">网银导入</option>
-              <option value="手工填写">手工填写</option>
-            </select>
+            <NSelect v-model:value="accountForm.input_method" :options="INPUT_METHOD_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">币种</label>
@@ -380,28 +324,19 @@
           </div>
           <div class="form-group" v-if="!editingAccount">
             <label class="form-label">余额日期 *</label>
-            <input v-model="accountForm.balance_date" type="date" class="form-input" />
+            <NDatePicker v-model:value="accountForm.balance_date" type="date" value-format="yyyy-MM-dd" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否纳入日报</label>
-            <select v-model="accountForm.include_in_daily_report" class="form-input">
-              <option :value="true">是</option>
-              <option :value="false">否</option>
-            </select>
+            <NSelect v-model:value="accountForm.include_in_daily_report" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否允许手工录入</label>
-            <select v-model="accountForm.allow_manual_entry" class="form-input">
-              <option :value="true">是</option>
-              <option :value="false">否</option>
-            </select>
+            <NSelect v-model:value="accountForm.allow_manual_entry" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" v-if="editingAccount">
             <label class="form-label">状态</label>
-            <select v-model="accountForm.status" class="form-input">
-              <option value="enabled">启用</option>
-              <option value="disabled">停用</option>
-            </select>
+            <NSelect v-model:value="accountForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>
@@ -434,10 +369,7 @@
           </div>
           <div class="form-group" v-if="editingDiv">
             <label class="form-label">状态</label>
-            <select v-model="divForm.status" class="form-input">
-              <option value="enabled">启用</option>
-              <option value="disabled">停用</option>
-            </select>
+            <NSelect v-model:value="divForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
@@ -454,10 +386,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属核算组织 *</label>
-            <select v-model="entForm.division_id" class="form-input">
-              <option :value="null" disabled>-- 请选择核算组织 --</option>
-              <option v-for="d in divisions" :key="d.id" :value="d.id">{{ d.name }}</option>
-            </select>
+            <NSelect v-model:value="entForm.division_id" :options="divisionFilterOptions" placeholder="-- 请选择核算组织 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">单位编码</label>
@@ -474,10 +403,7 @@
           </div>
           <div class="form-group" v-if="editingEnt">
             <label class="form-label">状态</label>
-            <select v-model="entForm.status" class="form-input">
-              <option value="enabled">启用</option>
-              <option value="disabled">停用</option>
-            </select>
+            <NSelect v-model:value="entForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
@@ -494,13 +420,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <select v-model="bankForm.entity_id" class="form-input">
-              <option :value="null" disabled>-- 请选择所属单位 --</option>
-              <optgroup v-for="d in divisions" :key="d.id" :label="d.name">
-                <option v-for="e in getEntitiesForDivision(d.id)" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
-              </optgroup>
-              <option v-for="e in ungroupedEntities" :key="e.id" :value="e.id">{{ e.short_name }}（{{ e.entity_code }}）</option>
-            </select>
+            <NSelect v-model:value="bankForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">开户银行</label>
@@ -520,35 +440,19 @@
           </div>
           <div class="form-group">
             <label class="form-label">账户类型</label>
-            <select v-model="bankForm.account_type" class="form-input">
-              <option value="银行账户">银行账户</option>
-              <option value="现金">现金</option>
-              <option value="票据">票据</option>
-              <option value="其他">其他</option>
-            </select>
+            <NSelect v-model:value="bankForm.account_type" :options="BANK_ACCOUNT_TYPE_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">资金类型</label>
-            <select v-model="bankForm.instrument_type" class="form-input">
-              <option value="银行存款">银行存款</option>
-              <option value="现金">现金</option>
-              <option value="票据">票据</option>
-              <option value="受限资金">受限资金</option>
-            </select>
+            <NSelect v-model:value="bankForm.instrument_type" :options="BANK_INSTRUMENT_TYPE_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否网银</label>
-            <select v-model="bankForm.has_online_banking" class="form-input">
-              <option :value="true">是</option>
-              <option :value="false">否</option>
-            </select>
+            <NSelect v-model:value="bankForm.has_online_banking" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">录入方式</label>
-            <select v-model="bankForm.input_method" class="form-input">
-              <option value="手工填写">手工填写</option>
-              <option value="网银导入">网银导入</option>
-            </select>
+            <NSelect v-model:value="bankForm.input_method" :options="INPUT_METHOD_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">币种</label>
@@ -560,28 +464,19 @@
           </div>
           <div class="form-group" v-if="!editingBank">
             <label class="form-label">余额日期</label>
-            <input v-model="bankForm.balance_date" type="date" class="form-input" />
+            <NDatePicker v-model:value="bankForm.balance_date" type="date" value-format="yyyy-MM-dd" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否纳入日报</label>
-            <select v-model="bankForm.include_in_daily_report" class="form-input">
-              <option :value="true">是</option>
-              <option :value="false">否</option>
-            </select>
+            <NSelect v-model:value="bankForm.include_in_daily_report" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否允许手工录入</label>
-            <select v-model="bankForm.allow_manual_entry" class="form-input">
-              <option :value="true">是</option>
-              <option :value="false">否</option>
-            </select>
+            <NSelect v-model:value="bankForm.allow_manual_entry" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" v-if="editingBank">
             <label class="form-label">状态</label>
-            <select v-model="bankForm.status" class="form-input">
-              <option value="enabled">启用</option>
-              <option value="disabled">停用</option>
-            </select>
+            <NSelect v-model:value="bankForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>
@@ -599,8 +494,47 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect } from 'naive-ui'
 import * as api from '@/api/master'
 import { fmtAmt } from '@/utils/format'
+
+// ── NSelect 选项常量 ──
+const STATUS_FILTER_OPTIONS = [
+  { label: '全部', value: '' },
+  { label: '启用', value: 'enabled' },
+  { label: '停用', value: 'disabled' },
+]
+const STATUS_FILTER_OPTIONS_2 = [
+  { label: '全部状态', value: '' },
+  { label: '启用', value: 'enabled' },
+  { label: '停用', value: 'disabled' },
+]
+const STATUS_OPTIONS = [
+  { label: '启用', value: 'enabled' },
+  { label: '停用', value: 'disabled' },
+]
+const ACCOUNT_TYPE_OPTIONS = [
+  { label: '基本户', value: '基本户' }, { label: '一般户', value: '一般户' },
+  { label: '临时户', value: '临时户' }, { label: '现金账户', value: '现金账户' },
+  { label: '农民工工资专用账户', value: '农民工工资专用账户' },
+  { label: '票据账户', value: '票据账户' }, { label: '信用证账户', value: '信用证账户' },
+  { label: '贷款账户', value: '贷款账户' }, { label: '其他账户', value: '其他账户' },
+]
+const INSTRUMENT_TYPE_OPTIONS = [
+  { label: '银行存款', value: '银行存款' }, { label: '现金', value: '现金' },
+  { label: '票据', value: '票据' }, { label: '信用证', value: '信用证' },
+  { label: '保证金', value: '保证金' }, { label: '其他', value: '其他' },
+]
+const BOOL_OPTIONS = [{ label: '是', value: true }, { label: '否', value: false }]
+const INPUT_METHOD_OPTIONS = [{ label: '网银导入', value: '网银导入' }, { label: '手工填写', value: '手工填写' }]
+const BANK_ACCOUNT_TYPE_OPTIONS = [
+  { label: '银行账户', value: '银行账户' }, { label: '现金', value: '现金' },
+  { label: '票据', value: '票据' }, { label: '其他', value: '其他' },
+]
+const BANK_INSTRUMENT_TYPE_OPTIONS = [
+  { label: '银行存款', value: '银行存款' }, { label: '现金', value: '现金' },
+  { label: '票据', value: '票据' }, { label: '受限资金', value: '受限资金' },
+]
 
 // ── 公共数据 ──
 const divisions = ref([])
@@ -728,6 +662,25 @@ const getEntitiesForDivision = (divisionId) => {
 
 const ungroupedEntities = computed(() => {
   return allEntities.value.filter(e => !e.division_id)
+})
+
+const divisionFilterOptions = computed(() => [
+  { label: '全部核算组织', value: null },
+  ...divisions.value.map(d => ({ label: d.name, value: d.id }))
+])
+const entityFilterSelectOptions = computed(() => [
+  { label: '全部单位', value: null },
+  ...filteredEntities.value.map(e => ({ label: e.short_name, value: e.id }))
+])
+const entityGroupOptions = computed(() => {
+  const opts = []
+  for (const d of divisions.value) {
+    const children = getEntitiesForDivision(d.id).map(e => ({
+      label: `${e.short_name}（${e.entity_code}）`, value: e.id
+    }))
+    if (children.length) opts.push({ type: 'group', label: d.name, key: `div-${d.id}`, children })
+  }
+  return [...opts, ...ungroupedEntities.value.map(e => ({ label: `${e.short_name}（${e.entity_code}）`, value: e.id }))]
 })
 
 const filteredAccounts = computed(() => {
