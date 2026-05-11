@@ -40,17 +40,17 @@
 | 10 | AI 配置 | POST | `/api/ai/configs/:id/test` | 连接测试 |
 | 11 | AI 配置 | GET | `/api/agents` | Agent 配置 |
 | 12 | AI 配置 | PUT | `/api/agents/:name/binding` | 绑定 Provider |
-| 13 | Fund Agent | POST | `/api/fund/agent/skills/parser.bank/invoke` | 生成银行 Parser |
-| 14 | Fund Agent | POST | `/api/fund/agent/skills/parser.manual/invoke` | 生成手工 Parser |
-| 15 | Fund Agent | POST | `/api/fund/agent/skills/rule.template_fill/invoke` | 生成 Rule |
-| 16 | Fund Agent | POST | `/api/fund/agent/skills/rule.maintain/invoke` | 维护 Rule |
-| 17 | Fund Agent | POST | `/api/fund/agent/skills/template.inference/invoke` | 模板识别 |
-| 18 | Artifacts | GET | `/api/fund/parsers` | Parser artifact 列表 |
-| 19 | Artifacts | GET | `/api/fund/parsers/:id` | 详情 + 代码 |
-| 20 | Artifacts | POST | `/api/fund/parsers/:id/approve` | 审批 draft → approved |
-| 21 | Artifacts | GET | `/api/fund/rules` | Rule artifact 列表 |
-| 22 | Artifacts | GET | `/api/fund/rules/:id` | 详情 + bindings |
-| 23 | Artifacts | POST | `/api/fund/rules/:id/approve` | 审批 |
+| 13 | Fund Agent | POST | `/api/fund/agent/skills/parser.bank/invoke` | 生成银行 Parser（**旧体系死链路，未注册到 main.py，必须删除，不迁移**） |
+| 14 | Fund Agent | POST | `/api/fund/agent/skills/parser.manual/invoke` | 生成手工 Parser（**旧体系死链路，必须删除**） |
+| 15 | Fund Agent | POST | `/api/fund/agent/skills/rule.template_fill/invoke` | 生成 Rule（**旧体系死链路，必须删除**） |
+| 16 | Fund Agent | POST | `/api/fund/agent/skills/rule.maintain/invoke` | 维护 Rule（**旧体系死链路，必须删除**） |
+| 17 | Fund Agent | POST | `/api/fund/agent/skills/template.inference/invoke` | 模板识别（**旧体系死链路，必须删除**） |
+| 18 | Artifacts | GET | `/api/fund/parsers` | Parser artifact 列表（**旧体系死链路，后续迁移到 `/api/artifacts/*`**） |
+| 19 | Artifacts | GET | `/api/fund/parsers/:id` | 详情 + 代码（**旧体系死链路，后续迁移**） |
+| 20 | Artifacts | POST | `/api/fund/parsers/:id/approve` | 审批 draft → approved（**旧体系死链路，后续迁移**） |
+| 21 | Artifacts | GET | `/api/fund/rules` | Rule artifact 列表（**旧体系死链路，后续迁移**） |
+| 22 | Artifacts | GET | `/api/fund/rules/:id` | 详情 + bindings（**旧体系死链路，后续迁移**） |
+| 23 | Artifacts | POST | `/api/fund/rules/:id/approve` | 审批（**旧体系死链路，后续迁移**） |
 | 24 | 流水导入 | POST | `/api/bank/import` | 上传银行流水（触发 Parser） |
 | 25 | 流水导入 | GET | `/api/bank/batches` | 批次列表 |
 | 26 | 流水导入 | GET | `/api/bank/batches/:id` | 批次详情 |
@@ -276,7 +276,7 @@
 | 约束 | 说明 |
 |---|---|
 | 路由层只做请求收发 | 业务逻辑**必须**在 `backend/services/` |
-| 路由层不得调用 `ai_call` | AI 调用由 `backend/agents/fund/` 封装 |
+| 路由层不得调用 `ai_call` | AI 调用由通用 Agent runtime 封装 |
 | 每个端点必须有对应 pytest 用例 | 放在 `tests/api/test_*.py` |
 | 响应体必须走 `response.success()` / `response.error()` | 强制统一格式 |
 | 端点新增必须更新本文件 + guards 白名单 | pre-commit 拦截 |

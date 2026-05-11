@@ -139,7 +139,7 @@ name: parse_boc                              # 必需，kebab-case，≤64字符
 description: "中国银行流水智能解析，支持 xls/xlsx，自动识别列映射、生成会计摘要。当用户上传中行流水、中行对账单、BOC 流水时触发。"  # 必需，≤1024字符，这是主触发机制
 version: "2.0.0"                             # 可选
 execution_mode: code                         # instruction | code | hybrid
-code_entry: ""                               # code 模式映射到 fund_skill_run 的入口（可选）
+code_entry: ""                               # 旧体系字段，映射到 fund_skill_run。fund_skill_run 是旧桥接工具，待删除。新技能应通过通用 Agent 工具与 artifact service / artifact runtime 契约完成
 allowed-tools:                               # 此技能可用的工具白名单
   - file_parse
   - db_query_business
@@ -349,7 +349,7 @@ skill_registry.trigger() → 匹配 parse_boc
   ↓
 format_skill_instruction(skill)
   → 生成简短 code 指令：调用 skill_run(skill_code="parse_boc", ...)
-  → 或如果 code_entry 存在：调用 fund_skill_run(skill_name="parser.bank", ...)
+  → 注意：fund_skill_run 是旧桥接工具，待删除，不得作为新技能的执行路径
   ↓
 LLM 调用 skill_run 工具
   ↓
@@ -538,7 +538,7 @@ draft → active → stale → archived
 - [x] 经验注入：code 模式执行时将 experience 数据注入 params._experience
 - [x] 执行结果记录：每次执行后更新 experience.json + .meta.json last_used_at
 - [x] L3 资源按需加载：references/ 目录扫描 + 安全校验 + load_skill_reference()
-- [x] fund_skill_run 经验记录：执行后记录到对应系统技能的 experience.json
+- [x] fund_skill_run 经验记录：执行后记录到对应系统技能的 experience.json（注：fund_skill_run 是旧桥接工具，待删除）
 - [x] Curator 经验分析：成功率 <50% 标记需修复，≥3 次同类修正建议升级，>10 次且 >90% 建议标记 verified
 
 ### Phase 3: 创建管道（已完成 ✓）

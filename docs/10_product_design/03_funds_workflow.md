@@ -70,14 +70,14 @@
 ### 2. 输入
 
 - 银行流水文件
-- 已有解析器模板
+- 已有 ParserArtifact（由通用 Agent 生成，用户审核后激活）
 - 主数据命中规则
 
 ### 3. 处理
 
 - 读取文件
-- 匹配模板
-- 首次识别或复用模板
+- 匹配已激活的 ParserArtifact（由通用 Agent 生成，artifact runtime 确定性执行）
+- 首次由通用 Agent 生成 ParserArtifact 草稿（用户审核确认）或复用已激活的 ParserArtifact
 - 标准化预览
 - 生成待处理批次
 

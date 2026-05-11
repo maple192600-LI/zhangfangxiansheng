@@ -22,7 +22,7 @@
 | **AgentV2** | `Agent` 的历史兼容别名，`AgentV2 = Agent`（`tables.py:464`） | `db/tables.py:464` | 同 `agents_v2` | — | 历史兼容别名，应冻结，Phase 7 删除 |
 | **Skill** | 技能定义，包含 SKILL.md 指令集和执行代码 | `backend/agents/skill_registry.py`，ORM `db/tables.py:470` | `skills_v2` | 技能 | 概念合理；表名带 `_v2` 后缀需后续清理 |
 | **SkillV2** | `Skill` 的历史兼容别名，`SkillV2 = Skill`（`tables.py:491`） | `db/tables.py:491` | 同 `skills_v2` | — | 历史兼容别名，应冻结，Phase 7 删除 |
-| **FundAgent** | 财务确定性调度器，独立的 Python 类（`backend/agents/fund/harness.py:35`）。不继承 Agent，不调用 LLM，不做对话。只做 5 个固定 skill 的确定性执行，产出 ParserArtifact / RuleArtifact | `backend/agents/fund/harness.py:35` | 无专属表 | 财务调度器 | 命名问题 — 见下方详解 |
+| **FundAgent** | 旧中间态：独立的 Python 类（`backend/agents/fund/harness.py:35`）。不继承 Agent，不调用 LLM，不做对话。只做 5 个固定 skill 的确定性执行。**待迁移后删除，不是目标实体**。ParserArtifact / RuleArtifact 的生成和维护应由通用 Agent 完成 | `backend/agents/fund/harness.py:35` | 无专属表 | 财务调度器 | 旧中间态，待迁移后删除 |
 
 ### C. Artifact 术语
 
@@ -62,7 +62,7 @@
 | `ReportTemplate` ≠ `ParserTemplate` | ParserTemplate 已删除（`005_drop_parser_templates`），禁止恢复。ReportTemplate 是报表模板（定义报表列和布局），不是解析模板的替代品，不是 ParserTemplate 的继任者 |
 | `ReportTemplate` ≠ `ParserArtifact` | 完全不同的概念：ReportTemplate 定义报表长什么样，ParserArtifact 定义怎么解析文件 |
 | `ParserArtifact` ≠ `RuleArtifact` | 完全不同的用途：ParserArtifact 解析文件→FundEvent，RuleArtifact 填充模板→报表 |
-| `FundAgent` ≠ 通用 Agent | FundAgent 是确定性调度器（不调 LLM），通用 Agent 是 LLM 驱动的对话系统 |
+| `FundAgent` ≠ 通用 Agent | FundAgent 是旧中间态（待迁移后删除），通用 Agent 是唯一的 Agent 实体。`backend/agents/fund/` ≠ `backend/fund/`，前者是旧调度器待删除，后者是产物执行基础设施必须保留 |
 | `template.inference` ≠ `rule.template_fill` | inference 识别模板结构，template_fill 生成填充规则 |
 | `artifact_runtime` ≠ 已实现的运行时 | 当前是未实现的占位，不是 deprecated（不曾有过实现） |
 
@@ -71,7 +71,7 @@
 | 优先级 | 建议 | 原因 | 风险 | 建议时机 |
 |--------|------|------|------|---------|
 | P1 | 在 `artifact_runtime.py` 中添加明确的模块文档，标明"未实现占位，非 deprecated" | 消除 N1 命名误导 | 无风险 — 只改注释 | 立即可做 |
-| P2 | `FundAgent` → `ArtifactFactory` 或 `FundArtifactFactory` | 准确反映"确定性工厂"本质 | 低 — 仅内部类名，但 SKILL.md 中有引用 | Phase 2 之后 |
+| P2 | 旧 `FundAgent` 类删除，可复用逻辑迁移到 `backend/services/` | 旧 FundAgent 体系待迁移后删除 | 低 — 迁移后删除旧类 | 清理审计 Phase 3 之后 |
 | P3 | `agents_v2` → `agents`，`skills_v2` → `skills` | 消除不必要的版本后缀 | 中 — 需 Alembic 迁移，6 张表 FK 需更新，`backup.py` 中有原生 SQL | Phase 7（功能稳定后） |
 | P4 | 删除 `AgentV2 = Agent` / `SkillV2 = Skill` 别名 | 代码中未使用 | 低 | Phase 7 |
 | P5 | 统一 Skill 目录名与 code_entry 命名 | 一致性 | 低 — 修改成本高于收益 | 按需 |

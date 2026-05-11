@@ -1,5 +1,6 @@
 # 目标产品地图
 
+> 本文档中的 Agent 均指唯一通用 Agent，不指 FundAgent 或任何领域 Agent。
 > 本文件描述产品目标是**什么能力**，不描述当前**怎么实现**。
 > 当前实现状态见 [01_project_map.md](01_project_map.md)。
 
