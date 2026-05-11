@@ -15,9 +15,9 @@
       <div v-if="backupMsg" class="warning ok">{{ backupMsg }}</div>
 
       <div class="backup-header">
-        <button class="btn btn-primary btn-sm" @click="doCreate" :disabled="creating">
+        <NButton type="primary" size="small" @click="doCreate" :disabled="creating">
           {{ creating ? '创建中...' : '创建备份' }}
-        </button>
+        </NButton>
       </div>
 
       <table v-if="backups.length" class="backup-table">
@@ -35,9 +35,9 @@
             <td>{{ b.size_mb }} MB</td>
             <td>{{ b.created_at }}</td>
             <td>
-              <button class="btn btn-warn btn-sm" @click="confirmRestore(b.filename)" :disabled="restoring">
+              <NButton type="warning" size="small" @click="confirmRestore(b.filename)" :disabled="restoring">
                 {{ restoring === b.filename ? '恢复中...' : '恢复' }}
-              </button>
+              </NButton>
             </td>
           </tr>
         </tbody>
@@ -47,9 +47,9 @@
       <div class="factory-section">
         <h4>恢复出厂设置</h4>
         <p>清空所有业务数据（流水、报表、日志），保留主数据配置。执行前自动创建备份。</p>
-        <button class="btn btn-warn btn-sm" @click="confirmingFactory = true" :disabled="resetting">
+        <NButton type="warning" size="small" @click="confirmingFactory = true" :disabled="resetting">
           {{ resetting ? '执行中...' : '恢复出厂设置' }}
-        </button>
+        </NButton>
       </div>
     </div>
 
@@ -60,9 +60,9 @@
 
       <p class="section-desc">清除已删除的智能体、会话及其关联数据（消息、记忆、技能）。活跃数据不受影响。</p>
 
-      <button class="btn btn-secondary btn-sm" @click="loadPreview" :disabled="cleanupLoading" style="margin-bottom: 16px;">
+      <NButton secondary size="small" @click="loadPreview" :disabled="cleanupLoading" style="margin-bottom: 16px;">
         {{ cleanupLoading ? '扫描中...' : '扫描残留数据' }}
-      </button>
+      </NButton>
 
       <div v-if="cleanupData">
         <div v-if="!cleanupData.summary.deleted_agents && !cleanupData.summary.deleted_sessions && !cleanupData.summary.draft_skills" class="cleanup-clean">
@@ -94,9 +94,9 @@
             </div>
           </div>
 
-          <button class="btn btn-warn btn-sm" @click="confirmingCleanup = true" style="margin-top: 12px;" :disabled="executing">
+          <NButton type="warning" size="small" @click="confirmingCleanup = true" style="margin-top: 12px;" :disabled="executing">
             {{ executing ? '清理中...' : '彻底清除以上数据' }}
-          </button>
+          </NButton>
         </template>
       </div>
     </div>
@@ -109,8 +109,8 @@
       <p>将从 <strong>{{ confirming }}</strong> 恢复数据，当前数据库将被替换。</p>
       <p style="color: var(--warn-text); font-weight: 600;">此操作不可撤销！</p>
       <div class="btn-row">
-        <button class="btn btn-secondary" @click="confirming = null">取消</button>
-        <button class="btn btn-warn" @click="doRestore(confirming)">确认恢复</button>
+        <NButton secondary @click="confirming = null">取消</NButton>
+        <NButton type="warning" @click="doRestore(confirming)">确认恢复</NButton>
       </div>
     </div>
   </div>
@@ -128,8 +128,8 @@
       </ul>
       <p style="color: var(--warn-text); font-weight: 600;">主数据将被保留。执行前自动创建备份。</p>
       <div class="btn-row">
-        <button class="btn btn-secondary" @click="confirmingFactory = false">取消</button>
-        <button class="btn btn-warn" @click="doFactoryReset">确认恢复出厂</button>
+        <NButton secondary @click="confirmingFactory = false">取消</NButton>
+        <NButton type="warning" @click="doFactoryReset">确认恢复出厂</NButton>
       </div>
     </div>
   </div>
@@ -146,8 +146,8 @@
       </ul>
       <p style="color: var(--warn-text, #c0392b); font-weight: 600;">活跃的智能体和数据不受影响。</p>
       <div class="btn-row">
-        <button class="btn btn-secondary" @click="confirmingCleanup = false">取消</button>
-        <button class="btn btn-warn" @click="doCleanup">确认清理</button>
+        <NButton secondary @click="confirmingCleanup = false">取消</NButton>
+        <NButton type="warning" @click="doCleanup">确认清理</NButton>
       </div>
     </div>
   </div>
@@ -155,6 +155,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { NButton } from 'naive-ui'
 import { listBackups, createBackup, restoreBackup, factoryReset, getCleanupPreview, executeCleanup } from '@/api/backup'
 
 const activeTab = ref('backup')

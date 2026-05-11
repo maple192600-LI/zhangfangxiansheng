@@ -25,8 +25,8 @@
       <!-- 右侧：模板管理区 -->
       <div class="main-panel">
         <div class="toolbar">
-          <button class="btn btn-primary" @click="openCreateForm">新建模板</button>
-          <button class="btn btn-outline" @click="triggerUpload">上传Excel解析</button>
+          <NButton type="primary" @click="openCreateForm">新建模板</NButton>
+          <NButton secondary @click="triggerUpload">上传Excel解析</NButton>
           <input ref="fileInput" type="file" accept=".xlsx,.xls" style="display:none" @change="handleUpload" />
         </div>
 
@@ -51,9 +51,9 @@
               </span>
             </div>
             <div class="tpl-actions">
-              <button class="btn-sm" @click="openEditForm(tpl)">编辑</button>
-              <button class="btn-sm" v-if="!tpl.is_default && tpl.status === 'active'" @click="handleSetDefault(tpl)">设为默认</button>
-              <button class="btn-sm danger" @click="handleDelete(tpl)">删除</button>
+              <NButton size="tiny" @click="openEditForm(tpl)">编辑</NButton>
+              <NButton size="tiny" v-if="!tpl.is_default && tpl.status === 'active'" @click="handleSetDefault(tpl)">设为默认</NButton>
+              <NButton type="error" size="tiny" @click="handleDelete(tpl)">删除</NButton>
             </div>
           </div>
         </div>
@@ -92,7 +92,7 @@
           <div class="columns-section">
             <div class="columns-header">
               <span>列配置 ({{ form.columns.length }} 列)</span>
-              <button class="btn-sm" @click="addColumn">添加列</button>
+              <NButton size="tiny" @click="addColumn">添加列</NButton>
             </div>
             <div class="column-list">
               <div v-for="(col, idx) in form.columns" :key="idx" class="column-row">
@@ -101,14 +101,14 @@
                 <input v-model.number="col.width" type="number" placeholder="宽度" class="col-input" style="width:70px" />
                 <NSelect v-model:value="col.align" :options="alignOptions" size="tiny" style="width:70px" />
                 <label class="col-check"><input type="checkbox" v-model="col.visible" /> 显示</label>
-                <button class="btn-sm danger" @click="removeColumn(idx)" title="删除">x</button>
+                <NButton type="error" size="tiny" @click="removeColumn(idx)" title="删除">x</NButton>
               </div>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline" @click="showForm = false">取消</button>
-          <button class="btn btn-primary" @click="saveForm">保存</button>
+          <NButton secondary @click="showForm = false">取消</NButton>
+          <NButton type="primary" @click="saveForm">保存</NButton>
         </div>
       </div>
     </div>
@@ -117,7 +117,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { NSelect } from 'naive-ui'
+import { NSelect, NButton } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/reportTemplate'
 

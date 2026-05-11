@@ -24,17 +24,17 @@
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
-              <button class="btn btn-secondary" @click="accDropdownOpen = !accDropdownOpen">批量操作 ({{ selectedAccountIds.length }})</button>
+              <NButton secondary @click="accDropdownOpen = !accDropdownOpen">批量操作 ({{ selectedAccountIds.length }})</NButton>
               <div class="dropdown-menu">
                 <button @click="batchAccounts('enable'); accDropdownOpen = false">批量启用</button>
                 <button @click="batchAccounts('disable'); accDropdownOpen = false">批量停用</button>
                 <button @click="batchAccounts('delete'); accDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
-            <button class="btn btn-secondary" @click="downloadTemplate">下载导入模板</button>
-            <button class="btn btn-secondary" @click="triggerImport">批量导入</button>
+            <NButton secondary @click="downloadTemplate">下载导入模板</NButton>
+            <NButton secondary @click="triggerImport">批量导入</NButton>
             <input ref="importInput" type="file" accept=".xls,.xlsx" style="display:none" @change="doImport" />
-            <button class="btn btn-primary" @click="openAccountForm()">+ 新建账户</button>
+            <NButton type="primary" @click="openAccountForm()">+ 新建账户</NButton>
           </div>
         </div>
 
@@ -70,9 +70,9 @@
                   <template v-else>{{ a[col.key] || '-' }}</template>
                 </td>
                 <td class="action-cell">
-                  <button class="btn btn-secondary btn-sm" @click="openAccountForm(a)">编辑</button>
-                  <button class="btn btn-secondary btn-sm" v-if="a.status==='enabled'" @click="toggleAccountStatus(a, 'disabled')">停用</button>
-                  <button class="btn btn-secondary btn-sm" v-else @click="toggleAccountStatus(a, 'enabled')">启用</button>
+                  <NButton secondary size="small" @click="openAccountForm(a)">编辑</NButton>
+                  <NButton secondary size="small" v-if="a.status==='enabled'" @click="toggleAccountStatus(a, 'disabled')">停用</NButton>
+                  <NButton secondary size="small" v-else @click="toggleAccountStatus(a, 'enabled')">启用</NButton>
                 </td>
               </tr>
             </tbody>
@@ -91,14 +91,14 @@
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
-              <button class="btn btn-secondary" @click="divDropdownOpen = !divDropdownOpen">批量操作 ({{ selectedDivIds.length }})</button>
+              <NButton secondary @click="divDropdownOpen = !divDropdownOpen">批量操作 ({{ selectedDivIds.length }})</NButton>
               <div class="dropdown-menu">
                 <button @click="batchDivisions('enable'); divDropdownOpen = false">批量启用</button>
                 <button @click="batchDivisions('disable'); divDropdownOpen = false">批量停用</button>
                 <button @click="batchDivisions('delete'); divDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
-            <button class="btn btn-primary" @click="openDivForm()">+ 新建核算组织</button>
+            <NButton type="primary" @click="openDivForm()">+ 新建核算组织</NButton>
           </div>
         </div>
         <div v-if="!filteredDivisions.length" class="empty-state">
@@ -131,10 +131,10 @@
                 <td><span class="tag" :class="d.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ d.status === 'enabled' ? '启用' : '停用' }}</span></td>
                 <td>{{ d.created_at ? d.created_at.slice(0, 19).replace('T', ' ') : '-' }}</td>
                 <td class="action-cell">
-                  <button class="btn btn-secondary btn-sm" @click="openDivForm(d)">编辑</button>
-                  <button class="btn btn-secondary btn-sm" v-if="d.status==='enabled'" @click="toggleDivStatus(d,'disabled')">停用</button>
-                  <button class="btn btn-secondary btn-sm" v-else @click="toggleDivStatus(d,'enabled')">启用</button>
-                  <button class="btn btn-warn btn-sm" @click="deleteDiv(d)">删除</button>
+                  <NButton secondary size="small" @click="openDivForm(d)">编辑</NButton>
+                  <NButton secondary size="small" v-if="d.status==='enabled'" @click="toggleDivStatus(d,'disabled')">停用</NButton>
+                  <NButton secondary size="small" v-else @click="toggleDivStatus(d,'enabled')">启用</NButton>
+                  <NButton type="warning" size="small" @click="deleteDiv(d)">删除</NButton>
                 </td>
               </tr>
             </tbody>
@@ -151,14 +151,14 @@
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
-              <button class="btn btn-secondary" @click="entDropdownOpen = !entDropdownOpen">批量操作 ({{ selectedEntIds.length }})</button>
+              <NButton secondary @click="entDropdownOpen = !entDropdownOpen">批量操作 ({{ selectedEntIds.length }})</NButton>
               <div class="dropdown-menu">
                 <button @click="batchEntities('enable'); entDropdownOpen = false">批量启用</button>
                 <button @click="batchEntities('disable'); entDropdownOpen = false">批量停用</button>
                 <button @click="batchEntities('delete'); entDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
-            <button class="btn btn-primary" @click="openEntForm()">+ 新建单位</button>
+            <NButton type="primary" @click="openEntForm()">+ 新建单位</NButton>
           </div>
         </div>
         <div v-if="!filteredEntities_list.length" class="empty-state">
@@ -193,10 +193,10 @@
                 <td><span class="tag" :class="e.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ e.status === 'enabled' ? '启用' : '停用' }}</span></td>
                 <td>{{ e.created_at ? e.created_at.slice(0, 19).replace('T', ' ') : '-' }}</td>
                 <td class="action-cell">
-                  <button class="btn btn-secondary btn-sm" @click="openEntForm(e)">编辑</button>
-                  <button class="btn btn-secondary btn-sm" v-if="e.status==='enabled'" @click="toggleEntStatus(e,'disabled')">停用</button>
-                  <button class="btn btn-secondary btn-sm" v-else @click="toggleEntStatus(e,'enabled')">启用</button>
-                  <button class="btn btn-warn btn-sm" @click="deleteEnt(e)">删除</button>
+                  <NButton secondary size="small" @click="openEntForm(e)">编辑</NButton>
+                  <NButton secondary size="small" v-if="e.status==='enabled'" @click="toggleEntStatus(e,'disabled')">停用</NButton>
+                  <NButton secondary size="small" v-else @click="toggleEntStatus(e,'enabled')">启用</NButton>
+                  <NButton type="warning" size="small" @click="deleteEnt(e)">删除</NButton>
                 </td>
               </tr>
             </tbody>
@@ -212,14 +212,14 @@
           <div style="flex:1"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">
-              <button class="btn btn-secondary" @click="bankDropdownOpen = !bankDropdownOpen">批量操作 ({{ selectedBankIds.length }})</button>
+              <NButton secondary @click="bankDropdownOpen = !bankDropdownOpen">批量操作 ({{ selectedBankIds.length }})</NButton>
               <div class="dropdown-menu">
                 <button @click="batchBanks('enable'); bankDropdownOpen = false">批量启用</button>
                 <button @click="batchBanks('disable'); bankDropdownOpen = false">批量停用</button>
                 <button @click="batchBanks('delete'); bankDropdownOpen = false" class="dropdown-item-danger">批量删除</button>
               </div>
             </div>
-            <button class="btn btn-primary" @click="openBankForm()">+ 新建银行账户</button>
+            <NButton type="primary" @click="openBankForm()">+ 新建银行账户</NButton>
           </div>
         </div>
         <!-- 无数据时 -->
@@ -253,10 +253,10 @@
                   <template v-else>{{ a[col.key] || '-' }}</template>
                 </td>
                 <td class="action-cell">
-                  <button class="btn btn-secondary btn-sm" @click="openBankForm(a)">编辑</button>
-                  <button class="btn btn-secondary btn-sm" v-if="a.status==='enabled'" @click="toggleBankAccountStatus(a,'disabled')">停用</button>
-                  <button class="btn btn-secondary btn-sm" v-else @click="toggleBankAccountStatus(a,'enabled')">启用</button>
-                  <button class="btn btn-warn btn-sm" @click="deleteBank(a)">删除</button>
+                  <NButton secondary size="small" @click="openBankForm(a)">编辑</NButton>
+                  <NButton secondary size="small" v-if="a.status==='enabled'" @click="toggleBankAccountStatus(a,'disabled')">停用</NButton>
+                  <NButton secondary size="small" v-else @click="toggleBankAccountStatus(a,'enabled')">启用</NButton>
+                  <NButton type="warning" size="small" @click="deleteBank(a)">删除</NButton>
                 </td>
               </tr>
             </tbody>
@@ -344,8 +344,8 @@
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-secondary" @click="showAccountForm=false">取消</button>
-          <button class="btn btn-primary" @click="saveAccount">保存</button>
+          <NButton secondary @click="showAccountForm=false">取消</NButton>
+          <NButton type="primary" @click="saveAccount">保存</NButton>
         </div>
       </div>
     </div>
@@ -373,8 +373,8 @@
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-secondary" @click="showDivForm=false">取消</button>
-          <button class="btn btn-primary" @click="saveDiv">保存</button>
+          <NButton secondary @click="showDivForm=false">取消</NButton>
+          <NButton type="primary" @click="saveDiv">保存</NButton>
         </div>
       </div>
     </div>
@@ -407,8 +407,8 @@
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-secondary" @click="showEntForm=false">取消</button>
-          <button class="btn btn-primary" @click="saveEnt">保存</button>
+          <NButton secondary @click="showEntForm=false">取消</NButton>
+          <NButton type="primary" @click="saveEnt">保存</NButton>
         </div>
       </div>
     </div>
@@ -484,8 +484,8 @@
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-secondary" @click="showBankForm=false">取消</button>
-          <button class="btn btn-primary" @click="saveBank">保存</button>
+          <NButton secondary @click="showBankForm=false">取消</NButton>
+          <NButton type="primary" @click="saveBank">保存</NButton>
         </div>
       </div>
     </div>
@@ -494,7 +494,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect } from 'naive-ui'
+import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import * as api from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 

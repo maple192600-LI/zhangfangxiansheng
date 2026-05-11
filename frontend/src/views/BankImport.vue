@@ -18,7 +18,7 @@
     <!-- 无匹配规则提示 -->
     <div v-if="noRuleHint" class="hint-panel" style="margin-bottom:14px">
       当前银行/文件格式尚无已审核解析规则。请从左侧 AI 智能体创建财务助手后，再创建解析规则。
-      <button class="btn btn-secondary btn-sm" style="margin-left:8px" @click="noRuleHint = false">关闭</button>
+      <NButton secondary size="small" style="margin-left:8px" @click="noRuleHint = false">关闭</NButton>
     </div>
 
     <div v-if="step === 1" class="upload-box" @dragover.prevent @drop.prevent="onDrop" @click="triggerFileInput">
@@ -55,8 +55,8 @@
         <div><label>置信度</label><strong>{{ parserMatch.confidence || '-' }}</strong></div>
       </div>
       <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-secondary" @click="reset">重新上传</button>
-        <button class="btn btn-primary" @click="doPreview">预览解析结果</button>
+        <NButton secondary @click="reset">重新上传</NButton>
+        <NButton type="primary" @click="doPreview">预览解析结果</NButton>
       </div>
     </div>
 
@@ -91,10 +91,10 @@
         </div>
       </div>
       <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-secondary" @click="step = 2">返回</button>
-        <button class="btn btn-primary" :disabled="committing" @click="doCommit">
+        <NButton secondary @click="step = 2">返回</NButton>
+        <NButton type="primary" :disabled="committing" @click="doCommit">
           {{ committing ? '提交中...' : `确认提交 ${previewResult.valid_count} 条记录` }}
-        </button>
+        </NButton>
       </div>
     </div>
 
@@ -107,20 +107,21 @@
         <div><label>入库行数</label><strong>{{ commitResult.inserted_rows }}</strong></div>
       </div>
       <div class="btn-row" style="margin-top:14px">
-        <button class="btn btn-secondary" @click="reset">继续导入</button>
-        <button class="btn btn-primary" @click="$router.push({ name: 'base-data' })">查看基础数据表</button>
+        <NButton secondary @click="reset">继续导入</NButton>
+        <NButton type="primary" @click="$router.push({ name: 'base-data' })">查看基础数据表</NButton>
       </div>
     </div>
 
     <div v-if="hint" class="hint-panel">
       {{ hint }}
-      <button class="btn btn-secondary btn-sm" style="margin-left:10px" @click="hint = ''">关闭</button>
+      <NButton secondary size="small" style="margin-left:10px" @click="hint = ''">关闭</NButton>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { NButton } from 'naive-ui'
 import * as bank from '@/api/bank'
 
 const fileInput = ref(null)

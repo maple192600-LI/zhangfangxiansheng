@@ -10,8 +10,8 @@
         <span style="font-size:var(--font-size-sm)">异常行数：<strong style="color:var(--warn)">{{ abnormalRows.length }}</strong></span>
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary" @click="goBack">返回预览</button>
-          <button class="btn btn-primary" @click="doFix" :disabled="fixing">{{ fixing ? '提交中...' : '应用修复并提交' }}</button>
+          <NButton secondary @click="goBack">返回预览</NButton>
+          <NButton type="primary" @click="doFix" :loading="fixing">{{ fixing ? '提交中...' : '应用修复并提交' }}</NButton>
         </div>
       </div>
 
@@ -57,7 +57,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NSelect } from 'naive-ui'
+import { NSelect, NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import * as master from '@/api/master'

@@ -9,7 +9,7 @@
         <input v-model="keyword" class="filter" placeholder="搜索银行编码/名称/联行号" style="width:220px" />
         <NSelect v-model:value="filterStatus" :options="statusFilterOptions" placeholder="全部状态" clearable style="width:110px" />
         <div style="flex:1"></div>
-        <button class="btn btn-primary" @click="openForm()">+ 新建银行</button>
+        <NButton type="primary" @click="openForm()">+ 新建银行</NButton>
       </div>
 
       <div class="table-wrap">
@@ -38,10 +38,10 @@
               <td>{{ b.contact_phone || '-' }}</td>
               <td><span class="tag" :class="b.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ b.status === 'enabled' ? '启用' : '停用' }}</span></td>
               <td class="action-cell">
-                <button class="btn btn-secondary btn-sm" @click="openForm(b)">编辑</button>
-                <button class="btn btn-secondary btn-sm" v-if="b.status==='enabled'" @click="toggleStatus(b, 'disabled')">停用</button>
-                <button class="btn btn-secondary btn-sm" v-else @click="toggleStatus(b, 'enabled')">启用</button>
-                <button class="btn btn-warn btn-sm" @click="handleDelete(b)">删除</button>
+                <NButton secondary size="small" @click="openForm(b)">编辑</NButton>
+                <NButton secondary size="small" v-if="b.status==='enabled'" @click="toggleStatus(b, 'disabled')">停用</NButton>
+                <NButton secondary size="small" v-else @click="toggleStatus(b, 'enabled')">启用</NButton>
+                <NButton type="warning" size="small" @click="handleDelete(b)">删除</NButton>
               </td>
             </tr>
             <tr v-if="!filteredList.length">
@@ -99,8 +99,8 @@
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-secondary" @click="showForm=false">取消</button>
-          <button class="btn btn-primary" @click="save">保存</button>
+          <NButton secondary @click="showForm=false">取消</NButton>
+          <NButton type="primary" @click="save">保存</NButton>
         </div>
       </div>
     </div>
@@ -109,7 +109,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NSelect } from 'naive-ui'
+import { NSelect, NButton } from 'naive-ui'
 import * as api from '@/api/master'
 
 const list = ref([])

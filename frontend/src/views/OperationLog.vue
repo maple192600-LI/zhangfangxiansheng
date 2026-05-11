@@ -9,7 +9,7 @@
       <NSelect v-model:value="filters.action" :options="actionOptions" placeholder="全部操作" clearable style="max-width:140px" @update:value="loadLogs" />
       <NDatePicker v-model:value="filters.start_date" type="date" value-format="yyyy-MM-dd" clearable style="max-width:150px" @update:value="loadLogs" />
       <NDatePicker v-model:value="filters.end_date" type="date" value-format="yyyy-MM-dd" clearable style="max-width:150px" @update:value="loadLogs" />
-      <button class="btn btn-secondary" @click="resetFilters">重置</button>
+      <NButton secondary @click="resetFilters">重置</NButton>
     </div>
 
     <table v-if="logs.length">
@@ -34,15 +34,15 @@
 
     <div class="bottom-bar" v-if="totalPages > 1">
       <span class="count-info">共 {{ total }} 条 / 第 {{ page }} 页</span>
-      <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="page--; loadLogs()">上一页</button>
-      <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="page++; loadLogs()">下一页</button>
+      <NButton secondary size="small" :disabled="page <= 1" @click="page--; loadLogs()">上一页</NButton>
+      <NButton secondary size="small" :disabled="page >= totalPages" @click="page++; loadLogs()">下一页</NButton>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NDatePicker, NSelect } from 'naive-ui'
+import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import { queryLogs } from '@/api/log'
 
 const logs = ref([])

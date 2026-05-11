@@ -15,9 +15,9 @@
           <label class="form-label">密码</label>
           <input v-model="password" class="form-input" type="password" placeholder="请输入密码" autocomplete="current-password" />
         </div>
-        <button class="btn btn-primary login-btn" type="submit" :disabled="loading">
+        <NButton type="primary" block class="login-btn" attr-type="submit" :disabled="loading">
           {{ loading ? '登录中...' : '登 录' }}
-        </button>
+        </NButton>
       </form>
     </div>
   </div>
@@ -25,6 +25,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { NButton } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 

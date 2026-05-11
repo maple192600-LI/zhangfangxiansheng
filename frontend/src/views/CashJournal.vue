@@ -12,9 +12,9 @@
         <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable style="min-width:180px" />
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary" @click="doExport">导出</button>
-          <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="loadReport">生成报表</button>
+          <NButton secondary @click="doExport">导出</NButton>
+          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton type="primary" @click="loadReport">生成报表</NButton>
         </div>
       </div>
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
@@ -141,7 +141,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect } from 'naive-ui'
+import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'

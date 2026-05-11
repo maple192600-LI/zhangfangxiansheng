@@ -28,12 +28,12 @@
 
       <!-- Tab -->
       <div class="filters-bar">
-        <button class="btn" :class="activeTab==='valid'?'btn-primary':'btn-secondary'" @click="activeTab='valid'">有效行 ({{ validCount }})</button>
-        <button class="btn" :class="activeTab==='abnormal'?'btn-primary':'btn-secondary'" @click="activeTab='abnormal'" v-if="abnormalCount">异常行 ({{ abnormalCount }})</button>
+        <NButton :type="activeTab==='valid'?'primary':'default'" @click="activeTab='valid'">有效行 ({{ validCount }})</NButton>
+        <NButton :type="activeTab==='abnormal'?'primary':'default'" @click="activeTab='abnormal'" v-if="abnormalCount">异常行 ({{ abnormalCount }})</NButton>
         <div style="flex:1"></div>
         <div class="btn-row">
-          <button class="btn btn-secondary" @click="$router.push('/manual-flow')">返回录入</button>
-          <button class="btn btn-primary" @click="doCommit" :disabled="committing">{{ committing ? '提交中...' : '提交有效行到基础数据' }}</button>
+          <NButton secondary @click="$router.push('/manual-flow')">返回录入</NButton>
+          <NButton type="primary" @click="doCommit" :disabled="committing">{{ committing ? '提交中...' : '提交有效行到基础数据' }}</NButton>
         </div>
       </div>
 
@@ -83,7 +83,7 @@
               <td class="money exp">{{ fmtAmt(r.expense_amount) }}</td>
               <td><span class="tag tag-warn">{{ r.abnormal_code }}</span></td>
               <td>
-                <button class="btn btn-secondary btn-sm" @click="goFix(r._row_no)">修复</button>
+                <NButton secondary size="small" @click="goFix(r._row_no)">修复</NButton>
               </td>
             </tr>
             <tr v-if="!abnormalRows.length"><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">暂无异常行</td></tr>
@@ -104,6 +104,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import { fmtAmt } from '@/utils/format'

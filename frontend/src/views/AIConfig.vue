@@ -108,13 +108,13 @@
 
             <div class="form-row">
               <div class="form-field">
-                <button
-                  class="btn btn-secondary"
+                <NButton
+                  secondary
                   @click="fetchModels"
                   :disabled="fetchingModels || !form.api_key || !form.base_url"
                 >
                   {{ fetchingModels ? '获取中...' : '获取模型列表' }}
-                </button>
+                </NButton>
                 <span v-if="fetchedModels.length" class="fetch-count">发现 {{ fetchedModels.length }} 个模型</span>
                 <span v-if="fetchError" class="fetch-error">{{ fetchError }}</span>
               </div>
@@ -157,19 +157,19 @@
         <!-- 底部操作栏 -->
         <div class="form-footer">
           <div class="footer-left">
-            <button v-if="selectedId" class="btn btn-secondary btn-danger" @click="deleteConfig">删除供应商</button>
+            <NButton v-if="selectedId" type="error" @click="deleteConfig">删除供应商</NButton>
           </div>
           <div class="footer-right">
             <span v-if="testResult" class="test-result-inline" :class="testResult.connected ? 'ok' : 'fail'">
               {{ testResult.connected ? `连接成功 (${testResult.latency_ms}ms)` : `失败: ${testResult.error}` }}
             </span>
-            <button v-if="selectedId" class="btn btn-ghost" @click="handleTest" :disabled="testing">
+            <NButton v-if="selectedId" tertiary @click="handleTest" :disabled="testing">
               {{ testing ? '测试中...' : '测试连接' }}
-            </button>
-            <button class="btn btn-ghost" @click="cancelForm">取消</button>
-            <button class="btn btn-primary" @click="saveForm" :disabled="saving">
+            </NButton>
+            <NButton tertiary @click="cancelForm">取消</NButton>
+            <NButton type="primary" @click="saveForm" :disabled="saving">
               {{ saving ? '保存中...' : '保存' }}
-            </button>
+            </NButton>
           </div>
         </div>
       </div>
@@ -180,7 +180,7 @@
       <div class="call-log-modal">
         <div class="modal-header">
           <h4>最近 AI 调用记录</h4>
-          <button class="btn btn-ghost btn-sm" @click="callLogs = []">关闭</button>
+          <NButton tertiary size="small" @click="callLogs = []">关闭</NButton>
         </div>
         <table class="log-table">
           <thead><tr><th>时间</th><th>提供商</th><th>模型</th><th>状态</th><th>耗时</th></tr></thead>
@@ -201,7 +201,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NSelect } from 'naive-ui'
+import { NSelect, NButton } from 'naive-ui'
 import * as api from '@/api/ai'
 
 const configs = ref([])

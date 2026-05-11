@@ -18,7 +18,7 @@
         <button class="filter" :class="{ active: filters.state === '异常' }" @click="setState('异常')">异常</button>
         <input v-model="filters.keyword" class="filter keyword-input" placeholder="搜索摘要/对方" @keyup.enter="reload" />
         <div style="flex:1"></div>
-        <button class="btn btn-secondary" @click="reload" :disabled="loading">{{ loading ? '刷新中...' : '刷新' }}</button>
+        <NButton secondary @click="reload" :disabled="loading">{{ loading ? '刷新中...' : '刷新' }}</NButton>
       </div>
 
       <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
@@ -54,8 +54,8 @@
             <td>{{ row.source }}</td>
             <td>
               <div class="btn-row compact">
-                <button class="btn btn-secondary btn-sm" @click="startEdit(row)">修正</button>
-                <button class="btn btn-warn btn-sm" @click="voidRow(row)">作废</button>
+                <NButton secondary size="small" @click="startEdit(row)">修正</NButton>
+                <NButton type="warning" size="small" @click="voidRow(row)">作废</NButton>
               </div>
             </td>
           </tr>
@@ -102,8 +102,8 @@
         </label>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" @click="resolveRow" :disabled="saving">{{ saving ? '保存中...' : '保存并标记正常' }}</button>
-        <button class="btn btn-secondary" @click="cancelEdit">取消</button>
+        <NButton type="primary" @click="resolveRow" :disabled="saving">{{ saving ? '保存中...' : '保存并标记正常' }}</NButton>
+        <NButton secondary @click="cancelEdit">取消</NButton>
       </div>
     </div>
   </div>
@@ -111,7 +111,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { NDatePicker } from 'naive-ui'
+import { NDatePicker, NButton } from 'naive-ui'
 import { getPendingEvents, resolveEvent, voidEvent } from '@/api/events'
 import { fmtAmt } from '@/utils/format'
 
