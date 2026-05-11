@@ -6,19 +6,16 @@
         <span>按账户、日期汇总的收入明细视图</span>
       </div>
       <div class="filters-bar">
-        <input v-model="startDate" type="date" class="filter" />
+        <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable style="width:160px" />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <input v-model="endDate" type="date" class="filter" />
-        <select v-model="entityId" class="filter">
-          <option :value="null">全部单位</option>
-          <option v-for="e in entities" :key="e.entity_id" :value="e.entity_id">{{ e.entity_name }}</option>
-        </select>
+        <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable style="width:160px" />
+        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable style="min-width:160px" />
         <div style="flex:1"></div>
-        <div class="btn-row">
-          <button class="btn btn-secondary" @click="doExport">导出</button>
-          <button class="btn btn-secondary" @click="window.print()">打印</button>
-          <button class="btn btn-primary" @click="page = 1; loadData()">生成报表</button>
-        </div>
+        <NSpace>
+          <NButton @click="doExport">导出</NButton>
+          <NButton @click="window.print()">打印</NButton>
+          <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
+        </NSpace>
       </div>
       <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
       <table v-else-if="displayColumns.length">
@@ -38,14 +35,15 @@
 
     <div class="bottom-bar" v-if="total > 0">
       <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
-      <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="page--; loadData()">上一页</button>
-      <button class="btn btn-secondary btn-sm" :disabled="page >= totalPages" @click="page++; loadData()">下一页</button>
+      <NButton size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
+      <NButton size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NDatePicker, NSelect, NButton, NSpace } from 'naive-ui'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -62,6 +60,31 @@ const total = ref(0)
 const page = ref(1)
 const totalPages = ref(1)
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('income_list')
+
+function dateStringToTs(s) {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+function tsToDateString(ts) {
+  if (ts == null) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const startDateTs = computed({
+  get: () => dateStringToTs(startDate.value),
+  set: (v) => { startDate.value = tsToDateString(v) }
+})
+const endDateTs = computed({
+  get: () => dateStringToTs(endDate.value),
+  set: (v) => { endDate.value = tsToDateString(v) }
+})
+
+const entityOptions = computed(() => [
+  { label: '全部单位', value: null },
+  ...entities.value.map(e => ({ label: e.entity_name, value: e.entity_id }))
+])
 
 const DEFAULT_COLUMNS = [
   { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
