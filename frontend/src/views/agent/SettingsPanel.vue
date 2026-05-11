@@ -23,11 +23,7 @@
 
         <div class="row">
           <label>AI 模型配置</label>
-          <select v-model="form.ai_config_id" class="inp">
-            <option v-for="cfg in aiConfigs" :key="cfg.id" :value="cfg.id">
-              {{ cfg.display_name }}（{{ cfg.provider }}{{ cfg.model_name ? ' · ' + cfg.model_name : '' }}）
-            </option>
-          </select>
+          <NSelect v-model:value="form.ai_config_id" :options="aiConfigOptions" placeholder="选择模型配置" class="inp" />
           <span class="hint">可在「系统设置 → 模型配置」中添加新的模型配置</span>
         </div>
 
@@ -75,11 +71,7 @@
             <div class="tool-list">
               <div v-for="tool in tools" :key="tool" class="tool-item" :class="getToolClass(tool)">
                 <span class="tool-name">{{ tool }}</span>
-                <select class="tool-perm-select" :value="getToolPerm(tool)" @change="setToolPerm(tool, $event.target.value)">
-                  <option value="allowed">允许</option>
-                  <option value="confirm">需确认</option>
-                  <option value="disabled">禁用</option>
-                </select>
+                <NSelect :value="getToolPerm(tool)" :options="toolPermOptions" size="tiny" style="width:80px" @update:value="v => setToolPerm(tool, v)" />
               </div>
             </div>
           </div>
@@ -143,7 +135,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { NSelect } from 'naive-ui'
 import { useAgentsStore } from '@/stores/agents'
 import http from '@/api'
 
@@ -153,6 +146,15 @@ const store = useAgentsStore()
 
 const form = ref({ display_name: '', role_prompt: '', ai_config_id: '', llm_timeout: 300, llm_max_tokens: 4096 })
 const aiConfigs = ref([])
+const aiConfigOptions = computed(() => aiConfigs.value.map(cfg => ({
+  label: `${cfg.display_name}（${cfg.provider}${cfg.model_name ? ' · ' + cfg.model_name : ''}）`,
+  value: cfg.id
+})))
+const toolPermOptions = [
+  { label: '允许', value: 'allowed' },
+  { label: '需确认', value: 'confirm' },
+  { label: '禁用', value: 'disabled' },
+]
 const saving = ref(false)
 const errMsg = ref('')
 const okMsg = ref('')

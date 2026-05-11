@@ -7,11 +7,7 @@
       </div>
       <div class="filters-bar">
         <input v-model="keyword" class="filter" placeholder="搜索银行编码/名称/联行号" style="width:220px" />
-        <select v-model="filterStatus" class="filter" style="width:90px">
-          <option value="">全部状态</option>
-          <option value="enabled">启用</option>
-          <option value="disabled">停用</option>
-        </select>
+        <NSelect v-model:value="filterStatus" :options="statusFilterOptions" placeholder="全部状态" clearable style="width:110px" />
         <div style="flex:1"></div>
         <button class="btn btn-primary" @click="openForm()">+ 新建银行</button>
       </div>
@@ -95,10 +91,7 @@
           </div>
           <div class="form-group" v-if="editing">
             <label class="form-label">状态</label>
-            <select v-model="form.status" class="form-input">
-              <option value="enabled">启用</option>
-              <option value="disabled">停用</option>
-            </select>
+            <NSelect v-model:value="form.status" :options="statusOptions" class="form-input" />
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>
@@ -116,10 +109,19 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NSelect } from 'naive-ui'
 import * as api from '@/api/master'
 
 const list = ref([])
-const filterStatus = ref('')
+const filterStatus = ref(null)
+const statusFilterOptions = [
+  { label: '启用', value: 'enabled' },
+  { label: '停用', value: 'disabled' },
+]
+const statusOptions = [
+  { label: '启用', value: 'enabled' },
+  { label: '停用', value: 'disabled' },
+]
 const keyword = ref('')
 const showForm = ref(false)
 const editing = ref(null)

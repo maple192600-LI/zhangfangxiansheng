@@ -5,16 +5,10 @@
     </div>
 
     <div class="filters-bar">
-      <select class="form-input" style="max-width:140px" v-model="filters.module" @change="loadLogs">
-        <option value="">全部模块</option>
-        <option v-for="m in modules" :key="m" :value="m">{{ m }}</option>
-      </select>
-      <select class="form-input" style="max-width:140px" v-model="filters.action" @change="loadLogs">
-        <option value="">全部操作</option>
-        <option v-for="a in actions" :key="a" :value="a">{{ a }}</option>
-      </select>
-      <input type="date" class="form-input" style="max-width:150px" v-model="filters.start_date" @change="loadLogs" />
-      <input type="date" class="form-input" style="max-width:150px" v-model="filters.end_date" @change="loadLogs" />
+      <NSelect v-model:value="filters.module" :options="moduleOptions" placeholder="全部模块" clearable style="max-width:140px" @update:value="loadLogs" />
+      <NSelect v-model:value="filters.action" :options="actionOptions" placeholder="全部操作" clearable style="max-width:140px" @update:value="loadLogs" />
+      <NDatePicker v-model:value="filters.start_date" type="date" value-format="yyyy-MM-dd" clearable style="max-width:150px" @update:value="loadLogs" />
+      <NDatePicker v-model:value="filters.end_date" type="date" value-format="yyyy-MM-dd" clearable style="max-width:150px" @update:value="loadLogs" />
       <button class="btn btn-secondary" @click="resetFilters">重置</button>
     </div>
 
@@ -48,16 +42,19 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { NDatePicker, NSelect } from 'naive-ui'
 import { queryLogs } from '@/api/log'
 
 const logs = ref([])
 const page = ref(1)
 const total = ref(0)
 const totalPages = ref(1)
-const filters = ref({ module: '', action: '', start_date: '', end_date: '' })
+const filters = ref({ module: null, action: '', start_date: null, end_date: null })
 
 const modules = ['bank_import', 'manual_flow', 'base_data', 'daily_report', 'export', 'backup', 'batch']
 const actions = ['batch_upload', 'batch_commit', 'report_rebuild', 'report_generate', 'export_excel', 'backup_create', 'backup_restore', 'batch_rollback']
+const moduleOptions = modules.map(m => ({ label: m, value: m }))
+const actionOptions = actions.map(a => ({ label: a, value: a }))
 
 onMounted(loadLogs)
 

@@ -74,7 +74,7 @@
       <div class="edit-grid">
         <label>
           <span>业务日期</span>
-          <input v-model="form.business_date" type="date" class="form-input" />
+          <NDatePicker v-model:value="form.business_date" type="date" value-format="yyyy-MM-dd" style="width:100%" />
         </label>
         <label>
           <span>摘要</span>
@@ -111,6 +111,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { NDatePicker } from 'naive-ui'
 import { getPendingEvents, resolveEvent, voidEvent } from '@/api/events'
 import { fmtAmt } from '@/utils/format'
 

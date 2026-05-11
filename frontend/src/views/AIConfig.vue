@@ -69,9 +69,7 @@
             <div class="form-row">
               <div class="form-field">
                 <label>API 协议</label>
-                <select v-model="form.protocol" class="field-input">
-                  <option v-for="p in protocols" :key="p.code" :value="p.code">{{ p.label }}</option>
-                </select>
+                <NSelect v-model:value="form.protocol" :options="protocolOptions" class="field-input" />
                 <span class="field-desc">选择与供应商 API 兼容的协议类型，大多数供应商使用 OpenAI Completions 格式。</span>
               </div>
             </div>
@@ -103,10 +101,7 @@
             <div class="form-row">
               <div class="form-field">
                 <label>默认模型</label>
-                <select v-if="availableModels.length" v-model="form.model_name" class="field-input">
-                  <option value="">— 请选择模型 —</option>
-                  <option v-for="m in availableModels" :key="m.id" :value="m.id">{{ m.name }}{{ m.desc ? ' · ' + m.desc : '' }}</option>
-                </select>
+                <NSelect v-if="availableModels.length" v-model:value="form.model_name" :options="modelSelectOptions" placeholder="— 请选择模型 —" clearable class="field-input" />
                 <input v-else v-model="form.model_name" class="field-input" placeholder="输入或通过获取模型列表自动填充" />
               </div>
             </div>
@@ -206,11 +201,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { NSelect } from 'naive-ui'
 import * as api from '@/api/ai'
 
 const configs = ref([])
 const providers = ref([])
 const protocols = ref([])
+const protocolOptions = computed(() => protocols.value.map(p => ({ label: p.label, value: p.code })))
+const modelSelectOptions = computed(() => availableModels.value.map(m => ({ label: `${m.name}${m.desc ? ' · ' + m.desc : ''}`, value: m.id })))
 const selectedId = ref(null)
 const isAdding = ref(false)
 const saving = ref(false)
