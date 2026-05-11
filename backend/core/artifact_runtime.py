@@ -1,10 +1,10 @@
-"""Runtime execution for Fund Agent artifacts.
+"""Artifact Runtime — deterministic execution of approved artifacts.
 
-ParserArtifact 执行器负责银行流水确定性解析。
-RuleArtifact 执行器负责报表填充。
+ParserArtifact: deterministic parsing of bank/manual Excel files into CANONICAL_12 rows.
+RuleArtifact: deterministic template filling from approved rules.
 
-当前 run_parser / run_rule 为 deprecated 占位，实际解析由
-bank_import_service 通过 artifact_runtime.run_parser 调用。
+Contract status: run_parser and run_rule are contract placeholders.
+Full implementation is a separate task (Phase E / Phase H).
 """
 from __future__ import annotations
 
@@ -12,13 +12,56 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator, Optional
 
-from openpyxl import load_workbook
 from openpyxl.workbook.workbook import Workbook
 from sqlalchemy.orm import Session
 
-from core import runtime_guard
-from db.tables import AIConfig, ParserArtifact, RuleArtifact
 
+# ── Structured exception hierarchy ──
+
+class ArtifactRuntimeError(RuntimeError):
+    """Base for all artifact runtime errors."""
+
+
+class ArtifactNotFoundError(ArtifactRuntimeError):
+    """Artifact ID does not exist."""
+
+
+class ArtifactNotActiveError(ArtifactRuntimeError):
+    """Artifact exists but status != 'active'."""
+
+
+class PrimitivesViolationError(ArtifactRuntimeError):
+    """Artifact code imports modules outside the primitives whitelist."""
+
+    def __init__(self, artifact_id: int, disallowed: list[str]) -> None:
+        self.artifact_id = artifact_id
+        self.disallowed = disallowed
+        super().__init__(
+            f"Artifact {artifact_id} imports disallowed modules: {disallowed}"
+        )
+
+
+class SandboxTimeoutError(ArtifactRuntimeError):
+    """Artifact execution exceeded the time limit."""
+
+    def __init__(self, artifact_id: int, timeout_seconds: int) -> None:
+        self.artifact_id = artifact_id
+        self.timeout_seconds = timeout_seconds
+        super().__init__(
+            f"Artifact {artifact_id} execution timed out after {timeout_seconds}s"
+        )
+
+
+class ArtifactExecutionError(ArtifactRuntimeError):
+    """Artifact code raised an error during execution."""
+
+    def __init__(self, artifact_id: int, detail: str) -> None:
+        self.artifact_id = artifact_id
+        self.detail = detail
+        super().__init__(f"Artifact {artifact_id} execution failed: {detail}")
+
+
+# ── Execution contracts ──
 
 def run_parser(
     db: Session,
@@ -26,14 +69,78 @@ def run_parser(
     file_path: str,
     ctx: Optional[dict[str, Any]] = None,
 ) -> Iterator[dict[str, Any]]:
-    """Execute active ParserArtifact — deprecated, no longer available."""
-    raise ValueError(
-        "ParserArtifact 执行器暂未就绪。请通过 AI 智能体创建银行流水解析器后重试。"
+    """Execute an active ParserArtifact against an Excel file.
+
+    Input contract:
+        db          — SQLAlchemy Session (read/write)
+        artifact_id — int, references a ParserArtifact with status='active'
+        file_path   — str, absolute path to the Excel file to parse
+        ctx         — optional dict with account_code, entity_code, etc.
+
+    Output contract:
+        Yields dicts, each conforming to CANONICAL_12 schema (§C1):
+            business_date, entity_code, entity_name, account_code, account_name,
+            summary, counterparty, amount_in, amount_out, rolling_balance,
+            state, source
+
+    Preconditions:
+        - artifact.status == 'active'
+        - artifact.code passes AST whitelist scan (§C5)
+        - file_path points to a readable .xlsx/.xls file
+
+    Runtime constraints:
+        - Execution runs inside core.runtime_guard.no_ai_runtime()
+        - No LLM / network calls allowed (§C8)
+        - Single execution timeout: 60 seconds
+
+    Raises:
+        ArtifactNotFoundError    — artifact_id does not exist
+        ArtifactNotActiveError   — artifact exists but status != 'active'
+        PrimitivesViolationError — AST scan finds disallowed imports
+        SandboxTimeoutError      — execution exceeds time limit
+        ArtifactExecutionError   — artifact code raises during execution
+    """
+    raise NotImplementedError(
+        "ParserArtifact runtime 尚未实现。"
+        "完整执行器将在后续 Phase E 中交付。"
     )
 
 
-def run_rule(db: Session, artifact_id: int, ctx: dict[str, Any]) -> Workbook:
-    """Execute active RuleArtifact — deprecated."""
-    raise ValueError(
-        "RuleArtifact 执行器暂未就绪。"
+def run_rule(
+    db: Session,
+    artifact_id: int,
+    ctx: dict[str, Any],
+) -> Workbook:
+    """Execute an active RuleArtifact to fill a report template.
+
+    Input contract:
+        db          — SQLAlchemy Session (read/write)
+        artifact_id — int, references a RuleArtifact with status='active'
+        ctx         — dict with keys:
+            period_start   — str (YYYY-MM-DD)
+            period_end     — str (YYYY-MM-DD)
+            account_code   — str
+            template_path  — str, path to the .xlsx template
+
+    Output contract:
+        Returns an openpyxl Workbook with all placeholders filled.
+
+    Preconditions:
+        - artifact.status == 'active'
+        - artifact.placeholder_bindings covers all §TEMPLATE_18 placeholders
+        - artifact.code passes AST whitelist scan (§C5)
+
+    Runtime constraints:
+        - Same as run_parser (no_ai_runtime, 60s timeout, §C8)
+
+    Raises:
+        ArtifactNotFoundError    — artifact_id does not exist
+        ArtifactNotActiveError   — artifact exists but status != 'active'
+        PrimitivesViolationError — AST scan finds disallowed imports
+        SandboxTimeoutError      — execution exceeds time limit
+        ArtifactExecutionError   — artifact code raises during execution
+    """
+    raise NotImplementedError(
+        "RuleArtifact runtime 尚未实现。"
+        "完整执行器将在后续 Phase H 中交付。"
     )

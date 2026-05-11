@@ -283,7 +283,153 @@
 
 ---
 
+## §A3 · 通用 Agent Artifact 管理 API
+
+> Phase 2 新增。路由前缀 `/api/artifacts`，独立于旧 `/api/fund/*` 体系。
+> 旧 `/api/fund/*` 端点（§A1 #13-23）为死链路，Phase 5 删除。
+> 本节定义的端点是产物管理的唯一生产路径。
+
+### 端点清单
+
+| # | 方法 | 路径 | 职责 |
+|---|------|------|------|
+| P1 | GET | `/api/artifacts/parsers` | ParserArtifact 列表（支持 status/kind/account_code 筛选） |
+| P2 | GET | `/api/artifacts/parsers/{id}` | ParserArtifact 详情（含 code） |
+| P3 | POST | `/api/artifacts/parsers/drafts` | 创建 ParserArtifact 草稿 |
+| P4 | POST | `/api/artifacts/parsers/{id}/approve` | 审批通过 ParserArtifact（draft → active） |
+| P5 | POST | `/api/artifacts/parsers/{id}/reject` | 拒绝 ParserArtifact（draft → retired） |
+| R1 | GET | `/api/artifacts/rules` | RuleArtifact 列表（支持 status/template_id 筛选） |
+| R2 | GET | `/api/artifacts/rules/{id}` | RuleArtifact 详情（含 placeholder_bindings） |
+| R3 | POST | `/api/artifacts/rules/drafts` | 创建 RuleArtifact 草稿 |
+| R4 | POST | `/api/artifacts/rules/{id}/approve` | 审批通过 RuleArtifact（draft → active） |
+| R5 | POST | `/api/artifacts/rules/{id}/reject` | 拒绝 RuleArtifact（draft → retired） |
+| J1 | GET | `/api/artifacts/template-inference-jobs` | 模板推断任务列表（支持 status 筛选） |
+| J2 | GET | `/api/artifacts/template-inference-jobs/{id}` | 模板推断任务详情 |
+
+### 状态流转
+
+```
+ParserArtifact / RuleArtifact:
+  create → draft
+  draft  → active   (approve：用户确认通过)
+  draft  → retired  (reject：用户拒绝，sample_check_log["__rejection"] 记录原因)
+  active → retired  (被新版本 approve 时自动降级)
+```
+
+ORM CHECK 约束：`status IN ('draft','active','retired')`。
+
+### 请求/响应 Schema
+
+#### P3 · `POST /api/artifacts/parsers/drafts`
+
+**请求体**：
+```json
+{
+  "name": "ICBC_网银_v1",
+  "kind": "bank",
+  "account_code": "ZH0001",
+  "code": "# Parser Python code",
+  "primitives_imports": ["fund.primitives.sheet_ops", "fund.primitives.canonical"],
+  "sample_check_log": {"sample_rows": 50, "parsed_rows": 50},
+  "confidence": 0.94,
+  "created_by": "agent"
+}
+```
+
+**成功响应**：
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "id": 1,
+    "name": "ICBC_网银_v1",
+    "kind": "bank",
+    "account_code": "ZH0001",
+    "version": 1,
+    "status": "draft",
+    "code": "# Parser Python code",
+    "primitives_imports": ["fund.primitives.sheet_ops", "fund.primitives.canonical"],
+    "sample_check_log": {"sample_rows": 50, "parsed_rows": 50},
+    "confidence": 0.94,
+    "created_by": "agent",
+    "approved_by": null,
+    "approved_at": null
+  }
+}
+```
+
+#### P4 · `POST /api/artifacts/parsers/{id}/approve`
+
+**请求体**：
+```json
+{
+  "reviewer": "admin",
+  "reason": null
+}
+```
+
+**行为**：
+1. 目标 artifact status 变为 `active`
+2. 同账户同类型当前 `active` 的 artifact 自动降级为 `retired`
+3. 记录 `approved_by` 和 `approved_at`
+
+**错误**：
+- `2001` — artifact 不存在
+- `2001` — 非 draft 状态不可审批（"只有 draft 可审批"）
+
+#### P5 · `POST /api/artifacts/parsers/{id}/reject`
+
+**请求体**：
+```json
+{
+  "reviewer": "admin",
+  "reason": "代码质量不达标"
+}
+```
+
+**行为**：
+1. 目标 artifact status 变为 `retired`
+2. `sample_check_log["__rejection"]` 记录 `{reason, rejected_by, rejected_at}`
+
+#### R3 · `POST /api/artifacts/rules/drafts`
+
+**请求体**：
+```json
+{
+  "name": "现金日记账_ICBC_v1",
+  "template_id": 1,
+  "placeholder_bindings": {"报表标题": "ICBC 现金日记账", "月初余额": "rolling_balance"},
+  "loop_config": {"group_by": "month", "sort_by": "business_date"},
+  "primitives_imports": ["fund.primitives.template_fill"],
+  "sample_check_log": {},
+  "confidence": 0.88,
+  "created_by": "agent"
+}
+```
+
+### 审核边界
+
+- `approve` / `reject` 由用户（前端）发起，体现用户审核语义
+- Agent 通过工具层调用 `drafts` 端点创建草稿，不直接审批
+- 执行阶段（`artifact_runtime.run_parser` / `run_rule`）不经过本 API，由 runtime 独立完成
+- 执行阶段禁止 LLM（§C8）
+
+### 错误码映射
+
+| 码 | 场景 |
+|----|------|
+| `2001` | Artifact / Job 不存在 |
+| `2001` | 状态不允许操作（非 draft 审批/拒绝） |
+| `1001` | 必填字段缺失 |
+| `1002` | 参数格式错误（kind 非法等） |
+| `3003` | 基元库调用越界（AST 扫描失败） |
+| `3004` | 沙箱超时 |
+
+---
+
 **版本**
+- v4.3 · 2026-05-11 · §A3 新增通用 Agent Artifact 管理 API（12 端点，Phase 2）
 - v4.2 · 2026-05-10 · §A1 标记 42 上限已失效；§A99 标记旧端点禁止恢复；口径待重新统计
 - v4.1 · 2026-05-10 · 移除银行导入旧端点（ai-parse / commit-by-mapping / save-template），N14-N17 改为 ParserArtifact 路线
 - v4.0 · 2026-05-02 · 承认端点数从 42 扩展至 59，更新标题和说明

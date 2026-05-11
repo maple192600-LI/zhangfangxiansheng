@@ -3,6 +3,7 @@
 基础 Schema 定义，后续 Round 逐步补充。
 """
 from datetime import date, datetime
+from enum import Enum
 from typing import Any, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field
@@ -543,3 +544,107 @@ class ReportTemplateOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────
+# Artifact 枚举
+# ──────────────────────────────────────────
+
+class ArtifactKind(str, Enum):
+    bank = "bank"
+    manual = "manual"
+
+
+class ArtifactDBStatus(str, Enum):
+    draft = "draft"
+    active = "active"
+    retired = "retired"
+
+
+class InferenceJobStatus(str, Enum):
+    pending = "pending"
+    reviewed = "reviewed"
+    approved = "approved"
+    rejected = "rejected"
+
+
+# ──────────────────────────────────────────
+# Artifact 请求
+# ──────────────────────────────────────────
+
+class ParserArtifactDraftCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+    kind: ArtifactKind
+    account_code: str = Field(..., max_length=50)
+    code: str
+    primitives_imports: list[str]
+    sample_check_log: dict = {}
+    confidence: Optional[float] = None
+    created_by: str = "agent"
+
+
+class RuleArtifactDraftCreate(BaseModel):
+    name: str = Field(..., max_length=100)
+    template_id: Optional[int] = None
+    placeholder_bindings: dict
+    loop_config: Optional[dict] = None
+    primitives_imports: list[str]
+    sample_check_log: dict = {}
+    confidence: Optional[float] = None
+    created_by: str = "agent"
+
+
+class ArtifactReviewRequest(BaseModel):
+    reviewer: str = "admin"
+    reason: Optional[str] = None
+
+
+# ──────────────────────────────────────────
+# Artifact 响应
+# ──────────────────────────────────────────
+
+class ParserArtifactResponse(BaseModel):
+    id: int
+    name: str
+    kind: str
+    account_code: Optional[str] = None
+    version: int
+    status: str
+    code: Optional[str] = None
+    primitives_imports: list
+    sample_check_log: dict
+    confidence: Optional[float] = None
+    created_by: str
+    approved_by: Optional[str] = None
+    approved_at: Optional[str] = None
+
+
+class RuleArtifactResponse(BaseModel):
+    id: int
+    name: str
+    template_id: Optional[int] = None
+    version: int
+    status: str
+    placeholder_bindings: Optional[dict] = None
+    loop_config: Optional[dict] = None
+    primitives_imports: list
+    sample_check_log: dict
+    confidence: Optional[float] = None
+    created_by: str
+    approved_by: Optional[str] = None
+    approved_at: Optional[str] = None
+
+
+class TemplateInferenceJobResponse(BaseModel):
+    id: int
+    template_file: Optional[str] = None
+    original_filename: Optional[str] = None
+    stage: Optional[str] = None
+    status: str
+    stage_a_output: Optional[dict] = None
+    stage_b_output: Optional[dict] = None
+    stage_c_decision: Optional[str] = None
+    rule_artifact_id: Optional[int] = None
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
