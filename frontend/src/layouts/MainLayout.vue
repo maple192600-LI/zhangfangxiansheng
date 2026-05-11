@@ -41,35 +41,35 @@
     </NLayoutSider>
 
     <!-- 修改密码弹窗 -->
-    <div v-if="showPwdDialog" class="modal-overlay" @click.self="showPwdDialog = false">
-      <div class="modal-box">
-        <h3>修改密码</h3>
-        <div v-if="pwdError" class="error-bar" style="margin-bottom: 12px;">{{ pwdError }}</div>
-        <div v-if="pwdOk" class="warning ok" style="margin-bottom: 12px;">密码修改成功，请重新登录</div>
-        <div class="form-group">
-          <label class="form-label">当前密码</label>
-          <input v-model="oldPwd" type="password" class="form-input" placeholder="请输入当前密码" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">新密码</label>
-          <input v-model="newPwd" type="password" class="form-input" placeholder="请输入新密码" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">确认新密码</label>
-          <input v-model="confirmPwd" type="password" class="form-input" placeholder="再次输入新密码" />
-        </div>
-        <div class="btn-row" style="justify-content: flex-end; margin-top: 16px;">
-          <button class="btn btn-secondary" @click="showPwdDialog = false">取消</button>
-          <button class="btn btn-primary" :disabled="pwdLoading" @click="handleChangePwd">
-            {{ pwdLoading ? '保存中...' : '确认修改' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <NModal
+      v-model:show="showPwdDialog"
+      preset="card"
+      title="修改密码"
+      style="width: 460px"
+      :mask-closable="!isForceChangePwd"
+    >
+      <NForm label-placement="top">
+        <NFormItem label="当前密码">
+          <NInput v-model:value="oldPwd" type="password" show-password-on="click" placeholder="请输入当前密码" />
+        </NFormItem>
+        <NFormItem label="新密码">
+          <NInput v-model:value="newPwd" type="password" show-password-on="click" placeholder="请输入新密码" />
+        </NFormItem>
+        <NFormItem label="确认新密码">
+          <NInput v-model:value="confirmPwd" type="password" show-password-on="click" placeholder="再次输入新密码" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showPwdDialog = false">取消</NButton>
+          <NButton type="primary" :loading="pwdLoading" @click="handleChangePwd">确认修改</NButton>
+        </NSpace>
+      </template>
+    </NModal>
 
     <!-- 新建 Agent 弹窗 -->
     <AgentCreateModal
-      v-if="showCreateAgentModal"
+      :show="showCreateAgentModal"
       @close="showCreateAgentModal = false"
       @created="onAgentCreated"
     />
@@ -131,7 +131,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutContent, NMenu } from 'naive-ui'
+import { NLayout, NLayoutSider, NLayoutContent, NMenu, NModal, NForm, NFormItem, NInput, NButton, NSpace, useMessage } from 'naive-ui'
 import { useNavStore } from '@/stores/nav'
 import { useAuthStore } from '@/stores/auth'
 import { useAgentsStore } from '@/stores/agents'
@@ -145,6 +145,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const agentsStore = useAgentsStore()
 const { setSkin, getSkinName, getSkinLabel } = useSkin()
+const message = useMessage()
 
 const skinLabel = computed(() => getSkinLabel())
 const skinNames = Object.keys(SKINS)
@@ -157,8 +158,10 @@ function toggleSkin() {
 }
 
 // 首次登录强制改密码检测
+const isForceChangePwd = computed(() => route.query.forceChangePwd === '1' || !!auth.user?.must_change_password)
+
 onMounted(() => {
-  if (route.query.forceChangePwd === '1' || auth.user?.must_change_password) {
+  if (isForceChangePwd.value) {
     showPwdDialog.value = true
   }
   agentsStore.fetchAll()
@@ -170,30 +173,26 @@ const oldPwd = ref('')
 const newPwd = ref('')
 const confirmPwd = ref('')
 const pwdLoading = ref(false)
-const pwdError = ref('')
-const pwdOk = ref(false)
 
 async function handleChangePwd() {
   if (!oldPwd.value || !newPwd.value || !confirmPwd.value) {
-    pwdError.value = '请填写所有字段'
+    message.error('请填写所有字段')
     return
   }
   if (newPwd.value !== confirmPwd.value) {
-    pwdError.value = '两次输入的新密码不一致'
+    message.error('两次输入的新密码不一致')
     return
   }
   if (newPwd.value.length < 6) {
-    pwdError.value = '新密码至少6位'
+    message.error('新密码至少6位')
     return
   }
   pwdLoading.value = true
-  pwdError.value = ''
   try {
     await changePassword({ old_password: oldPwd.value, new_password: newPwd.value })
-    pwdOk.value = true
+    message.success('密码修改成功，请重新登录')
     setTimeout(() => {
       showPwdDialog.value = false
-      pwdOk.value = false
       oldPwd.value = ''
       newPwd.value = ''
       confirmPwd.value = ''
@@ -201,7 +200,7 @@ async function handleChangePwd() {
       router.push({ name: 'login' })
     }, 1500)
   } catch (e) {
-    pwdError.value = e.message || '修改密码失败'
+    message.error(e.message || '修改密码失败')
   } finally {
     pwdLoading.value = false
   }
@@ -744,24 +743,4 @@ watch(() => router.currentRoute.value, (route) => {
 .user-btn-logout:hover {
   background: var(--warn-bg);
 }
-
-/* ── 弹窗 ── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.35);
-  display: flex; align-items: center; justify-content: center; z-index: 100;
-}
-.modal-box {
-  background: #faf8f3; border-radius: var(--radius-lg, 16px); padding: 28px;
-  max-width: 420px; width: 90%; box-shadow: 0 12px 40px rgba(0,0,0,.15);
-}
-.modal-box h3 { margin: 0 0 16px; font-size: var(--font-size-lg); }
-
-.form-group { margin-bottom: 14px; }
-.form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
-.form-input {
-  width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line);
-  border-radius: var(--radius-sm, 8px); font-size: 14px; color: var(--text);
-  background: var(--panel-2, #f7f4ee); outline: none; box-sizing: border-box;
-}
-.form-input:focus { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-2); }
 </style>
