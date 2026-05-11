@@ -111,17 +111,6 @@ body {
   min-height: 100vh;
 }
 
-/* Ant Design Vue 覆盖 */
-.ant-btn-primary {
-  background: var(--green) !important;
-  border-color: var(--green) !important;
-}
-
-.ant-btn-primary:hover {
-  background: var(--green-hover) !important;
-  border-color: var(--green-hover) !important;
-}
-
 /* 滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
