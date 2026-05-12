@@ -20,10 +20,10 @@
 ```json
 {
   "entity_id": 258,
-  "entity_name": "养护",           // 向后兼容（= short_name）
+  "entity_name": "养护",           // 向后兼容字段，当前语义=简称优先
   "entity_full_name": "山西喜跃发道路建设养护集团有限公司",
-  "entity_short_name": "养护",
-  "entity_display_name": "养护",   // UI 展示优先字段
+  "entity_short_name": "养护",     // 单位简称
+  "entity_display_name": "养护",   // UI 展示优先字段，当前=简称优先
   "accounts": [...]
 }
 ```

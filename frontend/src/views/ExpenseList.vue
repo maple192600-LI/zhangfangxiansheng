@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>支出明细表</h3>
         <span>按账户、日期汇总的支出明细视图</span>

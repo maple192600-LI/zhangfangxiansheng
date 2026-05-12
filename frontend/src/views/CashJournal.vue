@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>现金日记账</h3>
         <span>现金类资金载体的结果视图</span>

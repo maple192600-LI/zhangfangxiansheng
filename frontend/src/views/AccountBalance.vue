@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>账户余额表</h3>
         <span>各账户期初/本期收入/本期支出/期末汇总</span>

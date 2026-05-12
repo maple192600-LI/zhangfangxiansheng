@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>资金日报</h3>
         <span>按单位汇总：期初/收入/支出/净变动/期末</span>

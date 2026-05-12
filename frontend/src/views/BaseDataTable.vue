@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>基础数据表</h3>
         <span>所有后续报表的统一底座</span>

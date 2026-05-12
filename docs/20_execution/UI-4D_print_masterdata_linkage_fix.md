@@ -7,7 +7,7 @@
 | # | 问题 | 根因 | 修复方案 | 影响文件 |
 |---|------|------|----------|----------|
 | 1 | 打印按钮点击无反应 | `@click="window.print()"` 在 Vue 3 `<script setup>` 模板中无法正确解析全局 `window` 对象 | 改为 `@click="handlePrint"` + `function handlePrint() { window.print() }` 方法调用 | 7 个 Vue 文件 |
-| 2 | 单位下拉 label 使用简称 | `get_accounts_tree` 返回 `entity_name=ent.short_name` | 改为 `entity_name=ent.name`（全称） | `master_data_service.py` |
+| 2 | 单位下拉 label 使用简称 | `get_accounts_tree` 返回 `entity_name=ent.short_name` | 扩展返回 4 字段：`entity_name`(简称优先/兼容)、`entity_full_name`(全称)、`entity_short_name`(简称)、`entity_display_name`(UI展示) | `master_data_service.py`, `schemas.py` |
 | 3 | 停用账户仍在业务页下拉显示 | `get_accounts_tree` 未过滤 `Account.status` | 添加 `Account.status == "enabled"` 过滤条件 | `master_data_service.py` |
 | 4 | `/agents/ag_42nugg` 无法加载 | `Number("ag_42nugg")` → `NaN`，`loadAgent()` 提前返回 | 后端参数改为 `str` 类型，先尝试 `int` 转换再回退 `agent_code` 查询；前端直接传原始 ID | `agent.py`, `AgentDetail.vue` |
 
@@ -30,25 +30,40 @@
 - CDP 测试：拦截 `window.print` 后点击按钮 → `printTriggered: true`
 - 真实鼠标事件序列（pointerdown → mousedown → pointerup → mouseup → click）→ `printTriggered: true`
 
-## Issue 2：单位下拉 label 全称
+## Issue 2：主数据字段语义澄清
 
 ### 修改
 
-`backend/services/master_data_service.py` 第 327 行：
+`backend/db/schemas.py` — EntityTreeGroup 新增 3 个字段：
 ```python
-# 之前
-entity_name=ent.short_name,
-# 之后
-entity_name=ent.name,
+class EntityTreeGroup(BaseModel):
+    entity_id: int
+    entity_name: str           # 向后兼容，当前语义=简称优先
+    entity_full_name: str      # 单位全称
+    entity_short_name: str     # 单位简称
+    entity_display_name: str   # UI 展示优先字段，当前=简称优先
+    accounts: List[AccountTreeNode] = []
+```
+
+`backend/services/master_data_service.py`：
+```python
+entity_name=ent.short_name or ent.name,         # 向后兼容：简称优先
+entity_full_name=ent.name,                       # 全称
+entity_short_name=ent.short_name or "",          # 简称
+entity_display_name=ent.short_name or ent.name,  # UI 展示
 ```
 
 ### 验证
 
 API `/api/accounts/tree` 返回：
-- 修复前：`entity_name: "养护"`（short_name）
-- 修复后：`entity_name: "山西喜跃发道路建设养护集团有限公司"`（name）
-
-前端 CDP 验证：`entityOptions[1].label` = "山西喜跃发道路建设养护集团有限公司"
+```json
+{
+  "entity_name": "养护",
+  "entity_full_name": "山西喜跃发道路建设养护集团有限公司",
+  "entity_short_name": "养护",
+  "entity_display_name": "养护"
+}
+```
 
 ## Issue 3：停用账户过滤
 
@@ -112,7 +127,7 @@ const id = agent.value.id  // 从返回数据中获取数字 ID
 ## 影响范围
 
 - **报表页（6 个）+ TemplateReport composable**：打印按钮行为一致
-- **所有使用 `getAccountsTree` 的页面（10 个）**：单位下拉显示全称、排除停用账户
+- **所有使用 `getAccountsTree` 的页面（10 个）**：单位下拉使用 `entity_display_name`（简称优先）、通过 `entity_full_name` 在下拉菜单中显示全称、排除停用账户
 - **Agent 详情页**：URL 兼容数字 ID 和 agent_code
 - **向后兼容**：数字 ID 路由（如 `/agents/5`）不受影响，`agent_code` 路由为新增能力
 
@@ -121,7 +136,7 @@ const id = agent.value.id  // 从返回数据中获取数字 ID
 | 验证项 | 方法 | 结果 |
 |--------|------|------|
 | 打印按钮 | CDP 拦截 window.print + 真实鼠标事件 | 通过 |
-| 单位全称 | curl API + CDP 检查 entityOptions | 通过 |
+| 字段契约 | curl API 返回 4 字段 | 通过 |
 | 停用过滤 | curl API 检查 accounts status | 通过 |
 | Agent URL | curl 数字 ID 和 agent_code | 通过 |
 | 前端构建 | `npx vite build` | 通过 |
