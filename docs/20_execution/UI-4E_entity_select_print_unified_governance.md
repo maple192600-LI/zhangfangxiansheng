@@ -45,19 +45,31 @@
 
 ### 4. 全局打印 CSS
 
-从 `common.css`（scoped import）移至 `theme.css`（全局）：
+从 `common.css`（scoped import）移至 `theme.css`（全局）。
+
+打印区域契约：
+- 报表页面用 `.report-print-root-wrapper` 包裹最外层 div
+- 报表正文用 `.report-print-root`（加在 `.section` 上）
+- 打印时保留 `.section-title`（报表标题）
+- 打印时隐藏 `.report-print-root` 内部的筛选栏/按钮区/分页栏/加载状态
 
 ```css
 @media print {
-  .sidebar, .right-tabs, .filters-bar, .btn-row,
-  .bottom-bar, .section-title, ... { display: none !important; }
-  .n-layout-sider { display: none !important; }
+  /* 隐藏全局框架 */
+  .sidebar, .right-tabs, .n-layout-sider { display: none !important; }
   .n-layout { display: block !important; }
-  ...
+
+  /* 隐藏报表区域内的交互元素（筛选栏、按钮区、分页栏、加载状态等） */
+  .report-print-root .filters-bar,
+  .report-print-root .btn-row,
+  .report-print-root .bottom-bar,
+  .report-print-root .loading-state,
+  .report-print-root .error-bar,
+  .report-print-root-wrapper > .bottom-bar { display: none !important; }
+
+  /* 保留：.section-title（报表标题）不隐藏 */
 }
 ```
-
-关键新增：`.n-layout-sider { display: none !important; }` 确保 Naive UI 的侧边栏也被隐藏。
 
 ### 5. 页面替换清单
 
