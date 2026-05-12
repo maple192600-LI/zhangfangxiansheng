@@ -72,6 +72,7 @@ import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
 
 const props = defineProps({
   title: String,
@@ -82,11 +83,6 @@ const props = defineProps({
   defaultHeaders: { type: Array, default: () => [] },
   defaultKeys: { type: Array, default: () => [] },
 })
-
-const EXPORT_NAMES = {
-  major_balance: '资金余额表', month_check: '月度对账表',
-  week_report: '周报', month_report: '月报', year_report: '年报',
-}
 
 const { handlePrint } = useReportPrint()
 
@@ -156,8 +152,12 @@ async function doExport() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const dateSuffix = props.dateMode === 'year' ? `${selYear.value}年` : props.dateMode === 'month' ? `${selYear.value}年${selMonth.value}月` : `${startDate.value}_${endDate.value}`
-    a.download = `${EXPORT_NAMES[props.exportType] || props.exportType}_${dateSuffix}.xlsx`
+    a.download = getReportFilename(props.exportType, {
+      startDate: startDate.value,
+      endDate: endDate.value,
+      year: props.dateMode === 'year' || props.dateMode === 'month' ? selYear.value : undefined,
+      month: props.dateMode === 'month' ? selMonth.value : undefined,
+    })
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }

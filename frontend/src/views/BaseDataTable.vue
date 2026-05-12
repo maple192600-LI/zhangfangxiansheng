@@ -100,6 +100,7 @@ import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
 
 const { handlePrint } = useReportPrint()
 
@@ -185,7 +186,7 @@ async function doExport(exportType) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `基础数据表_${f.date_from || '全部'}_${f.date_to || '全部'}.xlsx`
+    a.download = getReportFilename('base_data', { startDate: f.date_from, endDate: f.date_to })
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
