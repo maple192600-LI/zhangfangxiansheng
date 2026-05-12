@@ -136,3 +136,43 @@ body {
   min-width: 180px !important;
   max-width: 480px !important;
 }
+
+/* ──────────────────────────────────────────
+   全局打印样式（必须在全局 CSS 中，不能在 scoped 中）
+   ────────────────────────────────────────── */
+@media print {
+  /* 隐藏非内容区域 */
+  .sidebar,
+  .right-tabs,
+  .filters-bar,
+  .btn-row,
+  .bottom-bar,
+  .top-bar,
+  .section-title,
+  .metric-strip,
+  .dashboard-grid,
+  .dashboard-grid-2,
+  .progress-list,
+  .kanban,
+  .quick-grid,
+  .warning-list,
+  .loading-state,
+  .error-bar,
+  .modal-overlay { display: none !important; }
+
+  /* 布局适配 */
+  .app-layout { grid-template-columns: 1fr !important; }
+  .n-layout-sider { display: none !important; }
+  .n-layout { display: block !important; }
+  .main-area { padding: 0 !important; }
+  .shell, .content-full { box-shadow: none; border: none; padding: 0; }
+
+  /* 只显示报表打印区域 */
+  .section { box-shadow: none; border: none; break-inside: avoid; padding: 8px; }
+  table { font-size: 11px; break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; break-after: auto; }
+
+  /* Excel 模板渲染 */
+  .excel-host { overflow: visible; }
+}

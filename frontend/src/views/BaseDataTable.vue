@@ -9,7 +9,7 @@
         <NDatePicker v-model:value="filters.date_from" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable />
-        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+        <MasterEntitySelect v-model="filters.entity_id" :entities="entities" />
         <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable class="filter-select-sm" :consistent-menu-width="false" />
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div class="filter-spacer"></div>
@@ -93,11 +93,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+
+const { handlePrint } = useReportPrint()
 
 const entities = ref([])
 const rows = ref([])
@@ -139,7 +143,6 @@ const directionOptions = [
   { label: '收入', value: 'income' },
   { label: '支出', value: 'expense' },
 ]
-const entityFilterOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
 const filters = ref({ date_from: null, date_to: null, entity_id: null, direction: null, keyword: '' })
 
 async function loadData() {
@@ -174,8 +177,6 @@ async function doRebuild() {
   } catch (e) { alert('重建失败: ' + (e.message || e)) }
   rebuilding.value = false
 }
-
-function handlePrint() { window.print() }
 
 async function doExport(exportType) {
   try {

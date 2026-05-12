@@ -18,7 +18,7 @@
           <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
           <NSelect v-model:value="selMonth" :options="monthSelectOptions" style="width:80px" />
         </template>
-        <NSelect v-model:value="entityId" :options="entityFilterOptions" placeholder="全部单位" clearable style="min-width:140px" />
+        <MasterEntitySelect v-model="entityId" :entities="entities" />
         <div style="flex:1"></div>
         <div class="btn-row">
           <NButton secondary @click="doExport">导出</NButton>
@@ -65,6 +65,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as reportApi from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -80,6 +82,8 @@ const props = defineProps({
   defaultHeaders: { type: Array, default: () => [] },
   defaultKeys: { type: Array, default: () => [] },
 })
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date()
 const startDate = ref(today.toISOString().slice(0, 10))
@@ -97,7 +101,6 @@ const yearOptions = computed(() => {
 })
 const yearSelectOptions = computed(() => yearOptions.value.map(y => ({ label: `${y}年`, value: y })))
 const monthSelectOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
-const entityFilterOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
 
 const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
 
@@ -130,8 +133,6 @@ async function loadData() {
     loading.value = false
   }
 }
-
-function handlePrint() { window.print() }
 
 async function doExport() {
   try {

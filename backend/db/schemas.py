@@ -250,6 +250,9 @@ class AccountTreeNode(BaseModel):
 class EntityTreeGroup(BaseModel):
     entity_id: int
     entity_name: str
+    entity_full_name: str
+    entity_short_name: str
+    entity_display_name: str
     accounts: List[AccountTreeNode] = []
 
 

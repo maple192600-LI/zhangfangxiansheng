@@ -518,19 +518,7 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
 }
 
 /* ===== 打印 ===== */
-@media print {
-  .sidebar, .right-tabs, .filters-bar, .btn-row, .bottom-bar,
-  .top-bar, .metric-strip, .dashboard-grid, .dashboard-grid-2,
-  .progress-list, .kanban, .quick-grid, .warning-list,
-  .loading-state, .error-bar, .modal-overlay { display: none !important; }
-  .app-layout { grid-template-columns: 1fr !important; }
-  .main-area { padding: 0 !important; }
-  .shell { box-shadow: none; border: none; }
-  .section { box-shadow: none; border: none; break-inside: avoid; }
-  table { font-size: 11px; break-inside: auto; }
-  thead { display: table-header-group; }
-  tr { break-inside: avoid; break-after: auto; }
-}
+/* 打印样式已移至全局 theme.css（scoped 导入无法匹配全局元素如 .sidebar） */
 
 /* ======= Excel 模板原表渲染（v-html 注入） ======= */
 .excel-host {
@@ -545,7 +533,4 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   border: 1px solid #c8c2b5;
   padding: 4px 6px;
   word-break: break-word;
-}
-@media print {
-  .excel-host { overflow: visible; }
 }

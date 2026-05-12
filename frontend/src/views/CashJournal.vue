@@ -142,11 +142,14 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -156,7 +159,7 @@ const accountId = ref(null)
 const accountGroupOptions = computed(() => {
   return entityGroups.value.map(g => ({
     type: 'group',
-    label: g.entity_name,
+    label: g.entity_display_name || g.entity_name,
     key: g.entity_id,
     children: g.accounts.map(a => ({ label: `${a.account_code} ${a.account_alias}`, value: a.id }))
   }))
@@ -191,7 +194,7 @@ function cellVal(r, key) {
 const entityGroups = computed(() => {
   const groups = {}
   for (const e of entities.value) {
-    if (!groups[e.entity_id]) groups[e.entity_id] = { entity_id: e.entity_id, entity_name: e.entity_name, accounts: [] }
+    if (!groups[e.entity_id]) groups[e.entity_id] = { entity_id: e.entity_id, entity_name: e.entity_display_name || e.entity_name, entity_display_name: e.entity_display_name || e.entity_name, accounts: [] }
     groups[e.entity_id].accounts.push(...e.accounts)
   }
   return Object.values(groups)
@@ -418,8 +421,6 @@ async function loadReport() {
     loading.value = false
   }
 }
-
-function handlePrint() { window.print() }
 
 async function doExport() {
   try {

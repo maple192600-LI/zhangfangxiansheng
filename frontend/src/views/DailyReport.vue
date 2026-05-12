@@ -9,7 +9,7 @@
         <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable />
-        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+        <MasterEntitySelect v-model="entityId" :entities="entities" />
         <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
@@ -49,12 +49,16 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect, NButton, NSpace } from 'naive-ui'
+import { NDatePicker, NButton, NSpace } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -85,11 +89,6 @@ const endDateTs = computed({
   get: () => dateStringToTs(endDate.value),
   set: (v) => { endDate.value = tsToDateString(v) }
 })
-
-const entityOptions = computed(() => [
-  { label: '全部单位', value: null },
-  ...entities.value.map(e => ({ label: e.entity_name, value: e.entity_id }))
-])
 
 const DEFAULT_COLUMNS = [
   { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
@@ -139,8 +138,6 @@ async function loadReport() {
     loading.value = false
   }
 }
-
-function handlePrint() { window.print() }
 
 async function doExport() {
   try {

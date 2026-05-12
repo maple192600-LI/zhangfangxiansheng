@@ -324,7 +324,10 @@ def get_accounts_tree(db: Session) -> List[EntityTreeGroup]:
             ))
         result.append(EntityTreeGroup(
             entity_id=ent.id,
-            entity_name=ent.name,
+            entity_name=ent.short_name or ent.name,
+            entity_full_name=ent.name,
+            entity_short_name=ent.short_name or "",
+            entity_display_name=ent.short_name or ent.name,
             accounts=account_nodes,
         ))
     return result
