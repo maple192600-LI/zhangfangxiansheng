@@ -1,33 +1,61 @@
-# AGENTS.md
+# AGENTS.md — Agent 行为指引
 
-## MUST READ
+> 本文件供 AI 智能体（包括 Claude Code、ChatGPT 等）阅读，帮助理解项目业务上下文。
 
-This repository currently stores the planning documents in `new/`.
+## 项目简介
 
-`new/` is a documentation location, not the required future development directory.
+**账房先生** — 本地部署的财务工作台，服务中国中小企业。
 
-Read first:
+核心循环：企业初始化 → 导入/录入流水 → 确认入库 → 查看和导出报表。
 
-- `new/AGENTS.md`
-- `new/00_项目文件地图与交付边界.md`
-- `new/PRD_账房先生_本地财务Agent工作台.md`
-- `new/13_AI_Coding_开发协作规范.md`
-- `new/12_测试与验收规范.md`
+## 业务知识入口
 
-## AUTHORITY
+所有业务流程、规则、术语在 `docs/10_business/` 目录下：
 
-Only the files listed above are implementation authority for this project.
+| 文件 | 内容 |
+|------|------|
+| `00_业务总览.md` | 产品定位、13 个流程一览、当前可用主线 |
+| `01_业务流程总账.md` | 每条流程的完整描述（正常流程 + 异常 + 验收标准） |
+| `02_业务规则总账.md` | 所有硬性业务约束（收入支出互斥、状态枚举等） |
+| `03_报表取数说明.md` | 每张报表的数据来源和计算逻辑 |
+| `04_异常处理规则.md` | 异常分类和处理操作 |
+| `05_业务术语表.md` | 术语统一（法人/账户/流水/批次等） |
+| `06_新增功能接入说明.md` | 新增报表/导入/主数据的开发检查清单 |
 
-Any other files in the workspace are not development input unless the user explicitly names them.
+技术映射在 `docs/11_technical_mapping/` 目录下：
 
-The final development workspace may be any folder or GitHub repository selected by the user later.
+| 文件 | 内容 |
+|------|------|
+| `01_业务流程对应页面接口表.md` | 每条流程对应的前端页面、API、后端路由、Service |
+| `02_报表取数技术映射.md` | 每张报表的代码函数和 SQL 查询 |
+| `03_数据表关系映射.md` | 24 张表的关系、CANONICAL_12 字段映射 |
+| `04_Agent产物生命周期映射.md` | ParserArtifact 和 RuleArtifact 的完整生命周期 |
 
-## HARD RULES
+## 关键事实
 
-- Do not develop directly on `main`.
-- Do not keep parallel implementations for the same capability.
-- Do not create parallel replacement files to bypass defects.
-- Do not commit `runtime/`, `.venv/`, `node_modules/`, downloads, logs, or temporary outputs.
-- Do not put docs, fixtures, runtime data, or test artifacts inside `product/`.
-- User-visible work must pass browser validation.
-- Completion requires project guard check result.
+- **FundEvent** 是核心事实表，所有报表的数据源
+- **旧 FundAgent 已删除**，只有通用 Agent（`backend/agents/runtime.py`）
+- **`backend/fund/`** 是确定性执行基础设施，必须保留，不等于旧 FundAgent
+- **`run_parser` 和 `run_rule`** 是未实现的占位函数（`raise NotImplementedError`）
+- **当前可用主线**：手工快速录入 → 报表查询/导出
+- **银行导入和手工 Excel 导入**：暂不可用，等待 `run_parser` 实现
+- **报表生成禁止调 LLM**（§C8 约束）
+- **增强层不阻断核心功能**：模板缺失时降级到默认列
+
+## 术语澄清
+
+| 说这个 | 实际指 |
+|--------|--------|
+| "流水" | FundEvent 表的一行记录 |
+| "解析器" | ParserArtifact（bank 或 manual 类型） |
+| "规则" | RuleArtifact（报表模板填充规则） |
+| "模板" | ReportTemplate（报表的列配置和 Excel 布局） |
+| "批次" | ImportBatch（一次导入操作） |
+| "标准格式" | CANONICAL_12（12 个字段的统一流水格式） |
+
+## 禁止
+
+- 禁止恢复旧 FundAgent
+- 禁止新增独立的领域 Agent
+- 禁止在确定性执行中调 LLM
+- 禁止把某家企业的表格格式写死成通用规则

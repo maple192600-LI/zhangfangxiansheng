@@ -66,6 +66,8 @@ docs/
 │   ├── 18_anti_drift.md             ← 防跑偏机制
 │   └── 19_ai_capability.md          ← Agent能力配置
 ├── 10_product_design/               ← 产品设计
+├── 10_business/                     ← 业务流程总账（面向业务人员）
+├── 11_technical_mapping/            ← 业务流程技术映射（面向 AI 和开发工具）
 ├── 20_execution/                    ← 模块执行文档
 └── 30_contracts/                    ← 数据库/API/字段契约
 ```
