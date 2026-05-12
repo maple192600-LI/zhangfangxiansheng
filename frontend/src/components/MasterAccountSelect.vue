@@ -11,14 +11,12 @@
     class="filter-select filter-account-select"
     :consistent-menu-width="false"
     :menu-props="{ class: 'filter-select-menu filter-account-menu' }"
-    :render-label="renderLabel"
   />
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { NSelect } from 'naive-ui'
-import { h } from 'vue'
 
 const props = defineProps({
   modelValue: { default: null },
@@ -31,7 +29,7 @@ defineEmits(['update:modelValue'])
 const options = computed(() => {
   return props.entities.map(e => ({
     type: 'group',
-    label: e.entity_display_name || e.entity_name,
+    label: e.entity_full_name || e.entity_display_name || e.entity_name,
     key: e.entity_id,
     entity: e,
     children: (e.accounts || []).map(a => ({
@@ -50,9 +48,9 @@ function accountFilter(pattern, option) {
     const e = option.entity
     if (!e) return true
     return (
+      (e.entity_full_name || '').toLowerCase().includes(p) ||
       (e.entity_display_name || '').toLowerCase().includes(p) ||
-      (e.entity_name || '').toLowerCase().includes(p) ||
-      (e.entity_full_name || '').toLowerCase().includes(p)
+      (e.entity_name || '').toLowerCase().includes(p)
     )
   }
   const a = option.account
@@ -63,25 +61,8 @@ function accountFilter(pattern, option) {
     (a.account_alias || '').toLowerCase().includes(p) ||
     (a.account_type || '').toLowerCase().includes(p) ||
     (a.bank_name || '').toLowerCase().includes(p) ||
-    (e && (e.entity_display_name || '').toLowerCase().includes(p)) ||
     (e && (e.entity_full_name || '').toLowerCase().includes(p))
   )
-}
-
-function renderLabel(option) {
-  if (option.type === 'group') {
-    const e = option.entity
-    const shortName = e ? (e.entity_short_name || e.entity_name) : option.label
-    const fullName = e ? e.entity_full_name : ''
-    if (fullName && fullName !== shortName) {
-      return h('div', { style: 'display:flex;gap:6px;align-items:baseline' }, [
-        h('span', { style: 'font-weight:600;font-size:13px' }, shortName),
-        h('span', { style: 'font-size:11px;color:var(--muted)' }, fullName),
-      ])
-    }
-    return option.label
-  }
-  return option.label
 }
 </script>
 
@@ -90,7 +71,7 @@ function renderLabel(option) {
   min-width: 200px;
 }
 .filter-account-menu {
-  min-width: 280px !important;
-  max-width: 480px !important;
+  min-width: 320px !important;
+  max-width: 520px !important;
 }
 </style>

@@ -18,7 +18,7 @@
       <div v-show="activeTab === 'accounts'">
         <div class="filters-bar filters-bar-dense">
           <NSelect filterable v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" @update:value="loadAccounts" />
-          <NSelect filterable v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+          <NSelect filterable v-model:value="filterEntity" :options="entityFilterSelectOptions" :filter="entityNameFilter" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="keyword" class="filter" placeholder="搜索账户编号/名称/银行/账号" style="width:220px" />
           <NSelect filterable v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
@@ -276,7 +276,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <NSelect filterable v-model:value="accountForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.entity_id" :options="entityGroupOptions" :filter="entityNameFilter" placeholder="-- 请选择所属单位 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">账户编号 *</label>
@@ -420,7 +420,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <NSelect filterable v-model:value="bankForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.entity_id" :options="entityGroupOptions" :filter="entityNameFilter" placeholder="-- 请选择所属单位 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">开户银行</label>
@@ -670,18 +670,25 @@ const divisionFilterOptions = computed(() => [
 ])
 const entityFilterSelectOptions = computed(() => [
   { label: '全部单位', value: null },
-  ...filteredEntities.value.map(e => ({ label: e.short_name, value: e.id }))
+  ...filteredEntities.value.map(e => ({ label: e.name || e.short_name, value: e.id, entity: e }))
 ])
 const entityGroupOptions = computed(() => {
   const opts = []
   for (const d of divisions.value) {
     const children = getEntitiesForDivision(d.id).map(e => ({
-      label: `${e.short_name}（${e.entity_code}）`, value: e.id
+      label: `${e.name || e.short_name}（${e.entity_code}）`, value: e.id, entity: e
     }))
     if (children.length) opts.push({ type: 'group', label: d.name, key: `div-${d.id}`, children })
   }
-  return [...opts, ...ungroupedEntities.value.map(e => ({ label: `${e.short_name}（${e.entity_code}）`, value: e.id }))]
+  return [...opts, ...ungroupedEntities.value.map(e => ({ label: `${e.name || e.short_name}（${e.entity_code}）`, value: e.id, entity: e }))]
 })
+function entityNameFilter(pattern, option) {
+  if (!pattern) return true
+  const p = pattern.toLowerCase()
+  const e = option.entity
+  if (!e) return true
+  return ((e.name || '').toLowerCase().includes(p) || (e.short_name || '').toLowerCase().includes(p))
+}
 
 const filteredAccounts = computed(() => {
   let list = accounts.value
