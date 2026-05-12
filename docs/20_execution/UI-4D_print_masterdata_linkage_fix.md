@@ -127,7 +127,7 @@ const id = agent.value.id  // 从返回数据中获取数字 ID
 ## 影响范围
 
 - **报表页（6 个）+ TemplateReport composable**：打印按钮行为一致
-- **所有使用 `getAccountsTree` 的页面（10 个）**：单位下拉使用 `entity_display_name`（简称优先）、通过 `entity_full_name` 在下拉菜单中显示全称、排除停用账户
+- **所有使用 `getAccountsTree` 的页面（10 个）**：单位下拉 label 显示全称（entity_full_name），搜索覆盖全称+简称+兼容字段，排除停用账户
 - **Agent 详情页**：URL 兼容数字 ID 和 agent_code
 - **向后兼容**：数字 ID 路由（如 `/agents/5`）不受影响，`agent_code` 路由为新增能力
 

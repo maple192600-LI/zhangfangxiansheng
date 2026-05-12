@@ -33,8 +33,11 @@
 `frontend/src/components/MasterEntitySelect.vue`
 
 - 固定宽度 180px（不因长名称撑满）
-- 下拉菜单最小 240px，双行显示（简称 + 全称）
-- 统一 clearable、placeholder="全部单位"
+- 下拉与选中 label 只显示单位全称
+- 长全称由 NSelect 自身截断显示，避免撑宽筛选栏
+- 搜索覆盖：单位全称、单位简称、entity_display_name、entity_name
+- 统一 clearable、placeholder="全部单位"、filterable
+- 搜索规则：toLowerCase().includes(pattern)，输入简称或全称关键词均可匹配
 
 ### 3. useReportPrint 统一 composable
 
@@ -123,4 +126,7 @@
 ### 未修改（向后兼容）
 - `ManualFlow.vue` — 继续使用 entity_name，后端保持兼容
 - `ManualMaintenance.vue` — 同上
-- `AccountManage.vue` — 不涉及单位下拉
+
+### 后续由 UI-4F 扩展
+- `AccountManage.vue` — 单位下拉已由 UI-4F 统一加 filterable + entityNameFilter
+- `CashJournal.vue` — 账户下拉已由 UI-4F 替换为 MasterAccountSelect
