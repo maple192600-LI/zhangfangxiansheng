@@ -153,9 +153,12 @@ body {
 
   /* 布局适配 */
   .n-layout { display: block !important; }
-  .app-layout { grid-template-columns: 1fr !important; }
+  .app-layout { grid-template-columns: 1fr !important; min-height: 0 !important; }
   .main-area { padding: 0 !important; }
-  .shell, .content-full { box-shadow: none; border: none; padding: 0; }
+  .shell, .content-full { box-shadow: none; border: none; padding: 0; overflow: visible; }
+
+  /* 消除 body/#app 的 100vh 撑出的空白首页 */
+  body, #app { min-height: 0 !important; height: auto !important; }
 
   /* 隐藏非打印区域内的交互元素 */
   .report-print-root .filters-bar,
@@ -172,8 +175,8 @@ body {
   .report-print-root .modal-overlay,
   .report-print-root-wrapper > .bottom-bar { display: none !important; }
 
-  /* 报表容器：去掉装饰 */
-  .report-print-root { box-shadow: none; border: none; padding: 8px; break-inside: avoid; }
+  /* 报表容器：去掉装饰，允许自然分页 */
+  .report-print-root { box-shadow: none; border: none; padding: 8px; }
   .section { box-shadow: none; border: none; }
 
   /* 表格打印优化 */

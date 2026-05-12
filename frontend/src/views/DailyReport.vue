@@ -144,7 +144,7 @@ async function doExport() {
     const blob = await exportReport({ export_type: 'daily_report', start_date: startDate.value || undefined, end_date: endDate.value || undefined, entity_id: entityId.value || undefined })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `daily_report.xlsx`; a.click()
+    a.href = url; a.download = `资金日报_${startDate.value}_${endDate.value}.xlsx`; a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }

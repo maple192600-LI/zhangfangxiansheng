@@ -83,6 +83,11 @@ const props = defineProps({
   defaultKeys: { type: Array, default: () => [] },
 })
 
+const EXPORT_NAMES = {
+  major_balance: '资金余额表', month_check: '月度对账表',
+  week_report: '周报', month_report: '月报', year_report: '年报',
+}
+
 const { handlePrint } = useReportPrint()
 
 const today = new Date()
@@ -151,7 +156,8 @@ async function doExport() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${props.exportType}.xlsx`
+    const dateSuffix = props.dateMode === 'year' ? `${selYear.value}年` : props.dateMode === 'month' ? `${selYear.value}年${selMonth.value}月` : `${startDate.value}_${endDate.value}`
+    a.download = `${EXPORT_NAMES[props.exportType] || props.exportType}_${dateSuffix}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }

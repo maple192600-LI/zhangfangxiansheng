@@ -413,7 +413,7 @@ async function doExport() {
     const blob = await exportReport(params)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `cash_journal.xlsx`; a.click()
+    a.href = url; a.download = `现金日记账_${startDate.value}_${endDate.value}.xlsx`; a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }
