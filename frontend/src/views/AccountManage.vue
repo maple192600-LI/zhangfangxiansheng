@@ -17,10 +17,10 @@
       <!-- ==================== 标签页1: 账户列表 ==================== -->
       <div v-show="activeTab === 'accounts'">
         <div class="filters-bar filters-bar-dense">
-          <NSelect v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" @update:value="loadAccounts" />
-          <NSelect v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+          <NSelect filterable v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" @update:value="loadAccounts" />
+          <NSelect filterable v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="keyword" class="filter" placeholder="搜索账户编号/名称/银行/账号" style="width:220px" />
-          <NSelect v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" class="filter-select-sm" :consistent-menu-width="false" />
+          <NSelect filterable v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
@@ -87,7 +87,7 @@
       <!-- ==================== 标签页2: 核算管理 ==================== -->
       <div v-show="activeTab === 'divisions'">
         <div class="filters-bar">
-          <NSelect v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
+          <NSelect filterable v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
@@ -145,9 +145,9 @@
       <!-- ==================== 标签页3: 单位管理 ==================== -->
       <div v-show="activeTab === 'entities'">
         <div class="filters-bar">
-          <NSelect v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+          <NSelect filterable v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="entKeyword" class="filter" placeholder="搜索单位编码/名称" style="width:200px" />
-          <NSelect v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
+          <NSelect filterable v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
@@ -208,7 +208,7 @@
       <div v-show="activeTab === 'banks'">
         <div class="filters-bar">
           <input v-model="bankKeyword" class="filter" placeholder="搜索账户编号/开户银行/银行账号" style="width:220px" />
-          <NSelect v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
+          <NSelect filterable v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">
@@ -276,7 +276,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <NSelect v-model:value="accountForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">账户编号 *</label>
@@ -300,19 +300,19 @@
           </div>
           <div class="form-group">
             <label class="form-label">账户类型 *</label>
-            <NSelect v-model:value="accountForm.account_type" :options="ACCOUNT_TYPE_OPTIONS" placeholder="-- 请选择 --" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.account_type" :options="ACCOUNT_TYPE_OPTIONS" placeholder="-- 请选择 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">资金类型 *</label>
-            <NSelect v-model:value="accountForm.instrument_type" :options="INSTRUMENT_TYPE_OPTIONS" placeholder="-- 请选择 --" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.instrument_type" :options="INSTRUMENT_TYPE_OPTIONS" placeholder="-- 请选择 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否网银 *</label>
-            <NSelect v-model:value="accountForm.has_online_banking" :options="BOOL_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.has_online_banking" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">录入方式 *</label>
-            <NSelect v-model:value="accountForm.input_method" :options="INPUT_METHOD_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.input_method" :options="INPUT_METHOD_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">币种</label>
@@ -328,15 +328,15 @@
           </div>
           <div class="form-group">
             <label class="form-label">是否纳入日报</label>
-            <NSelect v-model:value="accountForm.include_in_daily_report" :options="BOOL_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.include_in_daily_report" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否允许手工录入</label>
-            <NSelect v-model:value="accountForm.allow_manual_entry" :options="BOOL_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.allow_manual_entry" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" v-if="editingAccount">
             <label class="form-label">状态</label>
-            <NSelect v-model:value="accountForm.status" :options="STATUS_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="accountForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>
@@ -369,7 +369,7 @@
           </div>
           <div class="form-group" v-if="editingDiv">
             <label class="form-label">状态</label>
-            <NSelect v-model:value="divForm.status" :options="STATUS_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="divForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
@@ -386,7 +386,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属核算组织 *</label>
-            <NSelect v-model:value="entForm.division_id" :options="divisionFilterOptions" placeholder="-- 请选择核算组织 --" style="width:100%" />
+            <NSelect filterable v-model:value="entForm.division_id" :options="divisionFilterOptions" placeholder="-- 请选择核算组织 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">单位编码</label>
@@ -403,7 +403,7 @@
           </div>
           <div class="form-group" v-if="editingEnt">
             <label class="form-label">状态</label>
-            <NSelect v-model:value="entForm.status" :options="STATUS_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="entForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
         </div>
         <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
@@ -420,7 +420,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">所属单位 *</label>
-            <NSelect v-model:value="bankForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.entity_id" :options="entityGroupOptions" placeholder="-- 请选择所属单位 --" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">开户银行</label>
@@ -440,19 +440,19 @@
           </div>
           <div class="form-group">
             <label class="form-label">账户类型</label>
-            <NSelect v-model:value="bankForm.account_type" :options="BANK_ACCOUNT_TYPE_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.account_type" :options="BANK_ACCOUNT_TYPE_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">资金类型</label>
-            <NSelect v-model:value="bankForm.instrument_type" :options="BANK_INSTRUMENT_TYPE_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.instrument_type" :options="BANK_INSTRUMENT_TYPE_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否网银</label>
-            <NSelect v-model:value="bankForm.has_online_banking" :options="BOOL_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.has_online_banking" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">录入方式</label>
-            <NSelect v-model:value="bankForm.input_method" :options="INPUT_METHOD_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.input_method" :options="INPUT_METHOD_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">币种</label>
@@ -468,15 +468,15 @@
           </div>
           <div class="form-group">
             <label class="form-label">是否纳入日报</label>
-            <NSelect v-model:value="bankForm.include_in_daily_report" :options="BOOL_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.include_in_daily_report" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group">
             <label class="form-label">是否允许手工录入</label>
-            <NSelect v-model:value="bankForm.allow_manual_entry" :options="BOOL_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.allow_manual_entry" :options="BOOL_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" v-if="editingBank">
             <label class="form-label">状态</label>
-            <NSelect v-model:value="bankForm.status" :options="STATUS_OPTIONS" style="width:100%" />
+            <NSelect filterable v-model:value="bankForm.status" :options="STATUS_OPTIONS" style="width:100%" />
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>

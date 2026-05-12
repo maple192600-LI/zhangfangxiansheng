@@ -27,10 +27,10 @@
             <tr v-for="r in abnormalRows" :key="r._row_no" class="abnormal-row">
               <td>{{ r._row_no }}</td>
               <td>
-                <NSelect v-model:value="r._fix_entity_id" :options="entityFixOptions" placeholder="未匹配" clearable size="tiny" />
+                <NSelect filterable v-model:value="r._fix_entity_id" :options="entityFixOptions" placeholder="未匹配" clearable size="tiny" />
               </td>
               <td>
-                <NSelect v-model:value="r._fix_account_id" :options="accountFixOptions" placeholder="未匹配" clearable size="tiny" />
+                <NSelect filterable v-model:value="r._fix_account_id" :options="accountFixOptions" placeholder="未匹配" clearable size="tiny" />
               </td>
               <td>{{ r.business_date || '-' }}</td>
               <td>{{ r.summary_text || '-' }}</td>

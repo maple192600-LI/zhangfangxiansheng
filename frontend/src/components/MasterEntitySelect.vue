@@ -5,6 +5,9 @@
     :options="options"
     :placeholder="placeholder"
     clearable
+    filterable
+    :filter="entityFilter"
+    clear-filter-after-select
     class="filter-select filter-entity-select"
     :consistent-menu-width="false"
     :menu-props="{ class: 'filter-select-menu filter-entity-menu' }"
@@ -14,7 +17,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { NSelect, NTooltip } from 'naive-ui'
+import { NSelect } from 'naive-ui'
 import { h } from 'vue'
 
 const props = defineProps({
@@ -37,6 +40,19 @@ const options = computed(() => {
   }
   return items
 })
+
+function entityFilter(pattern, option) {
+  if (!pattern) return true
+  const p = pattern.toLowerCase()
+  const e = option.entity
+  if (!e) return true
+  return (
+    (e.entity_display_name || '').toLowerCase().includes(p) ||
+    (e.entity_name || '').toLowerCase().includes(p) ||
+    (e.entity_short_name || '').toLowerCase().includes(p) ||
+    (e.entity_full_name || '').toLowerCase().includes(p)
+  )
+}
 
 function renderLabel(option) {
   const e = option.entity

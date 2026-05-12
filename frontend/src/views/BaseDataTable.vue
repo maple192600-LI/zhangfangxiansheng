@@ -10,7 +10,7 @@
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable />
         <MasterEntitySelect v-model="filters.entity_id" :entities="entities" />
-        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable class="filter-select-sm" :consistent-menu-width="false" />
+        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable filterable class="filter-select-sm" :consistent-menu-width="false" />
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div class="filter-spacer"></div>
         <div class="btn-row">

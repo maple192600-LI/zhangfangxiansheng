@@ -78,7 +78,7 @@
           </div>
           <div class="form-row" v-if="!editingId">
             <label>报表类型</label>
-            <NSelect v-model:value="form.report_type" :options="reportTypeOptions" style="width:100%;padding:6px 10px;border:1px solid #E0D9D0;border-radius:6px;font-size:13px" />
+            <NSelect filterable v-model:value="form.report_type" :options="reportTypeOptions" style="width:100%;padding:6px 10px;border:1px solid #E0D9D0;border-radius:6px;font-size:13px" />
           </div>
           <div class="form-row">
             <label>
@@ -99,7 +99,7 @@
                 <input v-model="col.field_key" placeholder="字段名" class="col-input" style="width:120px" />
                 <input v-model="col.header_name" placeholder="表头名" class="col-input" style="width:120px" />
                 <input v-model.number="col.width" type="number" placeholder="宽度" class="col-input" style="width:70px" />
-                <NSelect v-model:value="col.align" :options="alignOptions" size="tiny" style="width:70px" />
+                <NSelect filterable v-model:value="col.align" :options="alignOptions" size="tiny" style="width:70px" />
                 <label class="col-check"><input type="checkbox" v-model="col.visible" /> 显示</label>
                 <NButton type="error" size="tiny" @click="removeColumn(idx)" title="删除">x</NButton>
               </div>

@@ -7,7 +7,7 @@
       </div>
       <div class="filters-bar">
         <input v-model="keyword" class="filter" placeholder="搜索银行编码/名称/联行号" style="width:220px" />
-        <NSelect v-model:value="filterStatus" :options="statusFilterOptions" placeholder="全部状态" clearable style="width:110px" />
+        <NSelect filterable v-model:value="filterStatus" :options="statusFilterOptions" placeholder="全部状态" clearable style="width:110px" />
         <div style="flex:1"></div>
         <NButton type="primary" @click="openForm()">+ 新建银行</NButton>
       </div>
@@ -91,7 +91,7 @@
           </div>
           <div class="form-group" v-if="editing">
             <label class="form-label">状态</label>
-            <NSelect v-model:value="form.status" :options="statusOptions" class="form-input" />
+            <NSelect filterable v-model:value="form.status" :options="statusOptions" class="form-input" />
           </div>
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">备注</label>

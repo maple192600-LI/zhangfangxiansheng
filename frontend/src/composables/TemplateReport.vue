@@ -12,11 +12,11 @@
           <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
         </template>
         <template v-else-if="dateMode === 'year'">
-          <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
+          <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
         </template>
         <template v-else>
-          <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
-          <NSelect v-model:value="selMonth" :options="monthSelectOptions" style="width:80px" />
+          <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
+          <NSelect v-model:value="selMonth" :options="monthSelectOptions" filterable style="width:80px" />
         </template>
         <MasterEntitySelect v-model="entityId" :entities="entities" />
         <div style="flex:1"></div>

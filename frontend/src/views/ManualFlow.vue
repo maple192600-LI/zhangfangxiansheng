@@ -29,7 +29,7 @@
               <tr v-for="(row, idx) in editableRows" :key="idx">
                 <td v-for="col in visibleColumns" :key="col.field_code">
                   <template v-if="col.field_code === 'entity_match_key'">
-                    <NSelect v-model:value="row[col.field_code]" :options="entitySelectOptions" placeholder="选择单位简称" size="tiny" />
+                    <NSelect filterable v-model:value="row[col.field_code]" :options="entitySelectOptions" placeholder="选择单位简称" size="tiny" />
                   </template>
                   <template v-else-if="col.field_code === 'account_match_key'">
                     <input v-model="row[col.field_code]" class="cell-input" placeholder="账户编号/名称" />
