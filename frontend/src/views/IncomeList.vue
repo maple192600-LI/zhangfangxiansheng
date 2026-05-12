@@ -13,7 +13,7 @@
         <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
-          <NButton @click="window.print()">打印</NButton>
+          <NButton @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
         </NSpace>
       </div>
@@ -117,6 +117,8 @@ async function loadData() {
     totalPages.value = result.total_pages || 1
   } catch (e) { console.error(e) }
 }
+
+function handlePrint() { window.print() }
 
 async function doExport() {
   try {

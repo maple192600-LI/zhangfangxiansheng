@@ -13,7 +13,7 @@
         <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
-          <NButton @click="window.print()">打印</NButton>
+          <NButton @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="loadReport">生成报表</NButton>
         </NSpace>
       </div>
@@ -139,6 +139,8 @@ async function loadReport() {
     loading.value = false
   }
 }
+
+function handlePrint() { window.print() }
 
 async function doExport() {
   try {

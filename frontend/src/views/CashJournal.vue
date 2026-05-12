@@ -13,7 +13,7 @@
         <div class="filter-spacer"></div>
         <div class="btn-row">
           <NButton secondary @click="doExport">导出</NButton>
-          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton secondary @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="loadReport">生成报表</NButton>
         </div>
       </div>
@@ -418,6 +418,8 @@ async function loadReport() {
     loading.value = false
   }
 }
+
+function handlePrint() { window.print() }
 
 async function doExport() {
   try {

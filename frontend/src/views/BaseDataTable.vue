@@ -17,7 +17,7 @@
           <NButton v-if="selectedIds.length" type="error" @click="doBatchDelete">删除选中 ({{ selectedIds.length }})</NButton>
           <NButton secondary @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</NButton>
           <NButton secondary @click="doExport('base_data')">导出</NButton>
-          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton secondary @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
         </div>
       </div>
@@ -174,6 +174,8 @@ async function doRebuild() {
   } catch (e) { alert('重建失败: ' + (e.message || e)) }
   rebuilding.value = false
 }
+
+function handlePrint() { window.print() }
 
 async function doExport(exportType) {
   try {

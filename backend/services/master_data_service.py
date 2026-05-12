@@ -303,7 +303,7 @@ def get_accounts_tree(db: Session) -> List[EntityTreeGroup]:
         accounts = (
             db.query(Account)
             .outerjoin(AccountAlias)
-            .filter(Account.entity_id == ent.id)
+            .filter(Account.entity_id == ent.id, Account.status == "enabled")
             .order_by(Account.id)
             .all()
         )
@@ -324,7 +324,7 @@ def get_accounts_tree(db: Session) -> List[EntityTreeGroup]:
             ))
         result.append(EntityTreeGroup(
             entity_id=ent.id,
-            entity_name=ent.short_name,
+            entity_name=ent.name,
             accounts=account_nodes,
         ))
     return result
