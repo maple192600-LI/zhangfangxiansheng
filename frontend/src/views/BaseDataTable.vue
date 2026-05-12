@@ -9,8 +9,8 @@
         <NDatePicker v-model:value="filters.date_from" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable />
-        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable />
-        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable style="width:100px" />
+        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable class="filter-select-sm" :consistent-menu-width="false" />
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div class="filter-spacer"></div>
         <div class="btn-row">

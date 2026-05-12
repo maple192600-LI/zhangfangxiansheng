@@ -17,10 +17,10 @@
       <!-- ==================== 标签页1: 账户列表 ==================== -->
       <div v-show="activeTab === 'accounts'">
         <div class="filters-bar filters-bar-dense">
-          <NSelect v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable @update:value="loadAccounts" />
-          <NSelect v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable />
+          <NSelect v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" @update:value="loadAccounts" />
+          <NSelect v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="keyword" class="filter" placeholder="搜索账户编号/名称/银行/账号" style="width:220px" />
-          <NSelect v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" style="width:90px" />
+          <NSelect v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
@@ -87,7 +87,7 @@
       <!-- ==================== 标签页2: 核算管理 ==================== -->
       <div v-show="activeTab === 'divisions'">
         <div class="filters-bar">
-          <NSelect v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
+          <NSelect v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
@@ -145,9 +145,9 @@
       <!-- ==================== 标签页3: 单位管理 ==================== -->
       <div v-show="activeTab === 'entities'">
         <div class="filters-bar">
-          <NSelect v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable />
+          <NSelect v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="entKeyword" class="filter" placeholder="搜索单位编码/名称" style="width:200px" />
-          <NSelect v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
+          <NSelect v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
@@ -208,7 +208,7 @@
       <div v-show="activeTab === 'banks'">
         <div class="filters-bar">
           <input v-model="bankKeyword" class="filter" placeholder="搜索账户编号/开户银行/银行账号" style="width:220px" />
-          <NSelect v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
+          <NSelect v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">

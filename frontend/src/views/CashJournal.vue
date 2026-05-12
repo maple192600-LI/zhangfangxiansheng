@@ -9,7 +9,7 @@
         <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable />
-        <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable />
+        <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
         <div class="filter-spacer"></div>
         <div class="btn-row">
           <NButton secondary @click="doExport">导出</NButton>

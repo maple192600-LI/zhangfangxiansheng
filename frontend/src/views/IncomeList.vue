@@ -9,7 +9,7 @@
         <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable />
-        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable />
+        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
         <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
