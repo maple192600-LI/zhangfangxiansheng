@@ -13,7 +13,7 @@ backend/data/zhangfang.db-wal
 backend/data/zhangfang.db-shm
 
 # Node
-frontend/node_modules/
+node_modules/
 frontend/dist/
 
 # IDE
@@ -37,6 +37,7 @@ htmlcov/
 
 # Upload temp files
 backend/data/uploads/
+backend/data/template_uploads/
 backend/tmp_skill_content.txt
 
 # Backups & exports (runtime data)
@@ -51,3 +52,6 @@ new/
 
 # Agent experience files (runtime)
 **/experience.json
+
+# Agent runtime instances (runtime)
+agents/
