@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>账户余额表</h3>
         <span>各账户期初/本期收入/本期支出/期末汇总</span>
@@ -9,11 +9,11 @@
         <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable />
-        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+        <MasterEntitySelect v-model="entityId" :entities="entities" />
         <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
-          <NButton @click="window.print()">打印</NButton>
+          <NButton @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="loadReport">生成报表</NButton>
         </NSpace>
       </div>
@@ -33,28 +33,26 @@
               <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
             </tr>
           </template>
-          <tr v-if="!rows.length">
-            <td :colspan="displayColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
-          </tr>
+          <tr v-if="!rows.length"><td :colspan="displayColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td></tr>
         </tbody>
       </table>
-      <div v-else-if="!loading" class="empty-state">
-        <div class="empty-icon">🏦</div>
-        <h4>暂无余额数据</h4>
-        <p>选择日期范围后点击"生成报表"</p>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect, NButton, NSpace } from 'naive-ui'
+import { NDatePicker, NButton, NSpace } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -62,7 +60,6 @@ const endDate = ref(today)
 const entityId = ref(null)
 const entities = ref([])
 const rows = ref([])
-const loading = ref(false)
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
 
 function dateStringToTs(s) {
@@ -84,11 +81,6 @@ const endDateTs = computed({
   get: () => dateStringToTs(endDate.value),
   set: (v) => { endDate.value = tsToDateString(v) }
 })
-
-const entityOptions = computed(() => [
-  { label: '全部单位', value: null },
-  ...entities.value.map(e => ({ label: e.entity_name, value: e.entity_id }))
-])
 
 const DEFAULT_COLUMNS = [
   { field_key: 'entity_name', header_name: '单位简称', width: 150, align: 'left' },
@@ -122,7 +114,7 @@ async function doExport() {
     const blob = await exportReport({ export_type: 'account_balance', start_date: startDate.value || undefined, end_date: endDate.value || undefined, entity_id: entityId.value || undefined })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `account_balance.xlsx`; a.click()
+    a.href = url; a.download = getReportFilename('account_balance', { startDate: startDate.value, endDate: endDate.value }); a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }

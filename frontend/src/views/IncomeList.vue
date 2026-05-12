@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>收入明细表</h3>
         <span>按账户、日期汇总的收入明细视图</span>
@@ -9,11 +9,11 @@
         <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable />
-        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+        <MasterEntitySelect v-model="entityId" :entities="entities" />
         <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
-          <NButton @click="window.print()">打印</NButton>
+          <NButton @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
         </NSpace>
       </div>
@@ -43,12 +43,17 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect, NButton, NSpace } from 'naive-ui'
+import { NDatePicker, NButton, NSpace } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -80,11 +85,6 @@ const endDateTs = computed({
   get: () => dateStringToTs(endDate.value),
   set: (v) => { endDate.value = tsToDateString(v) }
 })
-
-const entityOptions = computed(() => [
-  { label: '全部单位', value: null },
-  ...entities.value.map(e => ({ label: e.entity_name, value: e.entity_id }))
-])
 
 const DEFAULT_COLUMNS = [
   { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
@@ -123,7 +123,7 @@ async function doExport() {
     const blob = await exportReport({ export_type: 'income_list', start_date: startDate.value || undefined, end_date: endDate.value || undefined, entity_id: entityId.value || undefined })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `income_list.xlsx`; a.click()
+    a.href = url; a.download = getReportFilename('income_list', { startDate: startDate.value, endDate: endDate.value }); a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }

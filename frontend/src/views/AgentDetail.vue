@@ -96,10 +96,11 @@ onMounted(() => loadAgent())
 watch(() => route.params.id, () => { if (route.name === 'agent-detail') loadAgent() })
 
 async function loadAgent() {
-  const id = Number(route.params.id)
-  if (!id) return
+  const rawId = route.params.id
+  if (!rawId) return
   try {
-    agent.value = await agentsStore.getAgent(id)
+    agent.value = await agentsStore.getAgent(rawId)
+    const id = agent.value.id
     const sessions = await agentsStore.listSessions(id)
     if (sessions.length > 0) {
       currentSessionId.value = sessions[0].id

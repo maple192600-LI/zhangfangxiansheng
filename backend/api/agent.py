@@ -106,9 +106,14 @@ async def create_agent(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/agents/{agent_id}")
-def get_agent(agent_id: int, db: Session = Depends(get_db)):
-    """获取 agent 详情"""
-    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+def get_agent(agent_id: str, db: Session = Depends(get_db)):
+    """获取 agent 详情，支持数字 ID 或 agent_code（如 ag_42nugg）"""
+    agent = None
+    try:
+        numeric_id = int(agent_id)
+        agent = db.query(Agent).filter(Agent.id == numeric_id).first()
+    except (ValueError, TypeError):
+        agent = db.query(Agent).filter(Agent.agent_code == agent_id).first()
     if not agent or agent.status == "deleted":
         return error(2001, "智能体不存在")
     return success(_agent_to_dict(agent))

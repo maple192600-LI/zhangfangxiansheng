@@ -18,6 +18,7 @@
     <NForm label-placement="top">
       <NFormItem label="快速模板">
         <NSelect
+          filterable
           v-model:value="selectedTemplate"
           :options="templateOptions"
           @update:value="applyTemplate"
@@ -43,6 +44,7 @@
 
       <NFormItem label="AI 模型配置" required>
         <NSelect
+          filterable
           v-model:value="form.ai_config_id"
           :options="aiConfigOptions"
           placeholder="请选择 AI 配置"

@@ -136,3 +136,56 @@ body {
   min-width: 180px !important;
   max-width: 480px !important;
 }
+
+/* ──────────────────────────────────────────
+   全局打印样式（必须在全局 CSS 中，不能在 scoped 中）
+
+   打印区域契约：
+   - 报表页面使用 .report-print-root 包裹报表正文
+   - 打印时：隐藏全局导航/筛选栏/按钮区，只显示 .report-print-root 内容
+   - .section-title（报表标题 h3 + 副标题）保留显示
+   ────────────────────────────────────────── */
+@media print {
+  /* 隐藏全局框架 */
+  .sidebar,
+  .right-tabs,
+  .n-layout-sider { display: none !important; }
+
+  /* 布局适配 */
+  .n-layout { display: block !important; }
+  .app-layout { grid-template-columns: 1fr !important; min-height: 0 !important; }
+  .main-area { padding: 0 !important; }
+  .shell, .content-full { box-shadow: none; border: none; padding: 0; overflow: visible; }
+
+  /* 消除 body/#app 的 100vh 撑出的空白首页 */
+  body, #app { min-height: 0 !important; height: auto !important; }
+
+  /* 隐藏非打印区域内的交互元素 */
+  .report-print-root .filters-bar,
+  .report-print-root .btn-row,
+  .report-print-root .bottom-bar,
+  .report-print-root .top-bar,
+  .report-print-root .loading-state,
+  .report-print-root .error-bar,
+  .report-print-root .metric-strip,
+  .report-print-root .dashboard-grid,
+  .report-print-root .progress-list,
+  .report-print-root .kanban,
+  .report-print-root .warning-list,
+  .report-print-root .modal-overlay,
+  .report-print-root-wrapper > .bottom-bar { display: none !important; }
+
+  /* 报表容器：去掉装饰，允许自然分页 */
+  .report-print-root { box-shadow: none; border: none; padding: 8px; }
+  .section { box-shadow: none; border: none; }
+
+  /* 表格打印优化 */
+  table { font-size: 11px; break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; break-after: auto; }
+  .excel-host { overflow: visible; }
+
+  /* 隐藏非报表页面内容 */
+  .content > *:not(.report-print-root-wrapper),
+  .content-full > *:not(.report-print-root-wrapper) { display: none !important; }
+}

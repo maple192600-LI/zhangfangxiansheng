@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>现金日记账</h3>
         <span>现金类资金载体的结果视图</span>
@@ -9,11 +9,11 @@
         <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable />
-        <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
+        <MasterAccountSelect v-model="accountId" :entities="entities" />
         <div class="filter-spacer"></div>
         <div class="btn-row">
           <NButton secondary @click="doExport">导出</NButton>
-          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton secondary @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="loadReport">生成报表</NButton>
         </div>
       </div>
@@ -141,26 +141,23 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import { NDatePicker, NButton } from 'naive-ui'
+import MasterAccountSelect from '@/components/MasterAccountSelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
 const endDate = ref(today)
 const accountId = ref(null)
 
-const accountGroupOptions = computed(() => {
-  return entityGroups.value.map(g => ({
-    type: 'group',
-    label: g.entity_name,
-    key: g.entity_id,
-    children: g.accounts.map(a => ({ label: `${a.account_code} ${a.account_alias}`, value: a.id }))
-  }))
-})
 const entities = ref([])
 const blocks = ref([])
 const rows = ref([])
@@ -187,15 +184,6 @@ function cellVal(r, key) {
   if (r[key] === undefined || r[key] === null) return ''
   return r[key]
 }
-
-const entityGroups = computed(() => {
-  const groups = {}
-  for (const e of entities.value) {
-    if (!groups[e.entity_id]) groups[e.entity_id] = { entity_id: e.entity_id, entity_name: e.entity_name, accounts: [] }
-    groups[e.entity_id].accounts.push(...e.accounts)
-  }
-  return Object.values(groups)
-})
 
 // ── Excel 布局渲染核心 ──────────────────────────────
 
@@ -426,7 +414,7 @@ async function doExport() {
     const blob = await exportReport(params)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `cash_journal.xlsx`; a.click()
+    a.href = url; a.download = getReportFilename('cash_journal', { startDate: startDate.value, endDate: endDate.value }); a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }
 }

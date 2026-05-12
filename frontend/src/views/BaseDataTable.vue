@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>基础数据表</h3>
         <span>所有后续报表的统一底座</span>
@@ -9,15 +9,15 @@
         <NDatePicker v-model:value="filters.date_from" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
         <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable />
-        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
-        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable class="filter-select-sm" :consistent-menu-width="false" />
+        <MasterEntitySelect v-model="filters.entity_id" :entities="entities" />
+        <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable filterable class="filter-select-sm" :consistent-menu-width="false" />
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
         <div class="filter-spacer"></div>
         <div class="btn-row">
           <NButton v-if="selectedIds.length" type="error" @click="doBatchDelete">删除选中 ({{ selectedIds.length }})</NButton>
           <NButton secondary @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</NButton>
           <NButton secondary @click="doExport('base_data')">导出</NButton>
-          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton secondary @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
         </div>
       </div>
@@ -93,11 +93,16 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
+
+const { handlePrint } = useReportPrint()
 
 const entities = ref([])
 const rows = ref([])
@@ -139,7 +144,6 @@ const directionOptions = [
   { label: '收入', value: 'income' },
   { label: '支出', value: 'expense' },
 ]
-const entityFilterOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
 const filters = ref({ date_from: null, date_to: null, entity_id: null, direction: null, keyword: '' })
 
 async function loadData() {
@@ -182,7 +186,7 @@ async function doExport(exportType) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${exportType}_${f.date_from || 'all'}_${f.date_to || 'all'}.xlsx`
+    a.download = getReportFilename('base_data', { startDate: f.date_from, endDate: f.date_to })
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }

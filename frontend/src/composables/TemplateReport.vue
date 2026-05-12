@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="section">
+  <div class="report-print-root-wrapper">
+    <div class="section report-print-root">
       <div class="section-title">
         <h3>{{ title }}</h3>
         <span>{{ subtitle }}</span>
@@ -12,17 +12,17 @@
           <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
         </template>
         <template v-else-if="dateMode === 'year'">
-          <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
+          <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
         </template>
         <template v-else>
-          <NSelect v-model:value="selYear" :options="yearSelectOptions" style="width:100px" />
-          <NSelect v-model:value="selMonth" :options="monthSelectOptions" style="width:80px" />
+          <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
+          <NSelect v-model:value="selMonth" :options="monthSelectOptions" filterable style="width:80px" />
         </template>
-        <NSelect v-model:value="entityId" :options="entityFilterOptions" placeholder="全部单位" clearable style="min-width:140px" />
+        <MasterEntitySelect v-model="entityId" :entities="entities" />
         <div style="flex:1"></div>
         <div class="btn-row">
           <NButton secondary @click="doExport">导出</NButton>
-          <NButton secondary @click="window.print()">打印</NButton>
+          <NButton secondary @click="handlePrint">打印</NButton>
           <NButton type="primary" @click="loadData">生成报表</NButton>
         </div>
       </div>
@@ -65,11 +65,14 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import { useReportPrint } from '@/composables/useReportPrint'
 import * as reportApi from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
+import { getReportFilename } from '@/utils/reportFilename'
 
 const props = defineProps({
   title: String,
@@ -80,6 +83,8 @@ const props = defineProps({
   defaultHeaders: { type: Array, default: () => [] },
   defaultKeys: { type: Array, default: () => [] },
 })
+
+const { handlePrint } = useReportPrint()
 
 const today = new Date()
 const startDate = ref(today.toISOString().slice(0, 10))
@@ -97,7 +102,6 @@ const yearOptions = computed(() => {
 })
 const yearSelectOptions = computed(() => yearOptions.value.map(y => ({ label: `${y}年`, value: y })))
 const monthSelectOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
-const entityFilterOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_id })))
 
 const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
 
@@ -148,7 +152,12 @@ async function doExport() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${props.exportType}.xlsx`
+    a.download = getReportFilename(props.exportType, {
+      startDate: startDate.value,
+      endDate: endDate.value,
+      year: props.dateMode === 'year' || props.dateMode === 'month' ? selYear.value : undefined,
+      month: props.dateMode === 'month' ? selMonth.value : undefined,
+    })
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) { alert('导出失败: ' + (e.message || e)) }

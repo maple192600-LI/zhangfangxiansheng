@@ -23,7 +23,7 @@
 
         <div class="row">
           <label>AI 模型配置</label>
-          <NSelect v-model:value="form.ai_config_id" :options="aiConfigOptions" placeholder="选择模型配置" class="inp" />
+          <NSelect filterable v-model:value="form.ai_config_id" :options="aiConfigOptions" placeholder="选择模型配置" class="inp" />
           <span class="hint">可在「系统设置 → 模型配置」中添加新的模型配置</span>
         </div>
 
@@ -71,7 +71,7 @@
             <div class="tool-list">
               <div v-for="tool in tools" :key="tool" class="tool-item" :class="getToolClass(tool)">
                 <span class="tool-name">{{ tool }}</span>
-                <NSelect :value="getToolPerm(tool)" :options="toolPermOptions" size="tiny" style="width:80px" @update:value="v => setToolPerm(tool, v)" />
+                <NSelect filterable :value="getToolPerm(tool)" :options="toolPermOptions" size="tiny" style="width:80px" @update:value="v => setToolPerm(tool, v)" />
               </div>
             </div>
           </div>
