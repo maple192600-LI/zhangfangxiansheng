@@ -130,3 +130,9 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* NSelect 下拉菜单全局样式（teleport 到 body，scoped 样式无法覆盖） */
+.filter-select-menu {
+  min-width: 180px !important;
+  max-width: 480px !important;
+}

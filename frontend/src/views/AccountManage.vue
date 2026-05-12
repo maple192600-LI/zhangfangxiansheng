@@ -16,12 +16,12 @@
 
       <!-- ==================== 标签页1: 账户列表 ==================== -->
       <div v-show="activeTab === 'accounts'">
-        <div class="filters-bar">
-          <NSelect v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable style="min-width:130px" @update:value="loadAccounts" />
-          <NSelect v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable style="min-width:130px" />
+        <div class="filters-bar filters-bar-dense">
+          <NSelect v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" @update:value="loadAccounts" />
+          <NSelect v-model:value="filterEntity" :options="entityFilterSelectOptions" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="keyword" class="filter" placeholder="搜索账户编号/名称/银行/账号" style="width:220px" />
-          <NSelect v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" style="width:90px" />
-          <div style="flex:1"></div>
+          <NSelect v-model:value="filterStatus" :options="STATUS_FILTER_OPTIONS" class="filter-select-sm" :consistent-menu-width="false" />
+          <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: accDropdownOpen }" v-if="selectedAccountIds.length > 0">
               <NButton secondary @click="accDropdownOpen = !accDropdownOpen">批量操作 ({{ selectedAccountIds.length }})</NButton>
@@ -87,8 +87,8 @@
       <!-- ==================== 标签页2: 核算管理 ==================== -->
       <div v-show="activeTab === 'divisions'">
         <div class="filters-bar">
-          <NSelect v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
-          <div style="flex:1"></div>
+          <NSelect v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
+          <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: divDropdownOpen }" v-if="selectedDivIds.length > 0">
               <NButton secondary @click="divDropdownOpen = !divDropdownOpen">批量操作 ({{ selectedDivIds.length }})</NButton>
@@ -145,10 +145,10 @@
       <!-- ==================== 标签页3: 单位管理 ==================== -->
       <div v-show="activeTab === 'entities'">
         <div class="filters-bar">
-          <NSelect v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable style="min-width:130px" />
+          <NSelect v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="entKeyword" class="filter" placeholder="搜索单位编码/名称" style="width:200px" />
-          <NSelect v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
-          <div style="flex:1"></div>
+          <NSelect v-model:value="entFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
+          <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: entDropdownOpen }" v-if="selectedEntIds.length > 0">
               <NButton secondary @click="entDropdownOpen = !entDropdownOpen">批量操作 ({{ selectedEntIds.length }})</NButton>
@@ -208,8 +208,8 @@
       <div v-show="activeTab === 'banks'">
         <div class="filters-bar">
           <input v-model="bankKeyword" class="filter" placeholder="搜索账户编号/开户银行/银行账号" style="width:220px" />
-          <NSelect v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" style="width:110px" />
-          <div style="flex:1"></div>
+          <NSelect v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
+          <div class="filter-spacer"></div>
           <div class="btn-row">
             <div class="dropdown" :class="{ open: bankDropdownOpen }" v-if="selectedBankIds.length > 0">
               <NButton secondary @click="bankDropdownOpen = !bankDropdownOpen">批量操作 ({{ selectedBankIds.length }})</NButton>

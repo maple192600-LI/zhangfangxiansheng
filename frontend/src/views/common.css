@@ -42,10 +42,56 @@
 
 .filters-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-sm);
   margin-bottom: var(--space-lg);
   align-items: center;
+}
+
+.filters-bar > .n-date-picker {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+.filters-bar > .filter.input {
+  flex: 0 0 auto;
+}
+
+.filter-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* NSelect 本体宽度类：控件固定宽度，下拉菜单可独立更宽 */
+.filter-select {
+  flex: 0 0 180px;
+  width: 180px;
+}
+
+.filter-select-sm {
+  flex: 0 0 110px;
+  width: 110px;
+}
+
+.filter-select-lg {
+  flex: 0 0 220px;
+  width: 220px;
+}
+
+/* 高密度筛选栏：筛选项多，日期控件更紧凑 */
+.filters-bar-dense > .n-date-picker {
+  flex: 0 0 140px;
+  width: 140px;
+}
+
+/* 多行复杂筛选栏：控件确实无法单行容纳时显式使用 */
+.filters-bar-multi {
+  flex-wrap: wrap;
+}
+
+.filters-bar-multi > .n-date-picker {
+  flex: 0 0 150px;
+  width: 150px;
 }
 
 .filter {
