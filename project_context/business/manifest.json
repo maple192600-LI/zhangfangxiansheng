@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "updated": "2026-05-12",
+  "entries": [
+    {
+      "id": "flow_example",
+      "type": "flow",
+      "module": "流水录入",
+      "title": "手工快速录入（示例）",
+      "summary": "通过可编辑表格逐笔录入流水，系统自动匹配单位和账户后写入 FundEvent",
+      "status": "example",
+      "path": "flows/flow_example.md",
+      "keywords": ["手工录入", "快速录入", "FundEvent", "ManualFlow"]
+    },
+    {
+      "id": "report_example",
+      "type": "report",
+      "module": "报表查询",
+      "title": "资金日报（示例）",
+      "summary": "按法人汇总的每日资金状况：期初/收入/支出/净变动/期末",
+      "status": "example",
+      "path": "reports/report_example.md",
+      "keywords": ["日报", "资金日报", "DailyReport", "按法人汇总"]
+    },
+    {
+      "id": "term_fund_event",
+      "type": "term",
+      "module": "核心概念",
+      "title": "FundEvent",
+      "summary": "标准资金流水记录，所有报表的唯一数据源，不是旧 FundAgent",
+      "status": "active",
+      "path": "terms/term_fund_event.md",
+      "keywords": ["FundEvent", "流水", "CANONICAL_12", "事实表"]
+    }
+  ]
+}

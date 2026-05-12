@@ -72,6 +72,14 @@ docs/
 
 **冲突处理：** constitution > contracts > execution > product_design。先报告冲突，不擅自决定。
 
+## Business Context
+
+业务上下文包在 `project_context/business/`。遇到业务相关任务时：
+
+1. 先读 `project_context/business/INDEX.md`
+2. 根据 INDEX.md 按需读取 1-3 个相关文件
+3. **不要**一次性读取全部 project_context
+
 ## Current Code Structure
 
 ```

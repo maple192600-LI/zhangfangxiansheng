@@ -1,33 +1,17 @@
 # AGENTS.md
 
-## MUST READ
+## 业务上下文
 
-This repository currently stores the planning documents in `new/`.
+遇到业务相关任务时：
+1. 先读 `project_context/business/INDEX.md`
+2. 根据 INDEX.md 按需读取 1-3 个相关文件
+3. **不要**一次性读取全部 project_context
 
-`new/` is a documentation location, not the required future development directory.
+## 关键事实
 
-Read first:
-
-- `new/AGENTS.md`
-- `new/00_项目文件地图与交付边界.md`
-- `new/PRD_账房先生_本地财务Agent工作台.md`
-- `new/13_AI_Coding_开发协作规范.md`
-- `new/12_测试与验收规范.md`
-
-## AUTHORITY
-
-Only the files listed above are implementation authority for this project.
-
-Any other files in the workspace are not development input unless the user explicitly names them.
-
-The final development workspace may be any folder or GitHub repository selected by the user later.
-
-## HARD RULES
-
-- Do not develop directly on `main`.
-- Do not keep parallel implementations for the same capability.
-- Do not create parallel replacement files to bypass defects.
-- Do not commit `runtime/`, `.venv/`, `node_modules/`, downloads, logs, or temporary outputs.
-- Do not put docs, fixtures, runtime data, or test artifacts inside `product/`.
-- User-visible work must pass browser validation.
-- Completion requires project guard check result.
+- **FundEvent** 是标准资金流水记录，**不是**旧 FundAgent
+- 旧 FundAgent 已删除，禁止恢复
+- `backend/fund/` 是确定性执行基础设施，不等于旧 FundAgent
+- 当前可用主线：手工快速录入 → 报表查询/导出
+- 报表生成禁止调 LLM（§C8 约束）
+- 增强层不阻断核心功能：模板缺失时降级到默认列
