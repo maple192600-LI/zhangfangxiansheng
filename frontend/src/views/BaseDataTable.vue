@@ -5,14 +5,14 @@
         <h3>基础数据表</h3>
         <span>所有后续报表的统一底座</span>
       </div>
-      <div class="filters-bar">
-        <NDatePicker v-model:value="filters.date_from" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
+      <div class="filters-bar filters-bar-dense">
+        <NDatePicker v-model:value="filters.date_from" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
-        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable style="min-width:140px" />
+        <NDatePicker v-model:value="filters.date_to" type="date" value-format="yyyy-MM-dd" clearable />
+        <NSelect v-model:value="filters.entity_id" :options="entityFilterOptions" placeholder="全部单位" clearable />
         <NSelect v-model:value="filters.direction" :options="directionOptions" placeholder="全部方向" clearable style="width:100px" />
         <input v-model="filters.keyword" class="filter" placeholder="搜索摘要/对方" style="width:140px" />
-        <div style="flex:1"></div>
+        <div class="filter-spacer"></div>
         <div class="btn-row">
           <NButton v-if="selectedIds.length" type="error" @click="doBatchDelete">删除选中 ({{ selectedIds.length }})</NButton>
           <NButton secondary @click="doRebuild" :disabled="rebuilding">{{ rebuilding ? '重建中...' : '重建余额' }}</NButton>

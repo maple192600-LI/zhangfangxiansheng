@@ -6,11 +6,11 @@
         <span>按单位汇总：期初/收入/支出/净变动/期末</span>
       </div>
       <div class="filters-bar">
-        <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable style="width:160px" />
+        <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable style="width:160px" />
-        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable style="min-width:160px" />
-        <div style="flex:1"></div>
+        <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable />
+        <NSelect v-model:value="entityId" :options="entityOptions" placeholder="全部单位" clearable />
+        <div class="filter-spacer"></div>
         <NSpace>
           <NButton @click="doExport">导出</NButton>
           <NButton @click="window.print()">打印</NButton>

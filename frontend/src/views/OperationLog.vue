@@ -5,10 +5,10 @@
     </div>
 
     <div class="filters-bar">
-      <NSelect v-model:value="filters.module" :options="moduleOptions" placeholder="全部模块" clearable style="max-width:140px" @update:value="loadLogs" />
-      <NSelect v-model:value="filters.action" :options="actionOptions" placeholder="全部操作" clearable style="max-width:140px" @update:value="loadLogs" />
-      <NDatePicker v-model:value="filters.start_date" type="date" value-format="yyyy-MM-dd" clearable style="max-width:150px" @update:value="loadLogs" />
-      <NDatePicker v-model:value="filters.end_date" type="date" value-format="yyyy-MM-dd" clearable style="max-width:150px" @update:value="loadLogs" />
+      <NSelect v-model:value="filters.module" :options="moduleOptions" placeholder="全部模块" clearable @update:value="loadLogs" />
+      <NSelect v-model:value="filters.action" :options="actionOptions" placeholder="全部操作" clearable @update:value="loadLogs" />
+      <NDatePicker v-model:value="filters.start_date" type="date" value-format="yyyy-MM-dd" clearable @update:value="loadLogs" />
+      <NDatePicker v-model:value="filters.end_date" type="date" value-format="yyyy-MM-dd" clearable @update:value="loadLogs" />
       <NButton secondary @click="resetFilters">重置</NButton>
     </div>
 

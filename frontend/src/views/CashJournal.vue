@@ -6,11 +6,11 @@
         <span>现金类资金载体的结果视图</span>
       </div>
       <div class="filters-bar">
-        <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
+        <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable />
         <span style="color:var(--muted);font-size:13px">至</span>
-        <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
-        <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable style="min-width:180px" />
-        <div style="flex:1"></div>
+        <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable />
+        <NSelect v-model:value="accountId" :options="accountGroupOptions" placeholder="全部账户" clearable />
+        <div class="filter-spacer"></div>
         <div class="btn-row">
           <NButton secondary @click="doExport">导出</NButton>
           <NButton secondary @click="window.print()">打印</NButton>
