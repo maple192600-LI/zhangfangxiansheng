@@ -55,3 +55,6 @@ new/
 
 # Agent runtime instances (runtime)
 agents/
+
+# Playwright MCP cache (runtime)
+.playwright-mcp/
