@@ -54,11 +54,11 @@ def _graph():
     }
 
 
-def _create_workflow(client, code="wf_api"):
+def _create_workflow(client, code="wf_api", graph_override=None):
     resp = client.post("/api/workflow/workflows", json={
         "workflow_code": code,
         "name": "API Test",
-        "graph": _graph(),
+        "graph": graph_override or _graph(),
     })
     assert resp.json()["code"] == 0
     return resp.json()["data"]
@@ -244,4 +244,74 @@ def test_w11_get_run_with_steps(client):
 
 def test_w11_get_run_not_found(client):
     resp = client.get("/api/workflow/runs/99999")
+    assert resp.json()["code"] == 2001
+
+
+# W12: GET /workflows/{id}/versions
+
+
+def test_w12_list_versions_after_create(client):
+    created = _create_workflow(client, code="wf_ver_api")
+    resp = client.get(f"/api/workflow/workflows/{created['id']}/versions")
+    body = resp.json()
+    assert body["code"] == 0
+    assert len(body["data"]) == 1
+    assert body["data"][0]["version"] == 1
+
+
+def test_w12_list_versions_grows_after_patch(client):
+    created = _create_workflow(client, code="wf_ver_grow")
+    client.patch(f"/api/workflow/workflows/{created['id']}/graph", json={
+        "patches": [{"op": "replace_graph", "graph": _graph()}],
+        "change_summary": "v2",
+    })
+    resp = client.get(f"/api/workflow/workflows/{created['id']}/versions")
+    body = resp.json()
+    assert body["code"] == 0
+    assert len(body["data"]) == 2
+    assert body["data"][0]["version"] == 2
+
+
+def test_w12_list_versions_not_found(client):
+    resp = client.get("/api/workflow/workflows/99999/versions")
+    assert resp.json()["code"] == 2001
+
+
+# W13: POST /runs/{run_id}/resume
+
+
+def test_w13_resume_paused_run(client):
+    graph = {
+        "nodes": [
+            {"id": "s", "type": "control.start", "params": {}},
+            {"id": "p", "type": "control.pause", "params": {}},
+            {"id": "e", "type": "control.end", "params": {}},
+        ],
+        "edges": [{"from": "s", "to": "p"}, {"from": "p", "to": "e"}],
+    }
+    created = _create_workflow(client, code="wf_res_api", graph_override=graph)
+    client.post(f"/api/workflow/workflows/{created['id']}/activate")
+    run_resp = client.post(f"/api/workflow/workflows/{created['id']}/runs", json={"input": {}})
+    run_id = run_resp.json()["data"]["id"]
+    assert run_resp.json()["data"]["status"] == "paused"
+
+    resp = client.post(f"/api/workflow/runs/{run_id}/resume")
+    body = resp.json()
+    assert body["code"] == 0
+    assert body["data"]["status"] == "completed"
+    assert len(body["data"]["steps"]) == 3
+
+
+def test_w13_resume_completed_run_returns_error(client):
+    created = _create_workflow(client, code="wf_res_done")
+    client.post(f"/api/workflow/workflows/{created['id']}/activate")
+    run_resp = client.post(f"/api/workflow/workflows/{created['id']}/runs", json={"input": {}})
+    run_id = run_resp.json()["data"]["id"]
+
+    resp = client.post(f"/api/workflow/runs/{run_id}/resume")
+    assert resp.json()["code"] == 2001
+
+
+def test_w13_resume_not_found(client):
+    resp = client.post("/api/workflow/runs/99999/resume")
     assert resp.json()["code"] == 2001

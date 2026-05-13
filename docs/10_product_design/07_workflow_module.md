@@ -199,7 +199,20 @@ pending ──→ running ──→ completed
 | type | 功能 | input | output |
 |------|------|-------|--------|
 | `noop` | 空操作（测试用） | params + workflow_input | `{"ok": true, "params": ..., "input": ...}` |
+| `control.start` | 流程起点 | workflow_input | `{"started": true, "input": ...}` |
+| `control.end` | 流程终点 | previous_outputs | `{"finished": true, "outputs": ...}` |
 | `control.pause` | 暂停执行 | params + run_id | `{"paused": true, "params": ..., "run_id": ...}` |
+| `data.query_daily` | 日报数据查询 | start_date, end_date, entity_id | `{"rows": [...]}` |
+| `data.query_cash_journal` | 现金日记账查询 | start_date, end_date, account_id | `{"rows": [...]}` |
+| `data.query_balance` | 账户余额查询 | start_date, end_date, entity_id | `{"rows": [...]}` |
+| `data.query_income` | 收入明细查询 | start_date, end_date, entity_id | `{"rows": [...]}` |
+| `data.query_expense` | 支出明细查询 | start_date, end_date, entity_id | `{"rows": [...]}` |
+| `data.query_base` | 基础数据查询 | date_from, date_to, entity_id 等 | `{"rows": [...]}` |
+| `report.major_balance` | 主要账户余额表 | start_date, end_date, entity_id | `{"rows": [...]}` |
+| `report.month_check` | 月末盘点表 | year, month, entity_id | `{"rows": [...]}` |
+| `export.excel` | 导出 Excel | export_type + 筛选参数 | `{"file_path": "..."}` |
+
+> **延期节点**（依赖 artifact_runtime 或 V2）：`data.bank_import`、`data.manual_excel`、`report.generate`、`agent.invoke`
 
 ### 7.2 V1 候选节点设计
 
@@ -341,13 +354,13 @@ pending ──→ running ──→ completed
 | 维度 | 已实现 | 目标 | 差距 |
 |------|--------|------|------|
 | 数据模型 | 4 表 + ORM + Pydantic + 迁移 | 同左 | ✅ 数据模型已到位 |
-| API 端点 | 11 个端点（CRUD + patch + activate/archive + runs） | 11 个端点 | ✅ API 层基本到位 |
-| 执行引擎 | 同步拓扑排序 + 步骤记录 + 暂停 | 同左 | ✅ 核心引擎已到位 |
-| 节点注册表 | 2 个节点（noop, control.pause） | 10+ 个业务节点 | ❌ **仅骨架** |
+| API 端点 | 13 个端点（CRUD + patch + activate/archive + runs + versions + resume） | 13+ 个端点 | ✅ P0 端点已到位 |
+| 执行引擎 | 同步拓扑排序 + 步骤记录 + 暂停 + 恢复 | 同左 | ✅ 核心引擎已到位 |
+| 节点注册表 | 13 个 V1 可执行节点 | 13+ 个业务节点 | ✅ V1 节点已到位（延期：data.bank_import, data.manual_excel, report.generate, agent.invoke） |
 | Agent 工具 | 无 | 5 个工具 | ❌ 未实现 |
 | 前端页面 | 无 | 3 个页面 | ❌ 未实现 |
 | Vue Flow 集成 | 无 | 画布编辑器 | ❌ 未安装依赖 |
 | 运行取消 | 无 | 端点 + 逻辑 | ❌ 未实现 |
-| 恢复机制 | 暂停可检测 | 恢复端点 + 续执行 | ❌ 未实现 |
+| 恢复机制 | 恢复端点 + 续执行 | 恢复端点 + 续执行 | ✅ 已实现（V1 限制：仅 paused run，跳过已完成节点，不支持失败重试/指定节点/异步/dry-run） |
 | 条件分支 | 无 | branch 节点 | ❌ V2 考虑 |
 | 定时执行 | 无 | 定时调度 | ❌ V2 考虑 |

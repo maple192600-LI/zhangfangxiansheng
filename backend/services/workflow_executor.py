@@ -26,52 +26,7 @@ def execute_workflow(
     outputs: dict[str, Any] = {}
     workflow_input = _load_json(run.input_json)
     try:
-        for node in _ordered_nodes(graph):
-            step = _create_running_step(db, run.id, node, workflow_input, outputs)
-            try:
-                if node["type"] == "control.pause":
-                    step.status = "paused"
-                    step.output_json = _dump_json({"paused": True})
-                    step.finished_at = datetime.now()
-                    run.status = "paused"
-                    run.output_json = _dump_json(outputs)
-                    run.finished_at = datetime.now()
-                    db.commit()
-                    db.refresh(run)
-                    return run
-
-                handler = node_registry.get(node["type"])
-                ctx = WorkflowNodeContext(
-                    db=db,
-                    run_id=run.id,
-                    workflow_input=workflow_input,
-                    previous_outputs=dict(outputs),
-                )
-                node_output = handler(node.get("params") or {}, ctx)
-                outputs[node["id"]] = node_output
-                step.status = "completed"
-                step.output_json = _dump_json(node_output)
-            except Exception as exc:
-                step.status = "failed"
-                step.error_message = str(exc)
-                step.finished_at = datetime.now()
-                run.status = "failed"
-                run.error_message = str(exc)
-                run.output_json = _dump_json(outputs)
-                run.finished_at = datetime.now()
-                db.commit()
-                db.refresh(run)
-                return run
-
-            step.finished_at = datetime.now()
-            db.commit()
-
-        run.status = "completed"
-        run.output_json = _dump_json(outputs)
-        run.finished_at = datetime.now()
-        db.commit()
-        db.refresh(run)
-        return run
+        return _execute_node_loop(db, run, _ordered_nodes(graph), workflow_input, outputs)
     except Exception as exc:
         run.status = "failed"
         run.error_message = str(exc)
@@ -80,6 +35,104 @@ def execute_workflow(
         db.commit()
         db.refresh(run)
         return run
+
+
+def resume_workflow(
+    db: Session,
+    run: WorkflowRun,
+    version: WorkflowVersion,
+) -> WorkflowRun:
+    """Resume a paused workflow run from where it stopped."""
+    steps = db.query(WorkflowRunStep).filter(
+        WorkflowRunStep.run_id == run.id,
+    ).all()
+    outputs: dict[str, Any] = {}
+    skip_node_ids: set[str] = set()
+    for step in steps:
+        if step.status == "completed":
+            outputs[step.node_id] = _load_json(step.output_json) if step.output_json else {}
+            skip_node_ids.add(step.node_id)
+        elif step.status == "paused":
+            skip_node_ids.add(step.node_id)
+
+    run.status = "running"
+    run.finished_at = None
+    db.commit()
+    db.refresh(run)
+
+    graph = _load_json(version.graph_json)
+    workflow_input = _load_json(run.input_json)
+    try:
+        return _execute_node_loop(
+            db, run, _ordered_nodes(graph), workflow_input, outputs, skip_node_ids,
+        )
+    except Exception as exc:
+        run.status = "failed"
+        run.error_message = str(exc)
+        run.output_json = _dump_json(outputs)
+        run.finished_at = datetime.now()
+        db.commit()
+        db.refresh(run)
+        return run
+
+
+def _execute_node_loop(
+    db: Session,
+    run: WorkflowRun,
+    nodes: list[dict[str, Any]],
+    workflow_input: dict[str, Any],
+    outputs: dict[str, Any],
+    skip_node_ids: set[str] | None = None,
+) -> WorkflowRun:
+    skip = skip_node_ids or set()
+    for node in nodes:
+        if node["id"] in skip:
+            continue
+        step = _create_running_step(db, run.id, node, workflow_input, outputs)
+        try:
+            if node["type"] == "control.pause":
+                step.status = "paused"
+                step.output_json = _dump_json({"paused": True})
+                step.finished_at = datetime.now()
+                run.status = "paused"
+                run.output_json = _dump_json(outputs)
+                run.finished_at = datetime.now()
+                db.commit()
+                db.refresh(run)
+                return run
+
+            handler = node_registry.get(node["type"])
+            ctx = WorkflowNodeContext(
+                db=db,
+                run_id=run.id,
+                workflow_input=workflow_input,
+                previous_outputs=dict(outputs),
+            )
+            node_output = handler(node.get("params") or {}, ctx)
+            outputs[node["id"]] = node_output
+            step.status = "completed"
+            step.output_json = _dump_json(node_output)
+        except Exception as exc:
+            step.status = "failed"
+            step.error_message = str(exc)
+            step.finished_at = datetime.now()
+            run.status = "failed"
+            run.error_message = str(exc)
+            run.output_json = _dump_json(outputs)
+            run.finished_at = datetime.now()
+            db.commit()
+            db.refresh(run)
+            return run
+
+        step.finished_at = datetime.now()
+        db.commit()
+
+    run.status = "completed"
+    run.output_json = _dump_json(outputs)
+    run.finished_at = datetime.now()
+    db.commit()
+    db.refresh(run)
+    return run
 
 
 def _ordered_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:

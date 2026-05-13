@@ -167,6 +167,32 @@ def get_workflow_run(db: Session, run_id: int) -> Optional[dict[str, Any]]:
     return workflow_run_to_dict(row, include_steps=True)
 
 
+def list_workflow_versions(db: Session, workflow_id: int) -> Optional[list[dict[str, Any]]]:
+    row = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if row is None:
+        return None
+    versions = (
+        db.query(WorkflowVersion)
+        .filter(WorkflowVersion.workflow_id == workflow_id)
+        .order_by(WorkflowVersion.version.desc())
+        .all()
+    )
+    return [workflow_version_to_dict(v) for v in versions]
+
+
+def resume_workflow_run(db: Session, run_id: int) -> dict[str, Any]:
+    run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+    if run is None:
+        raise ValueError("工作流运行记录不存在")
+    if run.status != "paused":
+        raise ValueError("只有暂停的运行可以恢复")
+    version = db.query(WorkflowVersion).filter(WorkflowVersion.id == run.workflow_version_id).first()
+    if version is None:
+        raise ValueError("工作流版本不存在")
+    executed = workflow_executor.resume_workflow(db, run, version)
+    return workflow_run_to_dict(executed, include_steps=True)
+
+
 def workflow_to_dict(row: Workflow) -> dict[str, Any]:
     current = _get_current_version(row)
     return {

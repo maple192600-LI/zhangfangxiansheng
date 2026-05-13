@@ -106,7 +106,18 @@ class WorkflowNodeContext:
 | node_type | handler | 输出 |
 |-----------|---------|------|
 | `noop` | `_noop_node` | `{"ok": true, "params": params, "input": workflow_input}` |
+| `control.start` | `_start_node` | `{"started": true, "input": workflow_input}` |
+| `control.end` | `_end_node` | `{"finished": true, "outputs": previous_outputs}` |
 | `control.pause` | `_pause_node` | `{"paused": true, "params": params, "run_id": run_id}` |
+| `data.query_daily` | `_query_daily` | `{"rows": [...]}` |
+| `data.query_cash_journal` | `_query_cash_journal` | `{"rows": [...]}` |
+| `data.query_balance` | `_query_balance` | `{"rows": [...]}` |
+| `data.query_income` | `_query_income` | `{"rows": [...]}` or `{"items": [...], "total": N}` |
+| `data.query_expense` | `_query_expense` | `{"rows": [...]}` or `{"items": [...], "total": N}` |
+| `data.query_base` | `_query_base` | `{"rows": [...]}` |
+| `report.major_balance` | `_major_balance` | `{"rows": [...]}` |
+| `report.month_check` | `_month_check` | `{"rows": [...]}` |
+| `export.excel` | `_export_excel` | `{"file_path": "..."}` |
 
 ### 3.4 节点注册方式
 
@@ -191,17 +202,26 @@ node_registry.register("my.node_type", my_handler)
   3. 记录 `run.finished_at`
   4. 立即返回，后续节点不执行
 
-### 5.2 恢复（目标设计）
+### 5.2 恢复（已实现）
 
-> **目标设计** — 当前代码未实现恢复功能。
+> **已实现事实**：基于 `workflow_executor.py` 的 `resume_workflow` 函数。
 
-恢复需要：
-1. 新增 API 端点：`POST /workflow/runs/{id}/resume`
-2. 从 paused run 中识别已完成的步骤和未执行的节点
-3. 从暂停点继续拓扑排序执行
-4. 已完成节点的输出需要从 step 记录中恢复
+恢复流程：
+1. 校验 `run.status == "paused"`（由 service 层负责）
+2. 从 `WorkflowRunStep` 记录重建已完成节点的 `outputs`
+3. 标记已完成节点和暂停节点为 `skip_node_ids`
+4. 重新运行，跳过已执行节点，从暂停点后继续拓扑排序执行
+5. 后续节点全部成功 → `run.status = "completed"`
+6. 后续节点失败 → `run.status = "failed"`
 
-**待确认假设**：恢复时是否允许用户修改 input 参数？还是严格使用原始 input？
+**V1 恢复限制**：
+- 只能恢复 `paused` 状态的 run
+- 跳过已完成节点和暂停节点本身
+- 不支持失败重试
+- 不支持指定从某节点恢复
+- 不支持异步恢复
+- 不支持 dry-run
+- 不支持用户修改 input（使用原始 input）
 
 ---
 
@@ -258,6 +278,8 @@ node_registry.register("my.node_type", my_handler)
 | W9 | POST | `/api/workflow/workflows/{id}/activate` | ✅ 已实现 | draft → active |
 | W10 | POST | `/api/workflow/workflows/{id}/archive` | ✅ 已实现 | active → archived |
 | W11 | POST | `/api/workflow/workflows/{id}/runs` | ✅ 已实现 | 同步执行 |
+| W12 | GET | `/api/workflow/workflows/{id}/versions` | ✅ 已实现 | 版本历史（降序） |
+| W13 | POST | `/api/workflow/runs/{run_id}/resume` | ✅ 已实现 | 恢复暂停运行 |
 
 ---
 
@@ -277,6 +299,8 @@ node_registry.register("my.node_type", my_handler)
 | `start_workflow_run` | ✅ 已实现 | 校验 active，创建 Run，调用 executor |
 | `list_workflow_runs` | ✅ 已实现 | 按 workflow_id/status 筛选 |
 | `get_workflow_run` | ✅ 已实现 | 含 steps |
+| `list_workflow_versions` | ✅ 已实现 | version 降序 |
+| `resume_workflow_run` | ✅ 已实现 | 校验 paused，调用 executor |
 
 ---
 
@@ -305,7 +329,7 @@ node_registry.register("my.node_type", my_handler)
 | 优先级 | 任务 | 依赖 | 说明 |
 |--------|------|------|------|
 | P0 | 实现业务节点 handler | 无 | 当前只有 noop/pause，无法执行真实业务 |
-| P0 | 运行恢复端点 | 暂停机制 | POST /runs/{id}/resume |
+| P0 | ~~运行恢复端点~~ | ~~暂停机制~~ | ~~POST /runs/{id}/resume~~ ✅ 已实现 |
 | P1 | 运行取消端点 | 无 | POST /runs/{id}/cancel |
 | P1 | Agent 工具（workflow_ops.py） | API 层 | 5 个工具函数 |
 | P1 | 前端 API 文件（workflow.js） | API 层 | 对接 11 个端点 |
@@ -325,9 +349,9 @@ node_registry.register("my.node_type", my_handler)
 | 文件 | 已实现 | 待实现 |
 |------|--------|--------|
 | `workflow_nodes.py` | Registry 类 + noop + pause | 10+ 个业务节点 handler |
-| `workflow_executor.py` | 同步拓扑排序执行 + 暂停 + 失败记录 | 恢复执行、超时控制、重试 |
-| `workflow_service.py` | 完整 CRUD + patch + activate/retire + start_run | 运行取消、运行恢复 |
-| `api/workflow.py` | 11 个端点 | 运行恢复端点、运行取消端点 |
+| `workflow_executor.py` | 同步拓扑排序执行 + 暂停 + 失败记录 + 恢复执行 | 超时控制、重试 |
+| `workflow_service.py` | 完整 CRUD + patch + activate/retire + start_run + resume | 运行取消 |
+| `api/workflow.py` | 13 个端点 | 运行取消端点 |
 | `backend/agents/tools/` | 无 | workflow_ops.py（5 个 Agent 工具） |
 | `frontend/src/api/` | 无 | workflow.js（前端 API 文件） |
 | `frontend/src/views/` | 无 | 3 个页面组件 |

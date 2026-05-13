@@ -119,3 +119,19 @@ def start_workflow_run(
         return success(workflow_service.start_workflow_run(db, workflow_id, body))
     except ValueError as exc:
         return error(2001, str(exc))
+
+
+@router.get("/workflows/{workflow_id}/versions")
+def list_workflow_versions(workflow_id: int, db: Session = Depends(get_db)):
+    result = workflow_service.list_workflow_versions(db, workflow_id)
+    if result is None:
+        return error(2001, "工作流不存在")
+    return success(result)
+
+
+@router.post("/runs/{run_id}/resume")
+def resume_workflow_run(run_id: int, db: Session = Depends(get_db)):
+    try:
+        return success(workflow_service.resume_workflow_run(db, run_id))
+    except ValueError as exc:
+        return error(2001, str(exc))

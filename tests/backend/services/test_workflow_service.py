@@ -195,3 +195,96 @@ def test_list_runs_with_status_filter(db):
 def test_get_run_nonexistent_returns_none(db):
     result = workflow_service.get_workflow_run(db, 99999)
     assert result is None
+
+
+# ── list_workflow_versions ─────────────────────
+
+
+def test_list_versions_returns_v1_after_create(db):
+    created = _create(db, code="wf_ver_list")
+    versions = workflow_service.list_workflow_versions(db, created["id"])
+    assert versions is not None
+    assert len(versions) == 1
+    assert versions[0]["version"] == 1
+
+
+def test_list_versions_returns_v1_v2_after_patch(db):
+    created = _create(db, code="wf_ver_patch")
+    workflow_service.apply_workflow_patch(
+        db,
+        created["id"],
+        WorkflowPatchRequest(
+            patches=[{"op": "replace_graph", "graph": _graph()}],
+            created_by="tester",
+            change_summary="v2",
+        ),
+    )
+    versions = workflow_service.list_workflow_versions(db, created["id"])
+    assert versions is not None
+    assert len(versions) == 2
+    assert versions[0]["version"] == 2  # newest first
+    assert versions[1]["version"] == 1
+
+
+def test_list_versions_returns_none_for_missing(db):
+    result = workflow_service.list_workflow_versions(db, 99999)
+    assert result is None
+
+
+# ── resume_workflow_run ────────────────────────
+
+
+def test_resume_paused_run_succeeds(db):
+    graph = {
+        "nodes": [
+            {"id": "s", "type": "control.start", "params": {}},
+            {"id": "p", "type": "control.pause", "params": {}},
+            {"id": "e", "type": "control.end", "params": {}},
+        ],
+        "edges": [
+            {"from": "s", "to": "p"},
+            {"from": "p", "to": "e"},
+        ],
+    }
+    created = workflow_service.create_workflow_definition(
+        db, WorkflowCreate(workflow_code="wf_resume", name="Resume Test", graph=graph),
+    )
+    workflow_service.activate_workflow_definition(db, created["id"])
+    run = workflow_service.start_workflow_run(db, created["id"], WorkflowRunCreate(input={}))
+    assert run["status"] == "paused"
+
+    resumed = workflow_service.resume_workflow_run(db, run["id"])
+    assert resumed["status"] == "completed"
+    steps = resumed["steps"]
+    assert len(steps) == 3
+    assert steps[2]["node_id"] == "e"
+    assert steps[2]["status"] == "completed"
+
+
+def test_resume_completed_run_raises(db):
+    created = _create(db, code="wf_res_done")
+    workflow_service.activate_workflow_definition(db, created["id"])
+    run = workflow_service.start_workflow_run(db, created["id"], WorkflowRunCreate(input={}))
+    assert run["status"] == "completed"
+    with pytest.raises(ValueError, match="只有暂停的运行可以恢复"):
+        workflow_service.resume_workflow_run(db, run["id"])
+
+
+def test_resume_failed_run_raises(db):
+    graph = {
+        "nodes": [{"id": "bad", "type": "nonexistent.node", "params": {}}],
+        "edges": [],
+    }
+    created = workflow_service.create_workflow_definition(
+        db, WorkflowCreate(workflow_code="wf_res_fail", name="Fail Test", graph=graph),
+    )
+    workflow_service.activate_workflow_definition(db, created["id"])
+    run = workflow_service.start_workflow_run(db, created["id"], WorkflowRunCreate(input={}))
+    assert run["status"] == "failed"
+    with pytest.raises(ValueError, match="只有暂停的运行可以恢复"):
+        workflow_service.resume_workflow_run(db, run["id"])
+
+
+def test_resume_nonexistent_run_raises(db):
+    with pytest.raises(ValueError, match="工作流运行记录不存在"):
+        workflow_service.resume_workflow_run(db, 99999)

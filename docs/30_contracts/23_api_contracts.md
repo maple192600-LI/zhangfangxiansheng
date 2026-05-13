@@ -236,6 +236,8 @@
 | W9 | Workflow | POST | `/api/workflow/workflows/{id}/activate` | 启用工作流定义 |
 | W10 | Workflow | POST | `/api/workflow/workflows/{id}/archive` | 归档工作流定义 |
 | W11 | Workflow | POST | `/api/workflow/workflows/{id}/runs` | 同步启动一次工作流运行 |
+| W12 | Workflow | GET | `/api/workflow/workflows/{id}/versions` | 工作流版本历史列表（version 降序） |
+| W13 | Workflow | POST | `/api/workflow/runs/{run_id}/resume` | 恢复暂停的运行，继续执行后续节点 |
 
 ### `POST /api/manual-flow/ai-parse` 请求/响应
 
@@ -446,6 +448,7 @@ ORM CHECK 约束：`status IN ('draft','active','retired')`。
 
 **版本**
 - v4.6 · 2026-05-13 · 工作流端点对齐 `/api/workflow/*`，新增 graph patch 版本化入口
+- v4.7 · 2026-05-13 · 新增 W12 版本历史列表、W13 暂停恢复端点
 - v4.5 · 2026-05-13 · 新增 `/api/workflows` 工作流编排端点 W1-W10
 - v4.4 · 2026-05-11 · §A1 #13-23 旧 `/api/fund/*` 端点标记为 Phase 5 已删除
 - v4.3 · 2026-05-11 · §A3 新增通用 Agent Artifact 管理 API（12 端点，Phase 2）

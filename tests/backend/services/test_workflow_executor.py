@@ -1,6 +1,7 @@
 """Workflow executor unit tests."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -133,3 +134,88 @@ def test_cycle_in_graph_raises(db):
     result = workflow_executor.execute_workflow(db, run, version)
     assert result.status == "failed"
     assert "循环" in result.error_message
+
+
+# ── resume: success chain ──────────────────────
+
+
+def test_resume_completes_after_pause(db):
+    graph = '{"nodes":[{"id":"s","type":"control.start","params":{}},{"id":"p","type":"control.pause","params":{}},{"id":"m","type":"noop","params":{}},{"id":"e","type":"control.end","params":{}}],"edges":[{"from":"s","to":"p"},{"from":"p","to":"m"},{"from":"m","to":"e"}]}'
+    run, version = _make_run(db, graph)
+
+    # First execution stops at pause
+    result = workflow_executor.execute_workflow(db, run, version)
+    assert result.status == "paused"
+    steps_before = db.query(WorkflowRunStep).filter(WorkflowRunStep.run_id == run.id).all()
+    assert len(steps_before) == 2
+    assert steps_before[0].node_id == "s"
+    assert steps_before[0].status == "completed"
+    assert steps_before[1].node_id == "p"
+    assert steps_before[1].status == "paused"
+
+    # Resume
+    resumed = workflow_executor.resume_workflow(db, run, version)
+    assert resumed.status == "completed"
+
+    all_steps = db.query(WorkflowRunStep).filter(WorkflowRunStep.run_id == run.id).order_by(WorkflowRunStep.id).all()
+    assert len(all_steps) == 4
+    assert all_steps[2].node_id == "m"
+    assert all_steps[2].status == "completed"
+    assert all_steps[3].node_id == "e"
+    assert all_steps[3].status == "completed"
+
+    output = json.loads(resumed.output_json)
+    assert "s" in output
+    assert "m" in output
+    assert "e" in output
+
+
+def test_resume_does_not_reexecute_completed_nodes(db):
+    graph = '{"nodes":[{"id":"s","type":"control.start","params":{}},{"id":"p","type":"control.pause","params":{}},{"id":"e","type":"control.end","params":{}}],"edges":[{"from":"s","to":"p"},{"from":"p","to":"e"}]}'
+    run, version = _make_run(db, graph)
+
+    workflow_executor.execute_workflow(db, run, version)
+    steps_before = db.query(WorkflowRunStep).filter(WorkflowRunStep.run_id == run.id).all()
+    start_step_count = len(steps_before)
+
+    workflow_executor.resume_workflow(db, run, version)
+    all_steps = db.query(WorkflowRunStep).filter(WorkflowRunStep.run_id == run.id).all()
+    # Only end node should be added (pause node is skipped, start node is skipped)
+    assert len(all_steps) == start_step_count + 1
+
+
+# ── resume: failure chain ──────────────────────
+
+
+def test_resume_failure_records_failed_step(db):
+    graph = '{"nodes":[{"id":"s","type":"control.start","params":{}},{"id":"p","type":"control.pause","params":{}},{"id":"bad","type":"nonexistent.node","params":{}},{"id":"e","type":"control.end","params":{}}],"edges":[{"from":"s","to":"p"},{"from":"p","to":"bad"},{"from":"bad","to":"e"}]}'
+    run, version = _make_run(db, graph)
+
+    workflow_executor.execute_workflow(db, run, version)
+    assert run.status == "paused"
+
+    resumed = workflow_executor.resume_workflow(db, run, version)
+    assert resumed.status == "failed"
+    assert resumed.error_message is not None
+    assert "未知工作流节点" in resumed.error_message
+
+    all_steps = db.query(WorkflowRunStep).filter(WorkflowRunStep.run_id == run.id).order_by(WorkflowRunStep.id).all()
+    bad_step = [s for s in all_steps if s.node_id == "bad"][0]
+    assert bad_step.status == "failed"
+    assert bad_step.error_message is not None
+
+
+# ── resume: non-paused run ─────────────────────
+
+
+def test_resume_completed_run_still_runs(db):
+    """resume_workflow does not guard status — that's the service layer's job."""
+    graph = '{"nodes":[{"id":"s","type":"control.start","params":{}},{"id":"e","type":"control.end","params":{}}],"edges":[{"from":"s","to":"e"}]}'
+    run, version = _make_run(db, graph)
+    workflow_executor.execute_workflow(db, run, version)
+    assert run.status == "completed"
+
+    # Executor-level resume does not check status; it just re-runs the loop.
+    # Status guard is in the service layer.
+    resumed = workflow_executor.resume_workflow(db, run, version)
+    assert resumed.status == "completed"
