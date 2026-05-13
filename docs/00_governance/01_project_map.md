@@ -109,6 +109,7 @@ AI 智能体预留（7）：
 | `api/backup.js` | `/api/backups` `/api/reset` | `api/backup.py` + `api/reset.py` | `backup_service` + `reset_service` | 全库 |
 | `api/batch.js` | `/api/batches` | `api/batch.py` | (内联) | `import_batches`, `fund_events` |
 | `api/log.js` | `/api/logs` | `api/logs.py` | `log_service` | `operation_logs` |
+| （未创建）`api/workflow.js` | `/api/workflow` | `api/workflow.py` | `workflow_service` + `workflow_executor` + `workflow_nodes` | `workflows`, `workflow_versions`, `workflow_runs`, `workflow_run_steps` |
 
 ## 4. 后端 API 地图
 
@@ -136,6 +137,7 @@ AI 智能体预留（7）：
 | `api/agent.py` | `/api/agent` | 30 | `agent.js` + `stores/agents.js` | 可用 — 完整 Agent 管理和聊天 |
 | `api/fund_agent.py` | ~~已删除~~ | — | — | Phase 5 已删除 |
 | `api/artifacts.py` | `/api/artifacts` | 12 | `artifacts.js` | 可用 — Artifact CRUD + 审核流转 |
+| `api/workflow.py` | `/api/workflow` | 11 | 无（前端未实现） | **后端可用** — 工作流 CRUD + 版本管理 + 同步执行，前端页面未创建 |
 
 ## 5. Service 地图
 
@@ -158,6 +160,9 @@ AI 智能体预留（7）：
 | `reset_service.py` | (工厂重置) | 全库 | 自包含 | 可用 |
 | `ai_config_service.py` | (AI 配置管理) | `ai_configs` | 自包含 | 可用 |
 | `agent_init.py` | (Agent 初始化) | `agents_v2` | 自包含 | 可用 |
+| `workflow_service.py` | CRUD + patch + activate/retire + run | `workflows`, `workflow_versions`, `workflow_runs`, `workflow_run_steps` | `workflow_executor`, `workflow_nodes` | **后端可用** — 完整 CRUD + 版本管理 + 同步执行 |
+| `workflow_executor.py` | 拓扑排序同步执行 | `workflow_runs`, `workflow_run_steps` | `workflow_nodes` | **后端可用** — 仅 2 个内置节点 |
+| `workflow_nodes.py` | 节点注册表 | 无（纯函数） | 无 | **骨架** — 仅 noop + control.pause |
 
 ### `manual_flow_service.py` 逐函数拆解
 
@@ -172,7 +177,7 @@ AI 智能体预留（7）：
 
 ## 6. 数据库表地图
 
-共 **24 张表**（按 `backend/db/tables.py` 中 `__tablename__` 统计）。`parser_templates` 已在 Alembic 迁移 `005_drop_parser_templates` 中移除，不在当前数据库中。
+共 **28 张表**（按 `backend/db/tables.py` 中 `__tablename__` 统计）。`parser_templates` 已在 Alembic 迁移 `005_drop_parser_templates` 中移除，不在当前数据库中。
 
 ### 主数据模块（6 张）
 
@@ -232,6 +237,15 @@ AI 智能体预留（7）：
 | `agent_messages` | `AgentMessage` | 消息 |
 | `agent_runs` | `AgentRun` | 技能运行记录 |
 | `agent_memories` | `AgentMemory` | 记忆 |
+
+### 工作流编排（4 张）
+
+| 表名 | ORM 类 | 说明 |
+|------|--------|------|
+| `workflows` | `Workflow` | 工作流定义（workflow_code, name, status, current_version） |
+| `workflow_versions` | `WorkflowVersion` | 工作流版本快照（graph_json 不可变） |
+| `workflow_runs` | `WorkflowRun` | 工作流运行实例（status: pending/running/completed/failed/paused/cancelled） |
+| `workflow_run_steps` | `WorkflowRunStep` | 运行步骤明细（节点级 input/output/error） |
 
 ### 已移除
 

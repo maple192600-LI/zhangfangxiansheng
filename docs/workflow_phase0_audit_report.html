@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow 模块 Phase 0 审查报告</title>
+<style>
+  :root { --bg: #faf9f7; --card: #ffffff; --border: #e5e0d8; --text: #2c2825; --muted: #8a8279; --accent: #5a7a5e; --accent-light: #e8f0e8; --warn: #c49a3c; --warn-light: #fdf6e3; --danger: #b85450; --danger-light: #fce8e7; --info: #5b8fb9; --info-light: #e8f2fa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 2rem 1rem; }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--text); }
+  h2 { font-size: 1.2rem; margin: 2rem 0 1rem; padding-bottom: 0.3rem; border-bottom: 2px solid var(--accent); color: var(--accent); }
+  h3 { font-size: 1rem; margin: 1rem 0 0.5rem; color: var(--text); }
+  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; }
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 640px) { .card-grid { grid-template-columns: 1fr; } }
+  .stat { text-align: center; padding: 1rem; }
+  .stat .num { font-size: 2rem; font-weight: 700; }
+  .stat .label { font-size: 0.85rem; color: var(--muted); }
+  .done { color: var(--accent); }
+  .partial { color: var(--warn); }
+  .missing { color: var(--danger); }
+  .info { color: var(--info); }
+  .badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .badge-done { background: var(--accent-light); color: var(--accent); }
+  .badge-partial { background: var(--warn-light); color: var(--warn); }
+  .badge-missing { background: var(--danger-light); color: var(--danger); }
+  .badge-info { background: var(--info-light); color: var(--info); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg); font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr:hover td { background: var(--accent-light); }
+  .risk-high { border-left: 3px solid var(--danger); }
+  .risk-medium { border-left: 3px solid var(--warn); }
+  .risk-low { border-left: 3px solid var(--accent); }
+  ul { padding-left: 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .tag-keep { color: var(--accent); }
+  .tag-modify { color: var(--warn); }
+  .tag-deprecate { color: var(--danger); }
+  .phase-step { display: flex; gap: 0.8rem; margin-bottom: 0.8rem; align-items: flex-start; }
+  .phase-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
+  .phase-content { flex: 1; }
+  .phase-title { font-weight: 600; }
+  .phase-desc { font-size: 0.85rem; color: var(--muted); }
+  .footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Workflow 模块 Phase 0 审查报告</h1>
+<p class="meta">分支：<code>codex/workflow-module-phase1</code> &nbsp;|&nbsp; 审查日期：2026-05-13 &nbsp;|&nbsp; 代码不变，仅文档对齐</p>
+
+<!-- ===== 1. 总体概览 ===== -->
+<h2>1. 当前实现状态</h2>
+
+<div class="card-grid">
+  <div class="card stat"><div class="num done">4</div><div class="label">数据库表（已实现）</div></div>
+  <div class="card stat"><div class="num done">11</div><div class="label">API 端点（已实现）</div></div>
+  <div class="card stat"><div class="num partial">2</div><div class="label">内置节点（仅骨架）</div></div>
+  <div class="card stat"><div class="num missing">0</div><div class="label">前端页面（未实现）</div></div>
+</div>
+
+<div class="card">
+<h3>实现进度条</h3>
+<table>
+  <tr><th>模块</th><th>进度</th><th>状态</th></tr>
+  <tr><td>数据模型（4 表 + ORM + Schema + 迁移）</td><td>100%</td><td><span class="badge badge-done">已完成</span></td></tr>
+  <tr><td>API 路由（11 个端点）</td><td>100%</td><td><span class="badge badge-done">已完成</span></td></tr>
+  <tr><td>Service 层（CRUD + patch + run）</td><td>100%</td><td><span class="badge badge-done">已完成</span></td></tr>
+  <tr><td>执行引擎（拓扑排序 + 步骤审计）</td><td>100%</td><td><span class="badge badge-done">已完成</span></tr>
+  <tr><td>节点注册表（业务节点）</td><td>10%</td><td><span class="badge badge-partial">仅骨架</span></td></tr>
+  <tr><td>Agent 工具</td><td>0%</td><td><span class="badge badge-missing">未实现</span></td></tr>
+  <tr><td>前端页面 + 路由 + 导航</td><td>0%</td><td><span class="badge badge-missing">未实现</span></td></tr>
+  <tr><td>测试覆盖</td><td>60%</td><td><span class="badge badge-partial">部分覆盖</span></td></tr>
+</table>
+</div>
+
+<!-- ===== 2. 文档缺口 ===== -->
+<h2>2. 文档缺口（Phase 0 修复前）</h2>
+
+<div class="card">
+<table>
+  <tr><th>文档</th><th>修复前状态</th><th>Phase 0 后状态</th></tr>
+  <tr>
+    <td><code>docs/10_product_design/07_workflow_module.md</code></td>
+    <td><span class="badge badge-missing">不存在</span></td>
+    <td><span class="badge badge-done">已创建</span></td>
+  </tr>
+  <tr>
+    <td><code>docs/20_execution/19_workflow_execution.md</code></td>
+    <td><span class="badge badge-missing">不存在</span></td>
+    <td><span class="badge badge-done">已创建</span></td>
+  </tr>
+  <tr>
+    <td><code>01_project_map.md</code> 表数</td>
+    <td><span class="badge badge-partial">24 张（与宪法 28 张不一致）</span></td>
+    <td><span class="badge badge-done">已修正为 28 张</span></td>
+  </tr>
+  <tr>
+    <td><code>01_project_map.md</code> API/Service 地图</td>
+    <td><span class="badge badge-missing">无 workflow 条目</span></td>
+    <td><span class="badge badge-done">已添加</span></td>
+  </tr>
+  <tr>
+    <td><code>03_target_product_map.md</code> 能力清单</td>
+    <td><span class="badge badge-missing">无工作流编排</span></td>
+    <td><span class="badge badge-done">已添加</span></td>
+  </tr>
+  <tr>
+    <td><code>04_roadmap_and_change_log.md</code> 阶段</td>
+    <td><span class="badge badge-missing">无 WF 阶段</span></td>
+    <td><span class="badge badge-done">已添加 WF0/WF1/WF2</span></td>
+  </tr>
+  <tr>
+    <td><code>20_database_schema.md</code> §T8</td>
+    <td><span class="badge badge-done">已有</span></td>
+    <td><span class="badge badge-info">无需修改</span></td>
+  </tr>
+  <tr>
+    <td><code>23_api_contracts.md</code> W1-W11</td>
+    <td><span class="badge badge-done">已有</span></td>
+    <td><span class="badge badge-info">无需修改</span></td>
+  </tr>
+  <tr>
+    <td><code>00_project_constitution.md</code> §C6</td>
+    <td><span class="badge badge-done">已有 28 张</span></td>
+    <td><span class="badge badge-info">无需修改</span></td>
+  </tr>
+</table>
+</div>
+
+<!-- ===== 3. 代码保留/修改/废弃清单 ===== -->
+<h2>3. 代码保留 / 修改 / 废弃清单</h2>
+
+<div class="card">
+<h3><span class="tag-keep">&#9679; 保留</span> — 不需要修改，功能完整</h3>
+<table>
+  <tr><th>文件</th><th>说明</th></tr>
+  <tr><td><code>backend/db/tables.py:575-669</code></td><td>4 个 ORM 类，字段与契约一致</td></tr>
+  <tr><td><code>backend/db/schemas.py:733-821</code></td><td>2 枚举 + 4 请求 + 4 响应模型</td></tr>
+  <tr><td><code>alembic/versions/006_add_workflow_tables.py</code></td><td>迁移脚本，4 表 + 索引 + CHECK 约束</td></tr>
+  <tr><td><code>backend/api/workflow.py</code></td><td>11 个端点，与 API 契约 W1-W11 一致</td></tr>
+  <tr><td><code>backend/main.py:46,253</code></td><td>import + 路由注册</td></tr>
+  <tr><td><code>tests/test_workflow_module.py</code></td><td>11 个测试，覆盖核心场景</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3><span class="tag-modify">&#9679; 需修改</span> — 功能骨架到位，需扩展</h3>
+<table>
+  <tr><th>文件</th><th>当前状态</th><th>WF1 需补充</th></tr>
+  <tr>
+    <td><code>workflow_service.py</code></td>
+    <td>完整 CRUD + patch + run</td>
+    <td>增加运行恢复/取消函数</td>
+  </tr>
+  <tr>
+    <td><code>workflow_executor.py</code></td>
+    <td>同步拓扑排序 + 暂停</td>
+    <td>增加恢复执行、超时控制</td>
+  </tr>
+  <tr>
+    <td><code>workflow_nodes.py</code></td>
+    <td>Registry + noop + pause</td>
+    <td>增加 10+ 业务节点 handler</td>
+  </tr>
+  <tr>
+    <td><code>api/workflow.py</code></td>
+    <td>11 个端点</td>
+    <td>增加 resume/cancel 端点</td>
+  </tr>
+</table>
+</div>
+
+<div class="card">
+<h3><span class="tag-deprecate">&#9679; 废弃</span> — 需删除或替换</h3>
+<table>
+  <tr><th>文件</th><th>说明</th></tr>
+  <tr><td colspan="2"><em>当前无废弃文件。所有已有代码均为有效实现，不冲突。</em></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3><span class="tag-modify">&#9679; 待创建</span> — WF1/WF2 阶段需新增</h3>
+<table>
+  <tr><th>文件</th><th>阶段</th><th>用途</th></tr>
+  <tr><td><code>backend/agents/tools/workflow_ops.py</code></td><td>WF1</td><td>5 个 Agent 工具</td></tr>
+  <tr><td><code>frontend/src/api/workflow.js</code></td><td>WF2</td><td>前端 API 对接</td></tr>
+  <tr><td><code>frontend/src/views/WorkflowList.vue</code></td><td>WF2</td><td>工作流列表页</td></tr>
+  <tr><td><code>frontend/src/views/WorkflowEditor.vue</code></td><td>WF2</td><td>Vue Flow 画布编辑器</td></tr>
+  <tr><td><code>frontend/src/views/WorkflowRunDetail.vue</code></td><td>WF2</td><td>运行详情页</td></tr>
+  <tr><td><code>frontend/src/components/workflow/</code></td><td>WF2</td><td>画布相关组件</td></tr>
+</table>
+</div>
+
+<!-- ===== 4. Phase 1 前置风险 ===== -->
+<h2>4. Phase 1（WF1）前置风险</h2>
+
+<div class="card risk-high">
+<h3>高风险</h3>
+<ul>
+  <li><strong>节点 handler 依赖未就绪</strong> — 业务节点（bank_import、report 等）需要调用已有的 service 函数，但部分 service 仍依赖 <code>artifact_runtime.run_parser</code>（断链）。如果 WF1 要实现 data.bank_import 节点，必须先解决或绕过 artifact_runtime 断链。</li>
+  <li><strong>同步执行阻塞风险</strong> — 当前执行引擎是同步阻塞的。如果节点 handler 执行时间长（如大文件解析），会阻塞 HTTP 请求。WF1 需评估是否需要改为异步执行。</li>
+</ul>
+</div>
+
+<div class="card risk-medium">
+<h3>中风险</h3>
+<ul>
+  <li><strong>节点间数据传递 schema 未定义</strong> — <code>previous_outputs</code> 传递的是自由格式 dict，节点之间没有约定 schema。如果节点 A 的输出格式变更，节点 B 可能静默失败。WF1 需为每个节点定义明确的 output schema。</li>
+  <li><strong>graph_json 无版本迁移策略</strong> — 如果节点 params schema 变更，旧版本的 graph_json 中的参数可能不再有效。需要向前兼容策略或版本适配层。</li>
+</ul>
+</div>
+
+<div class="card risk-low">
+<h3>低风险</h3>
+<ul>
+  <li><strong>测试覆盖不够细</strong> — 11 个测试覆盖了核心路径，但缺少边界条件测试（空 graph、超大 graph、并发执行等）。</li>
+  <li><strong>无前端依赖安装</strong> — @vue-flow/core 尚未安装，WF2 阶段需要评估版本兼容性。</li>
+</ul>
+</div>
+
+<!-- ===== 5. 下一阶段执行顺序 ===== -->
+<h2>5. 下一阶段执行顺序</h2>
+
+<div class="phase-step">
+  <div class="phase-num">1</div>
+  <div class="phase-content">
+    <div class="phase-title">WF1-A：定义节点 output schema</div>
+    <div class="phase-desc">为每个候选节点定义明确的 input/output schema（作为 NodeType dataclass 或 Pydantic 模型）。这是所有后续工作的基础。</div>
+  </div>
+</div>
+<div class="phase-step">
+  <div class="phase-num">2</div>
+  <div class="phase-content">
+    <div class="phase-title">WF1-B：实现无外部依赖的业务节点</div>
+    <div class="phase-desc">优先实现不依赖 artifact_runtime 的节点（control.start、control.end、data.base_query、report.daily_fund、export.excel）。这些节点可直接调用现有可用 service。</div>
+  </div>
+</div>
+<div class="phase-step">
+  <div class="phase-num">3</div>
+  <div class="phase-content">
+    <div class="phase-title">WF1-C：增加运行恢复/取消端点</div>
+    <div class="phase-desc">在 workflow_executor 和 workflow_service 中增加 resume/cancel 逻辑，新增 2 个 API 端点。</div>
+  </div>
+</div>
+<div class="phase-step">
+  <div class="phase-num">4</div>
+  <div class="phase-content">
+    <div class="phase-title">WF1-D：实现 Agent 工具</div>
+    <div class="phase-desc">创建 <code>workflow_ops.py</code>，注册 5 个工具到 permission/tool_registry，让 Agent 能创建和管理工工作流。</div>
+  </div>
+</div>
+<div class="phase-step">
+  <div class="phase-num">5</div>
+  <div class="phase-content">
+    <div class="phase-title">WF2-A：前端 API 文件</div>
+    <div class="phase-desc">创建 <code>frontend/src/api/workflow.js</code>，对接 13 个端点（11 + resume + cancel）。</div>
+  </div>
+</div>
+<div class="phase-step">
+  <div class="phase-num">6</div>
+  <div class="phase-content">
+    <div class="phase-title">WF2-B：Vue Flow 画布编辑器</div>
+    <div class="phase-desc">安装 @vue-flow/core，创建 WorkflowEditor.vue + 节点面板 + 属性面板。</div>
+  </div>
+</div>
+<div class="phase-step">
+  <div class="phase-num">7</div>
+  <div class="phase-content">
+    <div class="phase-title">WF2-C：列表页 + 详情页 + 路由 + 导航</div>
+    <div class="phase-desc">WorkflowList.vue、WorkflowRunDetail.vue、router 更新、MainLayout 导航入口。</div>
+  </div>
+</div>
+
+<!-- ===== Footer ===== -->
+<div class="footer">
+  Workflow 模块 Phase 0 对齐审查报告 &nbsp;|&nbsp; 生成日期 2026-05-13 &nbsp;|&nbsp; 仅文档变更，无业务代码修改
+</div>
+
+</div>
+</body>
+</html>
