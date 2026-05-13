@@ -570,3 +570,100 @@ class AgentMemory(Base):
         Index("idx_agent_memories_agent", "agent_id"),
         Index("idx_agent_memories_key", "agent_id", "key"),
     )
+
+
+class Workflow(Base):
+    __tablename__ = "workflows"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_code = Column(String(80), nullable=False, unique=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="draft", server_default="draft")
+    current_version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_by = Column(String(50), nullable=False, default="agent", server_default="agent")
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    versions = relationship("WorkflowVersion", back_populates="workflow", order_by="WorkflowVersion.version")
+    runs = relationship("WorkflowRun", back_populates="workflow", passive_deletes=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','active','archived')",
+            name="ck_workflows_status",
+        ),
+        Index("idx_workflows_status", "status"),
+    )
+
+
+class WorkflowVersion(Base):
+    __tablename__ = "workflow_versions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    graph_json = Column(Text, nullable=False)
+    change_summary = Column(Text, nullable=True)
+    created_by = Column(String(50), nullable=False, default="agent", server_default="agent")
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    workflow = relationship("Workflow", back_populates="versions")
+
+    __table_args__ = (
+        Index("idx_workflow_versions_workflow", "workflow_id"),
+        Index("ux_workflow_versions_workflow_version", "workflow_id", "version", unique=True),
+    )
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    workflow_version_id = Column(Integer, ForeignKey("workflow_versions.id", ondelete="SET NULL"), nullable=True)
+    workflow_code = Column(String(80), nullable=False)
+    workflow_version = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    input_json = Column(Text, nullable=False, default="{}", server_default="{}")
+    output_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    workflow = relationship("Workflow", back_populates="runs")
+    version = relationship("WorkflowVersion")
+    steps = relationship("WorkflowRunStep", back_populates="run", order_by="WorkflowRunStep.id", passive_deletes=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','running','completed','failed','paused','cancelled')",
+            name="ck_workflow_runs_status",
+        ),
+        Index("idx_workflow_runs_workflow", "workflow_id"),
+        Index("idx_workflow_runs_version", "workflow_version_id"),
+        Index("idx_workflow_runs_status", "status"),
+    )
+
+
+class WorkflowRunStep(Base):
+    __tablename__ = "workflow_run_steps"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False)
+    node_id = Column(String(80), nullable=False)
+    node_type = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    input_json = Column(Text, nullable=False, default="{}", server_default="{}")
+    output_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    run = relationship("WorkflowRun", back_populates="steps")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','running','completed','failed','skipped','paused')",
+            name="ck_workflow_run_steps_status",
+        ),
+        Index("idx_workflow_run_steps_run", "run_id"),
+        Index("idx_workflow_run_steps_node", "run_id", "node_id"),
+    )

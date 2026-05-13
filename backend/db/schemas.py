@@ -728,3 +728,93 @@ class RuleRuntimeResult(BaseModel):
     placeholder_filled: int = 0
     warnings: list[str] = []
     errors: list[str] = []
+
+
+class WorkflowStatus(str, Enum):
+    draft = "draft"
+    active = "active"
+    archived = "archived"
+
+
+class WorkflowRunStatus(str, Enum):
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+    paused = "paused"
+    cancelled = "cancelled"
+
+
+class WorkflowCreate(BaseModel):
+    workflow_code: str = Field(..., max_length=80)
+    name: str = Field(..., max_length=150)
+    description: Optional[str] = None
+    graph: dict[str, Any] = Field(default_factory=dict)
+    created_by: str = "agent"
+
+
+class WorkflowMetadataUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=150)
+    description: Optional[str] = None
+    status: Optional[WorkflowStatus] = None
+
+
+class WorkflowPatchRequest(BaseModel):
+    patches: list[dict[str, Any]] = Field(default_factory=list)
+    created_by: str = "agent"
+    change_summary: Optional[str] = None
+
+
+class WorkflowRunCreate(BaseModel):
+    input: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowVersionResponse(BaseModel):
+    id: int
+    workflow_id: int
+    version: int
+    graph: dict[str, Any]
+    change_summary: Optional[str] = None
+    created_by: str
+    created_at: Optional[str] = None
+
+
+class WorkflowResponse(BaseModel):
+    id: int
+    workflow_code: str
+    name: str
+    description: Optional[str] = None
+    status: str
+    current_version: Optional[WorkflowVersionResponse] = None
+    created_by: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class WorkflowRunStepResponse(BaseModel):
+    id: int
+    run_id: int
+    node_id: str
+    node_type: str
+    status: str
+    input: dict[str, Any]
+    output: Optional[dict[str, Any]] = None
+    error_message: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+
+class WorkflowRunResponse(BaseModel):
+    id: int
+    workflow_id: int
+    workflow_version_id: Optional[int] = None
+    workflow_code: str
+    workflow_version: int
+    status: str
+    input: dict[str, Any]
+    output: Optional[dict[str, Any]] = None
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    steps: list[WorkflowRunStepResponse] = Field(default_factory=list)

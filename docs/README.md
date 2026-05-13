@@ -3,7 +3,7 @@
 > **任何 AI 或人类开发者开工前，必须按本文件指定的顺序阅读。**
 > 文档冲突时以 `00_governance/00_project_constitution.md` 为最高优先级。
 >
-> 版本：v6.0 · 2026-05-10
+> 版本：v6.1 · 2026-05-13
 
 ---
 
@@ -38,7 +38,7 @@
 
 | 文件 | 内容 |
 |------|------|
-| [`30_contracts/20_database_schema.md`](30_contracts/20_database_schema.md) | 数据库 DDL — 24 张业务 ORM 表的完整建表语句 |
+| [`30_contracts/20_database_schema.md`](30_contracts/20_database_schema.md) | 数据库 DDL — 28 张业务 ORM 表的完整建表语句 |
 | [`30_contracts/21_field_dictionary.md`](30_contracts/21_field_dictionary.md) | 字段字典 — 字段编码、中文名、类型、验证规则 |
 | [`30_contracts/22_manual_field_pool.md`](30_contracts/22_manual_field_pool.md) | 手工字段池 — 核心字段/可选字段/系统字段 |
 | [`30_contracts/23_api_contracts.md`](30_contracts/23_api_contracts.md) | API 契约 — 端点清单 + 错误码 |
@@ -141,7 +141,7 @@ cd frontend && npm run build
 §C3  · MASTER_20 账户主数据（20列冻结）
 §C4  · Agent 技能体系（通用 Agent 初始技能与动态技能体系）
 §C5  · 基元库白名单（37函数）
-§C6  · 数据库（当前真实业务 ORM 表为 24 张，sqlite_sequence 不计入业务表）
+§C6  · 数据库（当前真实业务 ORM 表为 28 张，sqlite_sequence 不计入业务表）
 §C7  · API（端点数量以 23_api_contracts.md 为准，旧 42 上限已失效）
 §C8  · 脚本编排确定性原则
 §C9  · 用户零编程原则

@@ -221,6 +221,22 @@
 | N16 | 银行导入 | POST | `/api/bank-import/preview` | 预览解析（参数：batch_code + parser_artifact_id） |
 | N17 | 银行导入 | POST | `/api/bank-import/commit` | 确认入库（参数：batch_code + parser_artifact_id） |
 
+### Workflow 编排端点
+
+| # | 模块 | 方法 | 路径 | 职责 |
+|---|---|---|---|---|
+| W1 | Workflow | GET | `/api/workflow/workflows` | 工作流定义列表，支持 status 筛选 |
+| W2 | Workflow | POST | `/api/workflow/workflows` | 创建工作流定义草稿并生成 v1 版本 |
+| W3 | Workflow | GET | `/api/workflow/nodes` | 可用节点类型列表 |
+| W4 | Workflow | GET | `/api/workflow/runs` | 工作流运行记录列表，支持 workflow_id/status 筛选 |
+| W5 | Workflow | GET | `/api/workflow/runs/{id}` | 工作流运行详情，含节点执行记录 |
+| W6 | Workflow | GET | `/api/workflow/workflows/{id}` | 工作流定义详情，含当前版本 |
+| W7 | Workflow | PUT | `/api/workflow/workflows/{id}` | 更新工作流元数据或状态 |
+| W8 | Workflow | PATCH | `/api/workflow/workflows/{id}/graph` | 统一 patch 入口，生成新 workflow_versions 版本 |
+| W9 | Workflow | POST | `/api/workflow/workflows/{id}/activate` | 启用工作流定义 |
+| W10 | Workflow | POST | `/api/workflow/workflows/{id}/archive` | 归档工作流定义 |
+| W11 | Workflow | POST | `/api/workflow/workflows/{id}/runs` | 同步启动一次工作流运行 |
+
 ### `POST /api/manual-flow/ai-parse` 请求/响应
 
 **请求体**：
@@ -429,6 +445,8 @@ ORM CHECK 约束：`status IN ('draft','active','retired')`。
 ---
 
 **版本**
+- v4.6 · 2026-05-13 · 工作流端点对齐 `/api/workflow/*`，新增 graph patch 版本化入口
+- v4.5 · 2026-05-13 · 新增 `/api/workflows` 工作流编排端点 W1-W10
 - v4.4 · 2026-05-11 · §A1 #13-23 旧 `/api/fund/*` 端点标记为 Phase 5 已删除
 - v4.3 · 2026-05-11 · §A3 新增通用 Agent Artifact 管理 API（12 端点，Phase 2）
 - v4.2 · 2026-05-10 · §A1 标记 42 上限已失效；§A99 标记旧端点禁止恢复；口径待重新统计
