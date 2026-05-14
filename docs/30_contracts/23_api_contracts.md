@@ -240,6 +240,24 @@
 | W13 | Workflow | POST | `/api/workflow/runs/{run_id}/resume` | 恢复暂停的运行，继续执行后续节点 |
 | W14 | Workflow | POST | `/api/workflow/workflows/{id}/validate` | 校验工作流 graph（不保存、不创建版本） |
 
+**W14 validate 校验规则**：
+
+| code | 级别 | 说明 |
+|------|------|------|
+| `INVALID_STRUCTURE` | error | graph 不是对象 |
+| `EMPTY_NODES` | error | 节点列表为空 |
+| `INVALID_NODE` | error | 节点不是对象 |
+| `MISSING_NODE_FIELD` | error | 节点缺少 id 或 type |
+| `DUPLICATE_NODE_ID` | error | 节点 id 重复 |
+| `INVALID_EDGE` | error | edge 不是对象 |
+| `INVALID_EDGE_REF` | error | edge 引用不存在的节点 |
+| `UNKNOWN_NODE_TYPE` | error | 未知节点类型 |
+| `CYCLE_DETECTED` | error | 图中存在循环 |
+| `ORPHAN_NODE` | error | 孤立节点（未被任何边连接），阻止发布 |
+| `MISSING_START` | warning | 缺少 control.start 节点 |
+| `MISSING_END` | warning | 缺少 control.end 节点 |
+| `PAUSE_NO_SUCCESSOR` | warning | 暂停节点无后续节点 |
+
 ### `POST /api/manual-flow/ai-parse` 请求/响应
 
 **请求体**：
