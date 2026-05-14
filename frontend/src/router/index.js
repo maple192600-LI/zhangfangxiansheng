@@ -22,6 +22,10 @@ const routes = [
       { path: 'manual-maintenance', name: 'manual-maintenance', component: () => import('@/views/ManualMaintenance.vue') },
       { path: 'upload-preview', name: 'upload-preview', component: () => import('@/views/UploadPreview.vue') },
 
+      // 工作流编排
+      { path: 'workflow', name: 'workflow-list', component: () => import('@/views/WorkflowList.vue') },
+      { path: 'workflow/:id', name: 'workflow-editor', component: () => import('@/views/WorkflowEditor.vue'), meta: { fullPage: true } },
+
       // 资金板块 > 资金日报表
       { path: 'daily-report', name: 'daily-report', component: () => import('@/views/DailyReport.vue') },
       { path: 'base-data', name: 'base-data', component: () => import('@/views/BaseDataTable.vue') },

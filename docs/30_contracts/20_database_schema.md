@@ -1,13 +1,13 @@
 # 20 · 数据库契约（当前 Schema，PR #2 后）
 
-> 本文件定义当前 `backend/db/tables.py` 中 24 张业务 ORM 表的完整 DDL。
+> 本文件定义当前 `backend/db/tables.py` 中 28 张业务 ORM 表的完整 DDL。
 > 契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
 
 ---
 
 ## §T0 · 表清单
 
-当前 24 张业务 ORM 表（按 `backend/db/tables.py` 中 `__tablename__` 定义）：
+当前 28 张业务 ORM 表（按 `backend/db/tables.py` 中 `__tablename__` 定义）：
 
 ```text
 ── 主数据模块（6 张）──
@@ -47,6 +47,12 @@
 22. agent_messages           Agent 消息
 23. agent_runs               Agent 运行记录
 24. agent_memories           Agent 记忆存储
+
+── 工作流编排（4 张）──
+25. workflows                工作流主表
+26. workflow_versions        工作流版本
+27. workflow_runs            工作流运行记录
+28. workflow_run_steps       工作流节点执行记录
 ```
 
 已移除：
@@ -602,7 +608,89 @@ CREATE INDEX idx_agent_memories_key ON agent_memories(agent_id, key);
 
 ---
 
+## §T8 · 工作流编排表
+
+### §T8.1 · `workflows` — 工作流主表
+
+```sql
+CREATE TABLE workflows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_code VARCHAR(80) NOT NULL UNIQUE,
+  name VARCHAR(150) NOT NULL,
+  description TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  current_version INTEGER NOT NULL DEFAULT 1,
+  created_by VARCHAR(50) NOT NULL DEFAULT 'agent',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (status IN ('draft','active','archived'))
+);
+CREATE INDEX idx_workflows_status ON workflows(status);
+```
+
+### §T8.2 · `workflow_versions` — 工作流版本
+
+```sql
+CREATE TABLE workflow_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  graph_json TEXT NOT NULL,
+  change_summary TEXT,
+  created_by VARCHAR(50) NOT NULL DEFAULT 'agent',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_workflow_versions_workflow ON workflow_versions(workflow_id);
+CREATE UNIQUE INDEX ux_workflow_versions_workflow_version ON workflow_versions(workflow_id, version);
+```
+
+### §T8.3 · `workflow_runs` — 工作流运行记录
+```sql
+CREATE TABLE workflow_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  workflow_version_id INTEGER REFERENCES workflow_versions(id) ON DELETE SET NULL,
+  workflow_code VARCHAR(80) NOT NULL,
+  workflow_version INTEGER NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  input_json TEXT NOT NULL DEFAULT '{}',
+  output_json TEXT,
+  error_message TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME,
+  finished_at DATETIME,
+  CHECK (status IN ('pending','running','completed','failed','paused','cancelled'))
+);
+CREATE INDEX idx_workflow_runs_workflow ON workflow_runs(workflow_id);
+CREATE INDEX idx_workflow_runs_version ON workflow_runs(workflow_version_id);
+CREATE INDEX idx_workflow_runs_status ON workflow_runs(status);
+```
+
+### §T8.4 · `workflow_run_steps` — 工作流节点执行记录
+
+```sql
+CREATE TABLE workflow_run_steps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+  node_id VARCHAR(80) NOT NULL,
+  node_type VARCHAR(100) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  input_json TEXT NOT NULL DEFAULT '{}',
+  output_json TEXT,
+  error_message TEXT,
+  started_at DATETIME,
+  finished_at DATETIME,
+  CHECK (status IN ('pending','running','completed','failed','skipped','paused'))
+);
+CREATE INDEX idx_workflow_run_steps_run ON workflow_run_steps(run_id);
+CREATE INDEX idx_workflow_run_steps_node ON workflow_run_steps(run_id, node_id);
+```
+
+---
+
 **版本**
+- v5.2 · 2026-05-13 · 工作流编排改为 workflows / workflow_versions / workflow_runs / workflow_run_steps 四表版本化模型
+- v5.1 · 2026-05-13 · 新增工作流编排 3 张表：workflow_definitions / workflow_runs / workflow_run_steps
 - v5.0 · 2026-05-10 · 标题改为当前 Schema；§T0 更新为 24 张业务 ORM 表；§T5 标记已完成；移除 parser_templates 和 agent_configs 占位行
 - v4.1 · 2026-05-10 · 移除 parser_templates 表（§T2.1），银行流水解析规则统一使用 parser_artifacts
 - v4.0 · 2026-05-02 · 新增 §T7 Agent 系统扩展表（6 张表 DDL）

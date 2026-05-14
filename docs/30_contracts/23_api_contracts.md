@@ -221,6 +221,43 @@
 | N16 | 银行导入 | POST | `/api/bank-import/preview` | 预览解析（参数：batch_code + parser_artifact_id） |
 | N17 | 银行导入 | POST | `/api/bank-import/commit` | 确认入库（参数：batch_code + parser_artifact_id） |
 
+### Workflow 编排端点
+
+| # | 模块 | 方法 | 路径 | 职责 |
+|---|---|---|---|---|
+| W1 | Workflow | GET | `/api/workflow/workflows` | 工作流定义列表，支持 status 筛选 |
+| W2 | Workflow | POST | `/api/workflow/workflows` | 创建工作流定义草稿并生成 v1 版本 |
+| W3 | Workflow | GET | `/api/workflow/nodes` | 可用节点类型列表 |
+| W4 | Workflow | GET | `/api/workflow/runs` | 工作流运行记录列表，支持 workflow_id/status 筛选 |
+| W5 | Workflow | GET | `/api/workflow/runs/{id}` | 工作流运行详情，含节点执行记录 |
+| W6 | Workflow | GET | `/api/workflow/workflows/{id}` | 工作流定义详情，含当前版本 |
+| W7 | Workflow | PUT | `/api/workflow/workflows/{id}` | 更新工作流元数据或状态 |
+| W8 | Workflow | PATCH | `/api/workflow/workflows/{id}/graph` | 统一 patch 入口，生成新 workflow_versions 版本 |
+| W9 | Workflow | POST | `/api/workflow/workflows/{id}/activate` | 启用工作流定义 |
+| W10 | Workflow | POST | `/api/workflow/workflows/{id}/archive` | 归档工作流定义 |
+| W11 | Workflow | POST | `/api/workflow/workflows/{id}/runs` | 同步启动一次工作流运行 |
+| W12 | Workflow | GET | `/api/workflow/workflows/{id}/versions` | 工作流版本历史列表（version 降序） |
+| W13 | Workflow | POST | `/api/workflow/runs/{run_id}/resume` | 恢复暂停的运行，继续执行后续节点 |
+| W14 | Workflow | POST | `/api/workflow/workflows/{id}/validate` | 校验工作流 graph（不保存、不创建版本） |
+
+**W14 validate 校验规则**：
+
+| code | 级别 | 说明 |
+|------|------|------|
+| `INVALID_STRUCTURE` | error | graph 不是对象 |
+| `EMPTY_NODES` | error | 节点列表为空 |
+| `INVALID_NODE` | error | 节点不是对象 |
+| `MISSING_NODE_FIELD` | error | 节点缺少 id 或 type |
+| `DUPLICATE_NODE_ID` | error | 节点 id 重复 |
+| `INVALID_EDGE` | error | edge 不是对象 |
+| `INVALID_EDGE_REF` | error | edge 引用不存在的节点 |
+| `UNKNOWN_NODE_TYPE` | error | 未知节点类型 |
+| `CYCLE_DETECTED` | error | 图中存在循环 |
+| `ORPHAN_NODE` | error | 孤立节点（未被任何边连接），阻止发布 |
+| `MISSING_START` | warning | 缺少 control.start 节点 |
+| `MISSING_END` | warning | 缺少 control.end 节点 |
+| `PAUSE_NO_SUCCESSOR` | warning | 暂停节点无后续节点 |
+
 ### `POST /api/manual-flow/ai-parse` 请求/响应
 
 **请求体**：
@@ -429,6 +466,10 @@ ORM CHECK 约束：`status IN ('draft','active','retired')`。
 ---
 
 **版本**
+- v4.6 · 2026-05-13 · 工作流端点对齐 `/api/workflow/*`，新增 graph patch 版本化入口
+- v4.8 · 2026-05-14 · 新增 W14 validate 端点（独立校验 graph，不保存不创建版本）
+- v4.7 · 2026-05-13 · 新增 W12 版本历史列表、W13 暂停恢复端点
+- v4.5 · 2026-05-13 · 新增 `/api/workflows` 工作流编排端点 W1-W10
 - v4.4 · 2026-05-11 · §A1 #13-23 旧 `/api/fund/*` 端点标记为 Phase 5 已删除
 - v4.3 · 2026-05-11 · §A3 新增通用 Agent Artifact 管理 API（12 端点，Phase 2）
 - v4.2 · 2026-05-10 · §A1 标记 42 上限已失效；§A99 标记旧端点禁止恢复；口径待重新统计

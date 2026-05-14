@@ -23,6 +23,9 @@
 | Phase G | BankRule 规则中心重建 | 待做 |
 | Phase H1 | RuleArtifact runtime | 待做 |
 | Phase I | 企业初始化向导 | 待做 |
+| Phase WF0 | 工作流模块文档对齐 | ✅ 已完成 |
+| Phase WF1 | 工作流业务节点 + Agent 工具 | 待做 |
+| Phase WF2 | 工作流前端页面（Vue Flow 画布） | 待做 |
 
 ---
 
@@ -260,10 +263,68 @@
 
 ---
 
-## 变更记录
+## Phase WF0：工作流模块文档对齐
+
+**状态**：✅ 已完成
+
+**目标**：基于 `codex/workflow-module-phase1` 分支已有代码，补齐产品设计文档和执行文档，对齐治理文档。
+
+**新增文件**：
+- `docs/10_product_design/07_workflow_module.md` — 产品设计文档
+- `docs/20_execution/19_workflow_execution.md` — 执行文档
+
+**更新文件**：
+- `docs/00_governance/01_project_map.md` — 表数 24→28，增加 workflow API/Service 条目
+- `docs/00_governance/03_target_product_map.md` — 增加工作流编排能力
+- `docs/00_governance/04_roadmap_and_change_log.md` — 增加 WF 阶段
+
+**未修改的代码文件**：
+- 所有后端代码、前端代码、测试代码、迁移代码均未修改
+
+**必须更新的文档**：
+- [x] `07_workflow_module.md` — 本阶段产物
+- [x] `19_workflow_execution.md` — 本阶段产物
+- [x] `01_project_map.md` — 表数和条目更新
+- [x] `03_target_product_map.md` — 能力清单更新
+- [x] `04_roadmap_and_change_log.md` — 阶段定义更新
+
+---
+
+## Phase WF1：工作流业务节点 + Agent 工具
+
+**状态**：待做
+
+**目标**：实现真实的业务节点 handler，让工作流能执行实际的数据处理操作。
+
+**将改变的地图状态**：
+- `workflow_nodes.py`：从 2 个骨架节点 → 10+ 个业务节点
+- `backend/agents/tools/workflow_ops.py`：从无 → 5 个 Agent 工具
+- `workflow_executor.py`：增加超时控制
+- `api/workflow.py`：增加运行恢复/取消端点
+
+**依赖**：无前置依赖（可与 Phase D-I 并行）
+
+---
+
+## Phase WF2：工作流前端页面
+
+**状态**：待做
+
+**目标**：实现 Vue Flow 画布编辑器、工作流列表页、运行详情页。
+
+**将改变的地图状态**：
+- `frontend/src/api/workflow.js`：从无 → 11 个 API 函数
+- `frontend/src/views/WorkflowList.vue`：新增页面
+- `frontend/src/views/WorkflowEditor.vue`：新增页面（Vue Flow 画布）
+- `frontend/src/views/WorkflowRunDetail.vue`：新增页面
+- `router/index.js`：新增 3 个路由
+- `layouts/MainLayout.vue`：新增导航入口
+
+**依赖**：Phase WF1
 
 | 日期 | 变更 | 涉及文档 |
 |------|------|---------|
+| 2026-05-13 | Phase WF0 完成：工作流模块文档对齐（产品设计 + 执行文档 + 治理文档更新） | `07_workflow_module.md`, `19_workflow_execution.md`, `01_project_map.md`, `03_target_product_map.md`, `04_roadmap_and_change_log.md` |
 | 2026-05-11 | Phase 6 / Runtime R0 完成：AST guard + Schema + 测试骨架 | `01_project_map.md`, `04_roadmap_and_change_log.md` |
 | 2026-05-11 | Phase 5 完成：删除旧 FundAgent 体系残留 | `01_project_map.md`, `04_roadmap_and_change_log.md`, `23_api_contracts.md`, `00_single_agent_cleanup_audit.md` |
 | 2026-05-10 | 新增路线图与变更记录文档 | `04_roadmap_and_change_log.md` |

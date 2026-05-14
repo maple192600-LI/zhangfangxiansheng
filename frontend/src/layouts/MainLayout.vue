@@ -233,7 +233,8 @@ const navData = {
           { name: '手工流水', explain: '工作台中的手工流水页。用于录入或导入手工流水。', route: 'manual-flow' },
           { name: '手动维护', explain: '工作台中的手动维护页。用于修正记录、补录信息和维护。', route: 'manual-maintenance' },
           { name: '上传结果预览', explain: '工作台中的上传结果预览页。查看处理状态、未处理项和异常数据。', route: 'upload-preview' },
-          { name: '异常处理', explain: '集中处理待确认和异常流水，修正或作废。', route: 'exception-receipt' }
+          { name: '异常处理', explain: '集中处理待确认和异常流水，修正或作废。', route: 'exception-receipt' },
+          { name: '工作流编排', explain: '用可视化节点编排资金导入、查询、报表生成和导出流程。', route: 'workflow-list' }
         ]
       },
       '资金日报表': {
@@ -335,7 +336,7 @@ const menuExpandedKeys = ref([...defaultExpandedKeys])
 
 // Agent 页面检测
 const isAgentPage = computed(() => route.name === 'agent-detail')
-const isFullPage = computed(() => route.name === 'ai-config')
+const isFullPage = computed(() => route.name === 'ai-config' || route.name === 'workflow-editor')
 
 // Agent 相关
 const showCreateAgentModal = ref(false)
