@@ -396,7 +396,30 @@ def _run_graph_validation(
     if not any(e["code"] == "INVALID_EDGE_REF" for e in errors):
         _check_cycle(seen_ids, edges, errors)
 
+    _check_orphan_nodes(valid_nodes, edges, errors)
+
     _check_warnings(valid_nodes, edges, warnings)
+
+
+def _check_orphan_nodes(
+    valid_nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    errors: list[dict[str, Any]],
+) -> None:
+    if len(valid_nodes) <= 1:
+        return
+    connected: set[str] = set()
+    for edge in edges:
+        if isinstance(edge, dict):
+            connected.add(edge.get("from", ""))
+            connected.add(edge.get("to", ""))
+    for node in valid_nodes:
+        if node["id"] not in connected:
+            errors.append({
+                "code": "ORPHAN_NODE",
+                "message": f"节点 {node['id']} 未被任何边连接",
+                "node_ids": [node["id"]],
+            })
 
 
 def _check_cycle(
@@ -443,20 +466,6 @@ def _check_warnings(
         warnings.append({"code": "MISSING_START", "message": "工作流缺少 control.start 节点"})
     if "control.end" not in node_types:
         warnings.append({"code": "MISSING_END", "message": "工作流缺少 control.end 节点"})
-
-    if len(valid_nodes) > 1:
-        connected: set[str] = set()
-        for edge in edges:
-            if isinstance(edge, dict):
-                connected.add(edge.get("from", ""))
-                connected.add(edge.get("to", ""))
-        for node in valid_nodes:
-            if node["id"] not in connected:
-                warnings.append({
-                    "code": "ORPHAN_NODE",
-                    "message": f"节点 {node['id']} 未被任何边连接",
-                    "node_ids": [node["id"]],
-                })
 
     out_map: dict[str, list[str]] = {n["id"]: [] for n in valid_nodes}
     for edge in edges:

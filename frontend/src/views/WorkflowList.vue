@@ -101,7 +101,7 @@
 import { ref, h, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NSelect, NTag, NSpin, NModal, NForm, NFormItem, NInput, NSpace, NDescriptions, NDescriptionsItem, NDataTable, useMessage, useDialog } from 'naive-ui'
-import { listWorkflows, createWorkflow, activateWorkflow, archiveWorkflow, startWorkflowRun } from '@/api/workflow'
+import { listWorkflows, createWorkflow, activateWorkflow, archiveWorkflow, startWorkflowRun, getWorkflow, validateWorkflow } from '@/api/workflow'
 
 const router = useRouter()
 const message = useMessage()
@@ -196,12 +196,21 @@ function goEditor(wf) {
 }
 
 async function handleActivate(wf) {
-  dialog.warning({
-    title: '确认发布',
-    content: `确定要发布「${wf.name}」吗？发布后可执行。`,
-    positiveText: '发布',
-    negativeText: '取消',
-    onPositiveClick: async () => {
+  try {
+    const detail = await getWorkflow(wf.id)
+    const graph = detail.current_version?.graph
+    if (!graph) {
+      message.error('无法获取工作流图，请先在编辑器中保存')
+      return
+    }
+    const result = await validateWorkflow(wf.id, graph)
+    if (!result.valid) {
+      const errSummary = (result.errors || []).map((e) => e.message).join('；')
+      message.error(`校验未通过：${errSummary}`)
+      return
+    }
+    const hasWarnings = result.warnings?.length > 0
+    const doActivate = async () => {
       try {
         await activateWorkflow(wf.id)
         message.success('已发布')
@@ -209,8 +218,27 @@ async function handleActivate(wf) {
       } catch (e) {
         message.error(e.message || '发布失败')
       }
-    },
-  })
+    }
+    if (hasWarnings) {
+      dialog.warning({
+        title: '校验警告',
+        content: (result.warnings || []).map((w) => w.message).join('；'),
+        positiveText: '仍然发布',
+        negativeText: '取消',
+        onPositiveClick: doActivate,
+      })
+    } else {
+      dialog.warning({
+        title: '确认发布',
+        content: `确定要发布「${wf.name}」吗？发布后可执行。`,
+        positiveText: '发布',
+        negativeText: '取消',
+        onPositiveClick: doActivate,
+      })
+    }
+  } catch (e) {
+    message.error(e.message || '校验失败')
+  }
 }
 
 async function handleArchive(wf) {

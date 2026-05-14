@@ -67,12 +67,12 @@
           <NInput
             type="textarea"
             :rows="8"
-            :value="paramsText"
-            @update:value="onParamsChange"
+            v-model:value="paramsDraft"
             placeholder="{}"
             size="small"
             monospace
           />
+          <NButton size="tiny" type="primary" @click="applyParams" style="margin-top:4px">应用参数</NButton>
         </div>
         <NButton size="small" type="error" quaternary @click="deleteSelectedNode" style="margin-top:8px">删除节点</NButton>
       </div>
@@ -131,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h, markRaw, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, h, markRaw, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -162,6 +162,7 @@ const nodes = ref([])
 const edges = ref([])
 const selectedNode = ref(null)
 const nodeTypes = ref({ workflowNode: markRaw(WorkflowNode) })
+const paramsDraft = ref('{}')
 const validationResult = ref(null)
 const saving = ref(false)
 const validating = ref(false)
@@ -193,9 +194,12 @@ const statusLabel = computed(() => {
   return { draft: '草稿', active: '已启用', archived: '已归档' }[s] || s
 })
 
-const paramsText = computed(() => {
-  if (!selectedNode.value?.data?.params) return '{}'
-  return JSON.stringify(selectedNode.value.data.params, null, 2)
+watch(selectedNode, (node) => {
+  if (node?.data?.params) {
+    paramsDraft.value = JSON.stringify(node.data.params, null, 2)
+  } else {
+    paramsDraft.value = '{}'
+  }
 })
 
 const groupedNodes = computed(() => {
@@ -335,12 +339,14 @@ function onNodesChange(changes) {
   }
 }
 
-function onParamsChange(val) {
+function applyParams() {
   if (!selectedNode.value) return
   try {
-    selectedNode.value.data.params = JSON.parse(val)
+    const parsed = JSON.parse(paramsDraft.value)
+    selectedNode.value.data.params = parsed
+    message.success('参数已应用')
   } catch {
-    // keep editing — don't blow up
+    message.error('JSON 格式错误，请修正后再应用')
   }
 }
 
@@ -382,7 +388,6 @@ async function doValidate() {
 }
 
 async function doActivate() {
-  // Validate first
   validating.value = true
   try {
     const graph = vueFlowToBackend()
@@ -393,15 +398,19 @@ async function doActivate() {
       return
     }
     const hasWarnings = result.warnings?.length > 0
-    const proceed = () => {
+    const proceed = async () => {
       activating.value = true
-      activateWorkflow(workflow.value.id)
-        .then(() => {
-          message.success('发布成功')
-          loadWorkflow()
-        })
-        .catch((e) => message.error(e.message || '发布失败'))
-        .finally(() => { activating.value = false })
+      try {
+        await patchWorkflowGraph(workflow.value.id, graph, 'publish graph from canvas')
+        await loadWorkflow()
+        await activateWorkflow(workflow.value.id)
+        message.success('发布成功')
+        await loadWorkflow()
+      } catch (e) {
+        message.error(e.message || '发布失败')
+      } finally {
+        activating.value = false
+      }
     }
     if (hasWarnings) {
       dialog.warning({
@@ -409,10 +418,10 @@ async function doActivate() {
         content: result.warnings.map((w) => w.message).join('；'),
         positiveText: '仍然发布',
         negativeText: '取消',
-        onPositiveClick: proceed,
+        onPositiveClick: () => proceed(),
       })
     } else {
-      proceed()
+      await proceed()
     }
   } catch (e) {
     message.error(e.message || '校验失败')

@@ -367,7 +367,7 @@ def test_validate_does_not_create_version(db):
     assert versions_after[0]["version"] == 1
 
 
-def test_validate_orphan_node_warning(db):
+def test_validate_orphan_node_error(db):
     created = _create(db, code="wf_val_orph")
     graph = {
         "nodes": [
@@ -377,8 +377,8 @@ def test_validate_orphan_node_warning(db):
         "edges": [],
     }
     result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
-    assert result["valid"] is True
-    assert any(w["code"] == "ORPHAN_NODE" for w in result["warnings"])
+    assert result["valid"] is False
+    assert any(e["code"] == "ORPHAN_NODE" for e in result["errors"])
 
 
 def test_validate_missing_start_end_warning(db):
