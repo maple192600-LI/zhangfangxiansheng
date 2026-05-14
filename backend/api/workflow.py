@@ -13,6 +13,7 @@ from db.schemas import (
     WorkflowMetadataUpdate,
     WorkflowPatchRequest,
     WorkflowRunCreate,
+    WorkflowValidateRequest,
 )
 from services import workflow_service
 from services.workflow_nodes import node_registry
@@ -91,6 +92,19 @@ def patch_workflow_graph(
         return success(workflow_service.apply_workflow_patch(db, workflow_id, body))
     except ValueError as exc:
         return error(1002, str(exc))
+
+
+@router.post("/workflows/{workflow_id}/validate")
+def validate_workflow(
+    workflow_id: int,
+    body: Optional[WorkflowValidateRequest] = None,
+    db: Session = Depends(get_db),
+):
+    graph_json = body.graph_json if body else None
+    result = workflow_service.validate_workflow_graph(db, workflow_id, graph_json)
+    if result is None:
+        return error(2001, "工作流不存在")
+    return success(result)
 
 
 @router.post("/workflows/{workflow_id}/activate")

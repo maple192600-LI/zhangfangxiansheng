@@ -288,3 +288,151 @@ def test_resume_failed_run_raises(db):
 def test_resume_nonexistent_run_raises(db):
     with pytest.raises(ValueError, match="工作流运行记录不存在"):
         workflow_service.resume_workflow_run(db, 99999)
+
+
+# ── validate_workflow_graph ────────────────────
+
+
+def test_validate_valid_graph(db):
+    created = _create(db, code="wf_val_ok")
+    graph = {
+        "nodes": [
+            {"id": "s", "type": "control.start", "params": {}},
+            {"id": "e", "type": "control.end", "params": {}},
+        ],
+        "edges": [{"from": "s", "to": "e"}],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result is not None
+    assert result["valid"] is True
+    assert result["errors"] == []
+    assert result["warnings"] == []
+
+
+def test_validate_invalid_edge(db):
+    created = _create(db, code="wf_val_edge")
+    graph = {
+        "nodes": [{"id": "n1", "type": "noop", "params": {}}],
+        "edges": [{"from": "n1", "to": "n99"}],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is False
+    assert any(e["code"] == "INVALID_EDGE_REF" for e in result["errors"])
+
+
+def test_validate_unknown_node_type(db):
+    created = _create(db, code="wf_val_type")
+    graph = {
+        "nodes": [{"id": "n1", "type": "nonexistent.node", "params": {}}],
+        "edges": [],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is False
+    assert any(e["code"] == "UNKNOWN_NODE_TYPE" for e in result["errors"])
+
+
+def test_validate_cycle(db):
+    created = _create(db, code="wf_val_cycle")
+    graph = {
+        "nodes": [
+            {"id": "a", "type": "noop", "params": {}},
+            {"id": "b", "type": "noop", "params": {}},
+        ],
+        "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "a"}],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is False
+    assert any(e["code"] == "CYCLE_DETECTED" for e in result["errors"])
+
+
+def test_validate_no_graph_json_uses_current_version(db):
+    created = _create(db, code="wf_val_curr")
+    result = workflow_service.validate_workflow_graph(db, created["id"])
+    assert result is not None
+    assert result["valid"] is True
+
+
+def test_validate_does_not_create_version(db):
+    created = _create(db, code="wf_val_nov")
+    versions_before = workflow_service.list_workflow_versions(db, created["id"])
+    assert len(versions_before) == 1
+
+    workflow_service.validate_workflow_graph(
+        db, created["id"],
+        graph_json={"nodes": [{"id": "x", "type": "noop", "params": {}}], "edges": []},
+    )
+
+    versions_after = workflow_service.list_workflow_versions(db, created["id"])
+    assert len(versions_after) == 1
+    assert versions_after[0]["version"] == 1
+
+
+def test_validate_orphan_node_warning(db):
+    created = _create(db, code="wf_val_orph")
+    graph = {
+        "nodes": [
+            {"id": "n1", "type": "noop", "params": {}},
+            {"id": "n2", "type": "noop", "params": {}},
+        ],
+        "edges": [],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is True
+    assert any(w["code"] == "ORPHAN_NODE" for w in result["warnings"])
+
+
+def test_validate_missing_start_end_warning(db):
+    created = _create(db, code="wf_val_se")
+    graph = {
+        "nodes": [{"id": "n1", "type": "noop", "params": {}}],
+        "edges": [],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is True
+    codes = [w["code"] for w in result["warnings"]]
+    assert "MISSING_START" in codes
+    assert "MISSING_END" in codes
+
+
+def test_validate_nonexistent_workflow(db):
+    result = workflow_service.validate_workflow_graph(db, 99999)
+    assert result is None
+
+
+def test_validate_not_dict_error(db):
+    created = _create(db, code="wf_val_nd")
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json="not a dict")
+    assert result["valid"] is False
+    assert any(e["code"] == "INVALID_STRUCTURE" for e in result["errors"])
+
+
+def test_validate_empty_nodes_error(db):
+    created = _create(db, code="wf_val_en")
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json={"nodes": [], "edges": []})
+    assert result["valid"] is False
+    assert any(e["code"] == "EMPTY_NODES" for e in result["errors"])
+
+
+def test_validate_duplicate_node_id(db):
+    created = _create(db, code="wf_val_dup")
+    graph = {
+        "nodes": [
+            {"id": "n1", "type": "noop", "params": {}},
+            {"id": "n1", "type": "control.start", "params": {}},
+        ],
+        "edges": [],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is False
+    assert any(e["code"] == "DUPLICATE_NODE_ID" for e in result["errors"])
+
+
+def test_validate_pause_no_successor_warning(db):
+    created = _create(db, code="wf_val_pns")
+    graph = {
+        "nodes": [{"id": "p", "type": "control.pause", "params": {}}],
+        "edges": [],
+    }
+    result = workflow_service.validate_workflow_graph(db, created["id"], graph_json=graph)
+    assert result["valid"] is True
+    assert any(w["code"] == "PAUSE_NO_SUCCESSOR" for w in result["warnings"])

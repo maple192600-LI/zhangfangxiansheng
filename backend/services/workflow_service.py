@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from db.tables import Workflow, WorkflowRun, WorkflowRunStep, WorkflowVersion
 from services import workflow_executor
+from services.workflow_nodes import node_registry
 
 
 def list_workflow_definitions(
@@ -312,6 +313,164 @@ def _validate_graph(graph: Any) -> None:
         target = edge.get("to")
         if source not in seen or target not in seen:
             raise ValueError("工作流 edge 引用了不存在的节点")
+
+
+def validate_workflow_graph(
+    db: Session,
+    workflow_id: int,
+    graph_json: Optional[dict[str, Any]] = None,
+) -> Optional[dict[str, Any]]:
+    """Validate a workflow graph without saving or creating any records."""
+    row = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if row is None:
+        return None
+
+    graph = graph_json
+    if graph is None:
+        version = _get_current_version(row)
+        if version is None:
+            return None
+        graph = _load_json(version.graph_json)
+
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    _run_graph_validation(graph, errors, warnings)
+    return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}
+
+
+def _run_graph_validation(
+    graph: Any,
+    errors: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+) -> None:
+    if not isinstance(graph, dict):
+        errors.append({"code": "INVALID_STRUCTURE", "message": "工作流图必须是对象"})
+        return
+
+    nodes = graph.get("nodes")
+    if not isinstance(nodes, list) or not nodes:
+        errors.append({"code": "EMPTY_NODES", "message": "工作流图必须包含 nodes"})
+        return
+
+    seen_ids: set[str] = set()
+    valid_nodes: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            errors.append({"code": "INVALID_NODE", "message": "工作流节点必须是对象"})
+            continue
+        nid, ntype = node.get("id"), node.get("type")
+        if not nid or not ntype:
+            errors.append({"code": "MISSING_NODE_FIELD", "message": "工作流节点必须包含 id 和 type"})
+            continue
+        if nid in seen_ids:
+            errors.append({"code": "DUPLICATE_NODE_ID", "message": f"工作流节点重复: {nid}", "node_ids": [nid]})
+        else:
+            seen_ids.add(nid)
+            valid_nodes.append(node)
+
+    if not seen_ids:
+        return
+
+    raw_edges = graph.get("edges")
+    if raw_edges is not None and not isinstance(raw_edges, list):
+        errors.append({"code": "INVALID_EDGES", "message": "工作流 edges 必须是数组"})
+        return
+
+    edges = raw_edges or []
+    for edge in edges:
+        if not isinstance(edge, dict):
+            errors.append({"code": "INVALID_EDGE", "message": "工作流 edge 必须是对象"})
+            continue
+        src, tgt = edge.get("from"), edge.get("to")
+        if src not in seen_ids or tgt not in seen_ids:
+            errors.append({"code": "INVALID_EDGE_REF", "message": "工作流 edge 引用了不存在的节点"})
+
+    for node in valid_nodes:
+        if not node_registry.has(node["type"]):
+            errors.append({
+                "code": "UNKNOWN_NODE_TYPE",
+                "message": f"未知工作流节点类型: {node['type']}",
+                "node_ids": [node["id"]],
+            })
+
+    if not any(e["code"] == "INVALID_EDGE_REF" for e in errors):
+        _check_cycle(seen_ids, edges, errors)
+
+    _check_warnings(valid_nodes, edges, warnings)
+
+
+def _check_cycle(
+    node_ids: set[str],
+    edges: list[dict[str, Any]],
+    errors: list[dict[str, Any]],
+) -> None:
+    incoming: dict[str, set[str]] = {nid: set() for nid in node_ids}
+    outgoing: dict[str, set[str]] = {nid: set() for nid in node_ids}
+    for edge in edges:
+        if isinstance(edge, dict):
+            src, tgt = edge.get("from"), edge.get("to")
+            if src in node_ids and tgt in node_ids:
+                outgoing[src].add(tgt)
+                incoming[tgt].add(src)
+
+    ready = [nid for nid in node_ids if not incoming[nid]]
+    ordered: list[str] = []
+    while ready:
+        nid = ready.pop(0)
+        ordered.append(nid)
+        for tgt in sorted(outgoing[nid]):
+            incoming[tgt].discard(nid)
+            if not incoming[tgt] and tgt not in ordered and tgt not in ready:
+                ready.append(tgt)
+
+    if len(ordered) != len(node_ids):
+        cycle_nodes = sorted(nid for nid in node_ids if nid not in set(ordered))
+        errors.append({
+            "code": "CYCLE_DETECTED",
+            "message": "工作流图不能包含循环",
+            "node_ids": cycle_nodes,
+        })
+
+
+def _check_warnings(
+    valid_nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+) -> None:
+    node_types = {n["type"] for n in valid_nodes}
+
+    if "control.start" not in node_types:
+        warnings.append({"code": "MISSING_START", "message": "工作流缺少 control.start 节点"})
+    if "control.end" not in node_types:
+        warnings.append({"code": "MISSING_END", "message": "工作流缺少 control.end 节点"})
+
+    if len(valid_nodes) > 1:
+        connected: set[str] = set()
+        for edge in edges:
+            if isinstance(edge, dict):
+                connected.add(edge.get("from", ""))
+                connected.add(edge.get("to", ""))
+        for node in valid_nodes:
+            if node["id"] not in connected:
+                warnings.append({
+                    "code": "ORPHAN_NODE",
+                    "message": f"节点 {node['id']} 未被任何边连接",
+                    "node_ids": [node["id"]],
+                })
+
+    out_map: dict[str, list[str]] = {n["id"]: [] for n in valid_nodes}
+    for edge in edges:
+        if isinstance(edge, dict):
+            src = edge.get("from")
+            if src in out_map:
+                out_map[src].append(edge.get("to"))
+    for node in valid_nodes:
+        if node["type"] == "control.pause" and not out_map.get(node["id"]):
+            warnings.append({
+                "code": "PAUSE_NO_SUCCESSOR",
+                "message": f"暂停节点 {node['id']} 后无后续节点",
+                "node_ids": [node["id"]],
+            })
 
 
 def _dump_json(value: dict[str, Any]) -> str:

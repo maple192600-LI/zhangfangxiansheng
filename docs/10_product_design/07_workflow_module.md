@@ -119,7 +119,7 @@
 }
 ```
 
-**验证规则**（基于代码 `_validate_graph`）：
+**验证规则**（基于代码 `_validate_graph` + `validate_workflow_graph`）：
 - `graph` 必须是 dict
 - `nodes` 必须是非空数组
 - 每个 node 必须是 dict，必须包含 `id`（字符串）和 `type`（字符串）
@@ -127,6 +127,11 @@
 - `edges` 必须是数组（可以为空）
 - 每个 edge 必须是 dict，必须包含 `from` 和 `to`
 - `from` 和 `to` 必须引用 nodes 中存在的 id
+- node type 必须存在于 node_registry（validate 端点检查）
+- graph 不允许有循环（validate 端点检查）
+- 缺少 control.start / control.end 为 warning
+- 孤岛节点（无入边无出边）为 warning
+- pause 节点后无后续节点为 warning
 
 **执行规则**（基于代码 `_ordered_nodes`）：
 - 通过 Kahn 算法拓扑排序确定执行顺序
@@ -354,7 +359,7 @@ pending ──→ running ──→ completed
 | 维度 | 已实现 | 目标 | 差距 |
 |------|--------|------|------|
 | 数据模型 | 4 表 + ORM + Pydantic + 迁移 | 同左 | ✅ 数据模型已到位 |
-| API 端点 | 13 个端点（CRUD + patch + activate/archive + runs + versions + resume） | 13+ 个端点 | ✅ P0 端点已到位 |
+| API 端点 | 14 个端点（CRUD + patch + activate/archive + runs + versions + resume + validate） | 14+ 个端点 | ✅ P0 端点已到位 |
 | 执行引擎 | 同步拓扑排序 + 步骤记录 + 暂停 + 恢复 | 同左 | ✅ 核心引擎已到位 |
 | 节点注册表 | 13 个 V1 可执行节点 | 13+ 个业务节点 | ✅ V1 节点已到位（延期：data.bank_import, data.manual_excel, report.generate, agent.invoke） |
 | Agent 工具 | 无 | 5 个工具 | ❌ 未实现 |

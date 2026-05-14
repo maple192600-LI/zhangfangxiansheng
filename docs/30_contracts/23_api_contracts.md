@@ -238,6 +238,7 @@
 | W11 | Workflow | POST | `/api/workflow/workflows/{id}/runs` | 同步启动一次工作流运行 |
 | W12 | Workflow | GET | `/api/workflow/workflows/{id}/versions` | 工作流版本历史列表（version 降序） |
 | W13 | Workflow | POST | `/api/workflow/runs/{run_id}/resume` | 恢复暂停的运行，继续执行后续节点 |
+| W14 | Workflow | POST | `/api/workflow/workflows/{id}/validate` | 校验工作流 graph（不保存、不创建版本） |
 
 ### `POST /api/manual-flow/ai-parse` 请求/响应
 
@@ -448,6 +449,7 @@ ORM CHECK 约束：`status IN ('draft','active','retired')`。
 
 **版本**
 - v4.6 · 2026-05-13 · 工作流端点对齐 `/api/workflow/*`，新增 graph patch 版本化入口
+- v4.8 · 2026-05-14 · 新增 W14 validate 端点（独立校验 graph，不保存不创建版本）
 - v4.7 · 2026-05-13 · 新增 W12 版本历史列表、W13 暂停恢复端点
 - v4.5 · 2026-05-13 · 新增 `/api/workflows` 工作流编排端点 W1-W10
 - v4.4 · 2026-05-11 · §A1 #13-23 旧 `/api/fund/*` 端点标记为 Phase 5 已删除

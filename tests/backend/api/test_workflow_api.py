@@ -315,3 +315,67 @@ def test_w13_resume_completed_run_returns_error(client):
 def test_w13_resume_not_found(client):
     resp = client.post("/api/workflow/runs/99999/resume")
     assert resp.json()["code"] == 2001
+
+
+# W14: POST /workflows/{id}/validate
+
+
+def test_w14_validate_valid_graph(client):
+    created = _create_workflow(client, code="wf_val_api")
+    graph = {
+        "nodes": [
+            {"id": "s", "type": "control.start", "params": {}},
+            {"id": "e", "type": "control.end", "params": {}},
+        ],
+        "edges": [{"from": "s", "to": "e"}],
+    }
+    resp = client.post(f"/api/workflow/workflows/{created['id']}/validate", json={"graph_json": graph})
+    body = resp.json()
+    assert body["code"] == 0
+    assert body["data"]["valid"] is True
+    assert body["data"]["errors"] == []
+
+
+def test_w14_validate_cycle_returns_error(client):
+    created = _create_workflow(client, code="wf_val_cyc_api")
+    graph = {
+        "nodes": [
+            {"id": "a", "type": "noop", "params": {}},
+            {"id": "b", "type": "noop", "params": {}},
+        ],
+        "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "a"}],
+    }
+    resp = client.post(f"/api/workflow/workflows/{created['id']}/validate", json={"graph_json": graph})
+    body = resp.json()
+    assert body["code"] == 0
+    assert body["data"]["valid"] is False
+    assert any(e["code"] == "CYCLE_DETECTED" for e in body["data"]["errors"])
+
+
+def test_w14_validate_without_graph_json(client):
+    created = _create_workflow(client, code="wf_val_curr_api")
+    resp = client.post(f"/api/workflow/workflows/{created['id']}/validate")
+    body = resp.json()
+    assert body["code"] == 0
+    assert body["data"]["valid"] is True
+
+
+def test_w14_validate_not_found(client):
+    resp = client.post("/api/workflow/workflows/99999/validate")
+    assert resp.json()["code"] == 2001
+
+
+def test_w14_validate_does_not_pollute_versions(client):
+    created = _create_workflow(client, code="wf_val_nov_api")
+    resp_before = client.get(f"/api/workflow/workflows/{created['id']}/versions")
+    versions_before = resp_before.json()["data"]
+    assert len(versions_before) == 1
+
+    client.post(f"/api/workflow/workflows/{created['id']}/validate", json={
+        "graph_json": {"nodes": [{"id": "x", "type": "noop", "params": {}}], "edges": []},
+    })
+
+    resp_after = client.get(f"/api/workflow/workflows/{created['id']}/versions")
+    versions_after = resp_after.json()["data"]
+    assert len(versions_after) == 1
+    assert versions_after[0]["version"] == 1

@@ -280,6 +280,7 @@ node_registry.register("my.node_type", my_handler)
 | W11 | POST | `/api/workflow/workflows/{id}/runs` | ✅ 已实现 | 同步执行 |
 | W12 | GET | `/api/workflow/workflows/{id}/versions` | ✅ 已实现 | 版本历史（降序） |
 | W13 | POST | `/api/workflow/runs/{run_id}/resume` | ✅ 已实现 | 恢复暂停运行 |
+| W14 | POST | `/api/workflow/workflows/{id}/validate` | ✅ 已实现 | 校验 graph（不保存、不创建版本） |
 
 ---
 
@@ -301,6 +302,7 @@ node_registry.register("my.node_type", my_handler)
 | `get_workflow_run` | ✅ 已实现 | 含 steps |
 | `list_workflow_versions` | ✅ 已实现 | version 降序 |
 | `resume_workflow_run` | ✅ 已实现 | 校验 paused，调用 executor |
+| `validate_workflow_graph` | ✅ 已实现 | 独立校验 graph，返回 errors/warnings，不保存不创建版本 |
 
 ---
 
@@ -351,7 +353,7 @@ node_registry.register("my.node_type", my_handler)
 | `workflow_nodes.py` | Registry 类 + noop + pause | 10+ 个业务节点 handler |
 | `workflow_executor.py` | 同步拓扑排序执行 + 暂停 + 失败记录 + 恢复执行 | 超时控制、重试 |
 | `workflow_service.py` | 完整 CRUD + patch + activate/retire + start_run + resume | 运行取消 |
-| `api/workflow.py` | 13 个端点 | 运行取消端点 |
+| `api/workflow.py` | 14 个端点 | 运行取消端点 |
 | `backend/agents/tools/` | 无 | workflow_ops.py（5 个 Agent 工具） |
 | `frontend/src/api/` | 无 | workflow.js（前端 API 文件） |
 | `frontend/src/views/` | 无 | 3 个页面组件 |

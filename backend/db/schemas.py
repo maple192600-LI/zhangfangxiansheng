@@ -769,6 +769,10 @@ class WorkflowRunCreate(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkflowValidateRequest(BaseModel):
+    graph_json: Optional[dict[str, Any]] = None
+
+
 class WorkflowVersionResponse(BaseModel):
     id: int
     workflow_id: int
