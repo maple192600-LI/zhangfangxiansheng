@@ -236,6 +236,11 @@ const navData = {
           { name: '异常处理', explain: '集中处理待确认和异常流水，修正或作废。', route: 'exception-receipt' }
         ]
       },
+      '工作流编排': {
+        tabs: [
+          { name: '工作流编排', explain: '用可视化节点编排资金导入、查询、报表生成和导出流程。', route: 'workflow-list' }
+        ]
+      },
       '资金日报表': {
         tabs: [
           { name: '基础数据表', explain: '基础数据表是所有后续报表的统一底座。', route: 'base-data' },
@@ -335,7 +340,7 @@ const menuExpandedKeys = ref([...defaultExpandedKeys])
 
 // Agent 页面检测
 const isAgentPage = computed(() => route.name === 'agent-detail')
-const isFullPage = computed(() => route.name === 'ai-config')
+const isFullPage = computed(() => route.name === 'ai-config' || route.name === 'workflow-editor')
 
 // Agent 相关
 const showCreateAgentModal = ref(false)
