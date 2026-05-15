@@ -1,0 +1,113 @@
+/* ──────────────────────────────────────────
+   Tabulator 主题覆盖 — 对齐账房先生设计体系
+   必须在 tabulator.min.css 之后引入
+   ────────────────────────────────────────── */
+
+.tabulator {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--text);
+  border: 1px solid var(--line-table);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+/* 表头 */
+.tabulator .tabulator-header {
+  background: var(--thead-bg);
+  border-bottom: 1px solid var(--line-table);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.tabulator .tabulator-header .tabulator-col {
+  background: transparent;
+  border-right: 1px solid var(--line-table-vert);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable .tabulator-col-title {
+  padding-right: 20px;
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+  padding: 8px 10px;
+}
+
+/* 表体 */
+.tabulator .tabulator-tableHolder .tabulator-table {
+  background: transparent;
+}
+
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row {
+  border-bottom: 1px solid var(--line-table-vert);
+  background: transparent;
+  transition: background 0.1s;
+}
+
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row:hover {
+  background: var(--green-3);
+}
+
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell {
+  border-right: 1px solid var(--line-table-vert);
+  padding: 6px 10px;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+/* 选中行 */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.tabulator-selected {
+  background: var(--green-2) !important;
+}
+
+/* 分页器 */
+.tabulator .tabulator-footer {
+  background: var(--thead-bg);
+  border-top: 1px solid var(--line-table);
+  padding: 6px 10px;
+}
+
+.tabulator .tabulator-footer .tabulator-page {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  padding: 4px 10px;
+  margin: 0 2px;
+}
+
+.tabulator .tabulator-footer .tabulator-page:hover {
+  background: var(--green-3);
+  border-color: var(--green);
+  color: var(--text);
+}
+
+.tabulator .tabulator-footer .tabulator-page.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+/* 分页计数器 */
+.tabulator .tabulator-footer .tabulator-page-counter {
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+  margin-right: 8px;
+}
+
+/* 空数据提示 */
+.tabulator .tabulator-placeholder {
+  color: var(--muted);
+  font-size: var(--font-size-base);
+}
+
+/* 列排序箭头 */
+.tabulator .tabulator-header .tabulator-col[aria-sort="ascending"] .tabulator-col-content::after {
+  color: var(--green);
+}
+
+.tabulator .tabulator-header .tabulator-col[aria-sort="descending"] .tabulator-col-content::after {
+  color: var(--green);
+}
