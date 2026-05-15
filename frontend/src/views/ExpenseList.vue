@@ -1,6 +1,5 @@
 <template>
-  <div class="report-print-root-wrapper">
-    <div class="section report-print-root table-workspace-page">
+  <div class="section report-print-root table-workspace-page">
       <div class="section-title">
         <h3>支出明细表</h3>
         <span>按账户、日期汇总的支出明细视图</span>
@@ -35,7 +34,6 @@
         <NButton size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
         <NButton size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
       </div>
-    </div>
   </div>
 </template>
 
