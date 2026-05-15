@@ -1,6 +1,6 @@
 <template>
   <div class="report-print-root-wrapper">
-  <div class="section report-print-root base-data-table-page">
+  <div class="section report-print-root table-workspace-page">
     <div class="section-title">
       <h3>基础数据表</h3>
       <span>所有后续报表的统一底座</span>
@@ -28,7 +28,7 @@
 
     <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
 
-    <div v-else class="base-data-table-main">
+    <div v-else class="table-workspace-main">
       <AdvancedDataTable
         ref="tableRef"
         :columns="tabulatorColumns"
@@ -37,7 +37,7 @@
         :loading="false"
         :enable-selection="true"
         row-key="id"
-        :height="tableHeight"
+        fill-parent
         empty-text="暂无数据，请先录入或导入流水"
         @selection-change="onSelectionChange"
       />
@@ -78,12 +78,6 @@ const errorMsg = ref('')
 const selectedIds = ref([])
 const tableRef = ref(null)
 const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('base_data')
-
-const tableHeight = computed(() => {
-  if (!rows.value.length) return '220px'
-  if (rows.value.length <= 12) return ''
-  return 'min(640px, calc(100vh - 320px))'
-})
 
 const MONEY_FIELD_SET = new Set(['income_amount', 'expense_amount', 'rolling_balance'])
 
@@ -190,21 +184,4 @@ onMounted(async () => {
 
 <style scoped>
 @import './common.css';
-
-.base-data-table-page {
-  display: block;
-}
-
-.base-data-table-main {
-  width: 100%;
-  margin-top: 8px;
-}
-
-.base-data-table-main :deep(.adt-wrap) {
-  width: 100%;
-}
-
-.base-data-table-main :deep(.adt-container) {
-  min-height: 0;
-}
 </style>
