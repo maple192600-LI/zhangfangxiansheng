@@ -617,6 +617,7 @@ watch(() => router.currentRoute.value, (route) => {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
+  height: 100%;
   flex: 1;
   min-height: 0;
   display: flex;
