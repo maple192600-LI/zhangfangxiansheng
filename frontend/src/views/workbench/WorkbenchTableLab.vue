@@ -38,8 +38,6 @@
           :pagination="true"
           :pagination-size="50"
           :enable-column-resize="true"
-          @rowClick="(row) => console.log('[TableLab] rowClick', row)"
-          @tableReady="() => console.log('[TableLab] tableReady')"
         />
       </div>
 
