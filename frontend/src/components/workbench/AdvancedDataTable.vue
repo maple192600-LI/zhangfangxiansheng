@@ -1,5 +1,5 @@
 <template>
-  <div class="adt-wrap">
+  <div class="adt-wrap" :class="densityClass">
     <div v-if="errorText" class="adt-error">
       {{ errorText }}
     </div>
@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-import { ref, watch, toRef } from 'vue'
+import { ref, watch, computed } from 'vue'
 import 'tabulator-tables/dist/css/tabulator.min.css'
 import '@/styles/tabulator-theme.css'
 import { useTabulatorTable } from '@/composables/useTabulatorTable'
@@ -47,17 +47,11 @@ const emit = defineEmits([
 
 const containerRef = ref(null)
 
-const densityCellPadding = {
-  compact: '3px 6px',
-  default: '6px 10px',
-  comfortable: '10px 14px',
-}
-
-const densityHeaderPadding = {
-  compact: '5px 6px',
-  default: '8px 10px',
-  comfortable: '12px 14px',
-}
+const densityClass = computed(() => {
+  if (props.density === 'compact') return 'adt-density-compact'
+  if (props.density === 'comfortable') return 'adt-density-comfortable'
+  return ''
+})
 
 const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows, clearSelection } =
   useTabulatorTable(containerRef, {
@@ -68,10 +62,12 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
     emptyText: props.emptyText,
     rowClick: (e, data) => emit('rowClick', data),
     rowDblClick: (e, data) => emit('rowDblClick', data),
+    onSelectionChange: (data) => emit('selectionChange', data),
     onTableReady: () => emit('tableReady'),
     onTableError: (msg) => emit('tableError', msg),
     tabulatorOverrides: {
-      selectable: props.enableSelection ? true : false,
+      index: props.rowKey,
+      selectableRows: props.enableSelection ? true : false,
       resizableColumns: props.enableColumnResize,
       movableColumns: props.enableColumnMove,
       ...(props.height ? { height: props.height } : {}),
@@ -148,5 +144,21 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* density: compact */
+.adt-density-compact :deep(.tabulator .tabulator-header .tabulator-col .tabulator-col-content) {
+  padding: 5px 6px;
+}
+.adt-density-compact :deep(.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell) {
+  padding: 3px 6px;
+}
+
+/* density: comfortable */
+.adt-density-comfortable :deep(.tabulator .tabulator-header .tabulator-col .tabulator-col-content) {
+  padding: 12px 14px;
+}
+.adt-density-comfortable :deep(.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell) {
+  padding: 10px 14px;
 }
 </style>

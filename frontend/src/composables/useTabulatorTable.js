@@ -57,6 +57,12 @@ export function useTabulatorTable(containerRef, options) {
         instance.on('rowDblClick', (e, row) => options.rowDblClick(e, row.getData()))
       }
 
+      if (options.onSelectionChange) {
+        instance.on('rowSelectionChanged', (data) => {
+          options.onSelectionChange(data)
+        })
+      }
+
       table.value = instance
       initialized = true
     } catch (err) {
