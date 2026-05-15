@@ -509,9 +509,10 @@ watch(() => router.currentRoute.value, (route) => {
 </script>
 
 <style scoped>
-/* n-layout 外层需要撑满视口 */
+/* n-layout 外层锁定视口高度，禁止 body 级滚动 */
 .app-layout {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ── 左侧导航 Sider ── */
@@ -603,6 +604,16 @@ watch(() => router.currentRoute.value, (route) => {
   flex-direction: column;
   gap: 14px;
   overflow: hidden;
+  height: 100%;
+}
+
+/* 禁用 Naive UI NLayoutContent 内部滚动容器 */
+.main-area :deep(.n-scroll-content),
+.main-area :deep(.n-layout-scroll-container) {
+  overflow: hidden !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-area--full {
