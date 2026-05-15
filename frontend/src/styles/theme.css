@@ -186,6 +186,6 @@ body {
   .excel-host { overflow: visible; }
 
   /* 隐藏非报表页面内容 */
-  .content > *:not(.report-print-root-wrapper),
-  .content-full > *:not(.report-print-root-wrapper) { display: none !important; }
+  .content > *:not(.report-print-root-wrapper):not(.report-print-root),
+  .content-full > *:not(.report-print-root-wrapper):not(.report-print-root) { display: none !important; }
 }
