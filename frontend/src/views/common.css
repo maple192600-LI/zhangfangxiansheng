@@ -548,6 +548,7 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   flex: 1;
   min-height: 0;
   overflow: auto;
+  margin-top: 0;
 }
 
 /* ===== 响应式 ===== */
