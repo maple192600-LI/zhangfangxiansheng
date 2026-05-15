@@ -18,7 +18,7 @@
         :data="logs"
         :pagination="false"
         :loading="loading"
-        height="100%"
+        fill-parent
         empty-text="暂无日志"
       />
     </div>
@@ -89,13 +89,4 @@ function resetFilters() {
 
 <style scoped>
 @import './common.css';
-
-.table-workspace-main :deep(.adt-wrap) {
-  height: 100%;
-  min-height: 0;
-}
-
-.table-workspace-main :deep(.adt-container) {
-  min-height: 0;
-}
 </style>
