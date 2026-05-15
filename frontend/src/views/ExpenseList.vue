@@ -1,6 +1,6 @@
 <template>
   <div class="report-print-root-wrapper">
-    <div class="section report-print-root">
+    <div class="section report-print-root table-workspace-page">
       <div class="section-title">
         <h3>支出明细表</h3>
         <span>按账户、日期汇总的支出明细视图</span>
@@ -17,26 +17,24 @@
           <NButton type="primary" @click="page = 1; loadData()">生成报表</NButton>
         </NSpace>
       </div>
-      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <table v-else-if="displayColumns.length">
-        <thead>
-          <tr>
-            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in rows" :key="r.id">
-            <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
-          </tr>
-          <tr v-if="!rows.length"><td :colspan="displayColumns.length" class="empty-cell">暂无支出数据</td></tr>
-        </tbody>
-      </table>
-    </div>
 
-    <div class="bottom-bar" v-if="total > 0">
-      <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
-      <NButton size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
-      <NButton size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
+      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+
+      <div v-else class="table-workspace-main">
+        <AdvancedDataTable
+          :columns="tabulatorColumns"
+          :data="rows"
+          :pagination="false"
+          fill-parent
+          empty-text="暂无支出数据"
+        />
+      </div>
+
+      <div class="bottom-bar" v-if="total > 0 && !templateExcelHtml">
+        <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
+        <NButton size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
+        <NButton size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
+      </div>
     </div>
   </div>
 </template>
@@ -45,10 +43,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NButton, NSpace } from 'naive-ui'
 import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
+import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
-import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 import { getReportFilename } from '@/utils/reportFilename'
@@ -86,25 +85,31 @@ const endDateTs = computed({
   set: (v) => { endDate.value = tsToDateString(v) }
 })
 
+const MONEY_FIELD_SET = new Set(['amount', 'rolling_balance'])
+
 const DEFAULT_COLUMNS = [
-  { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
-  { field_key: 'entity_name', header_name: '单位简称', width: 120, align: 'left' },
-  { field_key: 'account_name', header_name: '账户名称', width: 150, align: 'left' },
-  { field_key: 'summary_text', header_name: '摘要', width: 200, align: 'left' },
-  { field_key: 'counterparty_name', header_name: '对方', width: 120, align: 'left' },
-  { field_key: 'amount', header_name: '支出金额', width: 130, align: 'right' },
-  { field_key: 'rolling_balance', header_name: '余额', width: 130, align: 'right' },
+  { field: 'business_date', title: '日期', width: 120, hozAlign: 'center', formatter: emptyDashFormatter },
+  { field: 'entity_name', title: '单位简称', width: 120, formatter: emptyDashFormatter },
+  { field: 'account_name', title: '账户名称', width: 150, formatter: emptyDashFormatter },
+  { field: 'summary_text', title: '摘要', formatter: emptyDashFormatter },
+  { field: 'counterparty_name', title: '对方', width: 120, formatter: emptyDashFormatter },
+  { field: 'amount', title: '支出金额', width: 130, hozAlign: 'right', formatter: moneyFormatter },
+  { field: 'rolling_balance', title: '余额', width: 130, hozAlign: 'right', formatter: moneyFormatter },
 ]
 
-const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
-
-const MONEY_KEYS = new Set(['amount', 'rolling_balance'])
-function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }
-function cellVal(r, key) {
-  if (MONEY_KEYS.has(key)) return fmtAmt(r[key])
-  if (r[key] === undefined || r[key] === null) return ''
-  return r[key]
-}
+const tabulatorColumns = computed(() => {
+  if (templateColumns.value?.length) {
+    return templateColumns.value.map(col => {
+      const def = { field: col.field_key, title: col.header_name }
+      if (col.width) def.width = col.width
+      if (col.align) def.hozAlign = col.align
+      if (MONEY_FIELD_SET.has(col.field_key)) def.formatter = moneyFormatter
+      else def.formatter = emptyDashFormatter
+      return def
+    })
+  }
+  return DEFAULT_COLUMNS
+})
 
 async function loadData() {
   try {
