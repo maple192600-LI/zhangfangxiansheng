@@ -338,10 +338,6 @@ onUnmounted(async () => {
 <style scoped>
 @import '../common.css';
 
-.tlab {
-  max-width: 1200px;
-}
-
 .tlab-notice {
   background: #fef9f0;
   border: 1px solid #e8d9be;
