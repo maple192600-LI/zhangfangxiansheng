@@ -97,6 +97,11 @@ def primitives_db(tmp_db_path):
         "agent_sessions",
         "skills_v2",
         "agents_v2",
+        # 006 migration 创建的工作流表，同样会被 create_all 提前创建
+        "workflow_run_steps",
+        "workflow_runs",
+        "workflow_versions",
+        "workflows",
     ]
     with new_engine.begin() as conn:
         for t in v3_tables:

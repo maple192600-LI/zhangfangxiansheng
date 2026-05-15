@@ -9,6 +9,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src')
     }
   },
+  optimizeDeps: {
+    exclude: ['@duckdb/duckdb-wasm'],
+  },
   server: {
     port: 5180,
     proxy: {

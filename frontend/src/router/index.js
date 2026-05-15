@@ -67,6 +67,9 @@ const routes = [
       { path: 'agent/tax', name: 'agent-tax', component: Placeholder },
       { path: 'agent/custom', name: 'agent-custom', component: Placeholder },
 
+      // 工作台技术验证（不加入正式导航）
+      { path: 'workbench/table-lab', name: 'workbench-table-lab', component: () => import('@/views/workbench/WorkbenchTableLab.vue') },
+
       // 系统设置 > 数据中心
       { path: 'account-manage', name: 'account-manage', component: () => import('@/views/AccountManage.vue') },
       { path: 'data/report-tpl', name: 'data-report-tpl', component: () => import('@/views/ReportTemplate.vue') },
