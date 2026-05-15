@@ -1,6 +1,6 @@
 <template>
-  <div class="adt-wrap" :class="densityClass">
-    <div ref="containerRef" class="adt-container" :style="{ height: height || undefined }"></div>
+  <div class="adt-wrap" :class="[densityClass, { 'adt-fill': isFillMode }]">
+    <div ref="containerRef" class="adt-container" :style="containerStyle"></div>
     <div v-if="loading && !errorText" class="adt-loading">{{ loadingText }}</div>
     <div v-if="errorText" class="adt-error">
       {{ errorText }}
@@ -19,6 +19,7 @@ const props = defineProps({
   data: { type: Array, default: () => [] },
   rowKey: { type: String, default: 'id' },
   height: { type: String, default: '' },
+  fillParent: { type: Boolean, default: false },
   pagination: { type: Boolean, default: true },
   paginationSize: { type: Number, default: 50 },
   loading: { type: Boolean, default: false },
@@ -42,6 +43,14 @@ const emit = defineEmits([
 
 const containerRef = ref(null)
 
+const isFillMode = computed(() => props.fillParent || props.height === '100%')
+
+const containerStyle = computed(() => {
+  if (isFillMode.value) return {}
+  if (props.height) return { height: props.height }
+  return {}
+})
+
 const SELECTION_COL = {
   formatter: 'rowSelection',
   titleFormatter: 'rowSelection',
@@ -62,6 +71,12 @@ const resolvedColumns = computed(() => {
   return props.enableSelection ? [SELECTION_COL, ...cols] : cols
 })
 
+const tabulatorHeight = computed(() => {
+  if (isFillMode.value) return '100%'
+  if (props.height) return props.height
+  return ''
+})
+
 const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows, clearSelection } =
   useTabulatorTable(containerRef, {
     get columns() { return resolvedColumns.value },
@@ -79,7 +94,7 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
       selectableRows: props.enableSelection ? true : false,
       resizableColumns: props.enableColumnResize,
       movableColumns: props.enableColumnMove,
-      ...(props.height ? { height: props.height } : {}),
+      ...(tabulatorHeight.value ? { height: tabulatorHeight.value } : {}),
     },
   })
 
@@ -123,9 +138,21 @@ defineExpose({
   width: 100%;
 }
 
+.adt-wrap.adt-fill {
+  height: 100%;
+}
+
+.adt-wrap.adt-fill > .adt-container {
+  height: 100%;
+}
+
 .adt-container {
   width: 100%;
   min-height: 200px;
+}
+
+.adt-wrap.adt-fill > .adt-container {
+  min-height: 0;
 }
 
 .adt-loading {
