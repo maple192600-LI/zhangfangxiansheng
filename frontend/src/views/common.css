@@ -543,6 +543,13 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   overflow: hidden;
 }
 
+/* Excel 模板路径：在数据页 flex 布局下也要受约束 */
+.table-workspace-page > .excel-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 1200px) {
   .metric-strip, .dashboard-grid, .dashboard-grid-2,
