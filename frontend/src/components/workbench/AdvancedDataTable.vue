@@ -42,15 +42,29 @@ const emit = defineEmits([
 
 const containerRef = ref(null)
 
+const SELECTION_COL = {
+  formatter: 'rowSelection',
+  titleFormatter: 'rowSelection',
+  hozAlign: 'center',
+  headerSort: false,
+  width: 40,
+  frozen: true,
+}
+
 const densityClass = computed(() => {
   if (props.density === 'compact') return 'adt-density-compact'
   if (props.density === 'comfortable') return 'adt-density-comfortable'
   return ''
 })
 
+const resolvedColumns = computed(() => {
+  const cols = props.columns || []
+  return props.enableSelection ? [SELECTION_COL, ...cols] : cols
+})
+
 const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows, clearSelection } =
   useTabulatorTable(containerRef, {
-    get columns() { return props.columns },
+    get columns() { return resolvedColumns.value },
     get data() { return props.data },
     pagination: props.pagination,
     paginationSize: props.paginationSize,
@@ -75,8 +89,8 @@ watch(() => props.data, (newData, oldData) => {
   }
 })
 
-watch(() => props.columns, (newCols, oldCols) => {
-  if (isReady.value && newCols !== oldCols) {
+watch(resolvedColumns, (newCols) => {
+  if (isReady.value) {
     updateColumns(newCols)
   }
 })
