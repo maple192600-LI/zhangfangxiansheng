@@ -54,12 +54,13 @@ export async function initDuckDB() {
   }
 }
 
-export async function registerJsonRows(tableName, rows) {
+export async function replaceJsonRows(tableName, rows) {
   ensureReady()
-  const json = JSON.stringify(rows)
-  await db.registerFileText(`${tableName}.json`, json)
   const conn = await db.connect()
   try {
+    await conn.query(`DROP TABLE IF EXISTS "${tableName}"`)
+    const json = JSON.stringify(rows)
+    await db.registerFileText(`${tableName}.json`, json)
     await conn.insertJSONFromPath(`${tableName}.json`, { name: tableName })
   } finally {
     await conn.close()

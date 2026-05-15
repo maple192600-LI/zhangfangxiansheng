@@ -6,6 +6,13 @@
         <span>工作台高级表格底座技术验证（内部页面，非正式功能）</span>
       </div>
 
+      <!-- 技术验证声明 -->
+      <div class="tlab-notice">
+        <strong>内部技术验证页</strong> — 所有数据均为浏览器端模拟数据。
+        DuckDB 仅做浏览器端临时分析，<strong>不写入任何正式数据库</strong>，
+        查询结果<strong>不代表正式报表结论</strong>。
+      </div>
+
       <!-- 数据量控制 -->
       <div class="tlab-controls">
         <span class="tlab-controls-label">数据行数：</span>
@@ -30,6 +37,9 @@
           height="400px"
           :pagination="true"
           :pagination-size="50"
+          :enable-column-resize="true"
+          @rowClick="(row) => console.log('[TableLab] rowClick', row)"
+          @tableReady="() => console.log('[TableLab] tableReady')"
         />
       </div>
 
@@ -67,7 +77,7 @@
             size="small"
             style="margin-left: 8px"
           >
-            {{ { idle: '未启用', initializing: '初始化中', ready: '就绪', closed: '已关闭' }[dbStatus] }}
+            {{ { idle: '未启用', initializing: '初始化中', ready: '就绪' }[dbStatus] || '未启用' }}
           </NTag>
         </div>
 
@@ -85,9 +95,12 @@
           </NButton>
         </div>
 
-        <!-- 查询耗时 -->
-        <div v-if="queryTime !== null" class="tlab-timing">
-          查询耗时：{{ queryTime }}ms | 返回 {{ queryResultRows.length.toLocaleString() }} 行
+        <!-- 性能指标 -->
+        <div v-if="perfMetrics.length" class="tlab-metrics">
+          <div v-for="m in perfMetrics" :key="m.label" class="tlab-metric-item">
+            <span class="tlab-metric-label">{{ m.label }}</span>
+            <span class="tlab-metric-value" :class="m.cls || ''">{{ m.value }}</span>
+          </div>
         </div>
 
         <!-- 查询错误 -->
@@ -97,7 +110,7 @@
 
         <!-- 查询结果 -->
         <div v-if="queryResultColumns.length" class="tlab-query-result">
-          <h4 class="tlab-subtitle">查询结果</h4>
+          <h4 class="tlab-subtitle">查询结果（{{ queryResultRows.length.toLocaleString() }} 行）</h4>
           <AdvancedDataTable
             :columns="queryDisplayColumns"
             :data="queryResultRows"
@@ -118,7 +131,7 @@ import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { generateRows } from './mockTransactionRows.js'
 import {
   initDuckDB,
-  registerJsonRows,
+  replaceJsonRows,
   queryReadonly,
   closeDuckDB,
   getDuckDBStatus,
@@ -134,6 +147,28 @@ const queryError = ref('')
 const queryTime = ref(null)
 const queryResultColumns = ref([])
 const queryResultRows = ref([])
+
+// DuckDB 数据脏标记
+let duckdbDataDirty = false
+// 性能指标
+const duckdbInitTime = ref(null)
+const duckdbSyncTime = ref(null)
+
+const perfMetrics = computed(() => {
+  const items = []
+  items.push({ label: '当前行数', value: rows.value.length.toLocaleString() })
+  if (duckdbInitTime.value !== null) {
+    items.push({ label: 'DuckDB 初始化', value: duckdbInitTime.value + 'ms', cls: 'tlab-metric-green' })
+  }
+  if (duckdbSyncTime.value !== null) {
+    items.push({ label: '数据同步', value: duckdbSyncTime.value + 'ms', cls: 'tlab-metric-green' })
+  }
+  if (queryTime.value !== null) {
+    items.push({ label: '查询耗时', value: queryTime.value + 'ms', cls: 'tlab-metric-green' })
+    items.push({ label: '返回行数', value: queryResultRows.value.length.toLocaleString() })
+  }
+  return items
+})
 
 const tableColumns = [
   { title: '#', field: '_row_no', width: 60, hozAlign: 'center' },
@@ -226,14 +261,25 @@ function changeRowSize(size) {
   queryResultRows.value = []
   queryError.value = ''
   queryTime.value = null
+  duckdbSyncTime.value = null
+  if (dbStatus.value === 'ready') {
+    duckdbDataDirty = true
+  }
 }
 
 async function doInitDuckDB() {
   dbStatus.value = 'initializing'
   try {
+    const start = performance.now()
     await initDuckDB()
+    duckdbInitTime.value = Math.round(performance.now() - start)
     dbStatus.value = getDuckDBStatus()
-    await registerJsonRows('transactions', rows.value)
+
+    const syncStart = performance.now()
+    await replaceJsonRows('transactions', rows.value)
+    duckdbSyncTime.value = Math.round(performance.now() - syncStart)
+    duckdbDataDirty = false
+
     message.success('DuckDB 已就绪，数据已注册')
   } catch (e) {
     dbStatus.value = getDuckDBStatus()
@@ -247,7 +293,19 @@ async function doCloseDuckDB() {
   queryResultColumns.value = []
   queryResultRows.value = []
   queryTime.value = null
+  queryError.value = ''
+  duckdbInitTime.value = null
+  duckdbSyncTime.value = null
+  duckdbDataDirty = false
   message.info('DuckDB 已关闭')
+}
+
+async function syncIfNeeded() {
+  if (!duckdbDataDirty) return
+  const syncStart = performance.now()
+  await replaceJsonRows('transactions', rows.value)
+  duckdbSyncTime.value = Math.round(performance.now() - syncStart)
+  duckdbDataDirty = false
 }
 
 async function runPreset(preset) {
@@ -256,9 +314,7 @@ async function runPreset(preset) {
   queryTime.value = null
 
   try {
-    if (rowCount.value !== rows.value.length) {
-      await registerJsonRows('transactions', rows.value)
-    }
+    await syncIfNeeded()
 
     const start = performance.now()
     const result = await queryReadonly(preset.sql)
@@ -286,6 +342,17 @@ onUnmounted(async () => {
 
 .tlab {
   max-width: 1200px;
+}
+
+.tlab-notice {
+  background: #fef9f0;
+  border: 1px solid #e8d9be;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: var(--font-size-sm);
+  color: #7a6a4f;
+  line-height: 1.7;
+  margin-bottom: 16px;
 }
 
 .tlab-controls {
@@ -339,10 +406,36 @@ onUnmounted(async () => {
   margin-bottom: 10px;
 }
 
-.tlab-timing {
+.tlab-metrics {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}
+
+.tlab-metric-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tlab-metric-label {
   font-size: var(--font-size-xs);
+  color: var(--muted);
+}
+
+.tlab-metric-value {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tlab-metric-green {
   color: var(--green);
-  margin-bottom: 8px;
 }
 
 .tlab-error {
