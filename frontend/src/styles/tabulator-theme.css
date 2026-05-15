@@ -111,3 +111,56 @@
 .tabulator .tabulator-header .tabulator-col[aria-sort="descending"] .tabulator-col-content::after {
   color: var(--green);
 }
+
+/* ── 密度：compact ── */
+.adt-density-compact .tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+  padding: 5px 6px;
+}
+.adt-density-compact .tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell {
+  padding: 3px 6px;
+}
+
+/* ── 密度：comfortable ── */
+.adt-density-comfortable .tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+  padding: 12px 14px;
+}
+.adt-density-comfortable .tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell {
+  padding: 10px 14px;
+}
+
+/* ── 标签（formatter 输出） ── */
+.tabulator-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  border: 1px solid transparent;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tabulator-tag-blue {
+  background: var(--tag-blue-bg);
+  color: var(--tag-blue-text);
+  border-color: var(--tag-blue-border);
+}
+.tabulator-tag-green {
+  background: var(--tag-green-bg);
+  color: var(--tag-green-text);
+  border-color: var(--tag-green-border);
+}
+.tabulator-tag-orange {
+  background: var(--tag-warn-bg);
+  color: var(--tag-warn-text);
+  border-color: var(--tag-warn-border);
+}
+.tabulator-tag-red {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.tabulator-tag-gray {
+  background: var(--tag-gray-bg);
+  color: var(--tag-gray-text);
+  border-color: var(--tag-gray-border);
+}

@@ -73,7 +73,7 @@ export function useTabulatorTable(containerRef, options) {
   function destroyTable() {
     destroyed = true
     if (table.value) {
-      try { table.value.destroy() } catch { /* ignore */ }
+      try { table.value.destroy() } catch (e) { console.warn('[useTabulatorTable] destroy failed:', e) }
       table.value = null
     }
     isReady.value = false
@@ -84,21 +84,22 @@ export function useTabulatorTable(containerRef, options) {
     if (!table.value || !isReady.value || destroyed) return
     try {
       table.value.replaceData(newData || [])
-    } catch { /* ignore stale operations */ }
+    } catch (e) { console.warn('[useTabulatorTable] updateData failed:', e) }
   }
 
   function updateColumns(newColumns) {
     if (!table.value || !isReady.value || destroyed) return
     try {
       table.value.setColumns(newColumns || [])
-    } catch { /* ignore stale operations */ }
+    } catch (e) { console.warn('[useTabulatorTable] updateColumns failed:', e) }
   }
 
   function getSelectedRows() {
     if (!table.value || !isReady.value || destroyed) return []
     try {
       return table.value.getSelectedData()
-    } catch {
+    } catch (e) {
+      console.warn('[useTabulatorTable] getSelectedRows failed:', e)
       return []
     }
   }
@@ -107,7 +108,7 @@ export function useTabulatorTable(containerRef, options) {
     if (!table.value || !isReady.value || destroyed) return
     try {
       table.value.deselectRow()
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[useTabulatorTable] clearSelection failed:', e) }
   }
 
   onMounted(() => {
