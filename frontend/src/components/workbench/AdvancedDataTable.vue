@@ -1,15 +1,10 @@
 <template>
   <div class="adt-wrap" :class="densityClass">
+    <div ref="containerRef" class="adt-container" :style="{ height: height || undefined }"></div>
+    <div v-if="loading && !errorText" class="adt-loading">{{ loadingText }}</div>
     <div v-if="errorText" class="adt-error">
       {{ errorText }}
     </div>
-    <div v-else-if="loading" class="adt-loading">{{ loadingText }}</div>
-    <div
-      v-show="!errorText && !loading"
-      ref="containerRef"
-      class="adt-container"
-      :style="{ height: height || undefined }"
-    ></div>
   </div>
 </template>
 
@@ -74,14 +69,14 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
     },
   })
 
-watch(() => props.data, (newData) => {
-  if (isReady.value) {
+watch(() => props.data, (newData, oldData) => {
+  if (isReady.value && newData !== oldData) {
     updateData(newData)
   }
 })
 
-watch(() => props.columns, (newCols) => {
-  if (isReady.value) {
+watch(() => props.columns, (newCols, oldCols) => {
+  if (isReady.value && newCols !== oldCols) {
     updateColumns(newCols)
   }
 })
@@ -94,7 +89,7 @@ watch(() => props.selectedRowKeys, (keys) => {
     } else {
       table.value.deselectRow()
     }
-  } catch { /* ignore */ }
+  } catch (e) { console.warn('[AdvancedDataTable] selectedRowKeys sync failed:', e) }
 })
 
 defineExpose({
@@ -144,21 +139,5 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* density: compact */
-.adt-density-compact :deep(.tabulator .tabulator-header .tabulator-col .tabulator-col-content) {
-  padding: 5px 6px;
-}
-.adt-density-compact :deep(.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell) {
-  padding: 3px 6px;
-}
-
-/* density: comfortable */
-.adt-density-comfortable :deep(.tabulator .tabulator-header .tabulator-col .tabulator-col-content) {
-  padding: 12px 14px;
-}
-.adt-density-comfortable :deep(.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell) {
-  padding: 10px 14px;
 }
 </style>
