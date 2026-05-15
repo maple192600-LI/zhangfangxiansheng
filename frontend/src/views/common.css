@@ -13,6 +13,11 @@
 }
 .section:last-child { margin-bottom: 0; }
 
+/* 数据页：覆盖 .section 的 margin，防止高度溢出 */
+.section.table-workspace-page {
+  margin-bottom: 0;
+}
+
 .section-title {
   display: flex;
   align-items: center;
@@ -517,6 +522,7 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .table-workspace-page > .section-title {
@@ -534,6 +540,7 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
 .table-workspace-main {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* ===== 响应式 ===== */
