@@ -515,6 +515,12 @@ watch(() => router.currentRoute.value, (route) => {
   overflow: hidden;
 }
 
+/* 禁用 NLayout 根级滚动容器，它是 sidebar 和 main-area 的共同父级 */
+.app-layout > :deep(.n-layout-scroll-container) {
+  overflow: hidden !important;
+  height: 100%;
+}
+
 /* ── 左侧导航 Sider ── */
 .sidebar {
   position: sticky;
