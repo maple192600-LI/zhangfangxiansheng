@@ -1,5 +1,5 @@
 <template>
-  <div class="section">
+  <div class="section table-workspace-page">
     <div class="section-title">
       <h3>操作日志</h3>
     </div>
@@ -12,13 +12,16 @@
       <NButton secondary @click="resetFilters">重置</NButton>
     </div>
 
-    <AdvancedDataTable
-      :columns="columns"
-      :data="logs"
-      :pagination="false"
-      :loading="loading"
-      empty-text="暂无日志"
-    />
+    <div class="table-workspace-main">
+      <AdvancedDataTable
+        :columns="columns"
+        :data="logs"
+        :pagination="false"
+        :loading="loading"
+        height="100%"
+        empty-text="暂无日志"
+      />
+    </div>
 
     <div class="bottom-bar" v-if="totalPages > 1">
       <span class="count-info">共 {{ total }} 条 / 第 {{ page }} 页</span>
@@ -86,4 +89,13 @@ function resetFilters() {
 
 <style scoped>
 @import './common.css';
+
+.table-workspace-main :deep(.adt-wrap) {
+  height: 100%;
+  min-height: 0;
+}
+
+.table-workspace-main :deep(.adt-container) {
+  min-height: 0;
+}
 </style>

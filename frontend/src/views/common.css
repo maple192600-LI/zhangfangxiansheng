@@ -511,6 +511,31 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   gap: 8px;
 }
 
+/* ===== 表格工作区页面 ===== */
+.table-workspace-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-workspace-page > .section-title {
+  flex-shrink: 0;
+}
+
+.table-workspace-page > .filters-bar {
+  flex-shrink: 0;
+}
+
+.table-workspace-page > .bottom-bar {
+  flex-shrink: 0;
+}
+
+.table-workspace-main {
+  flex: 1;
+  min-height: 0;
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 1200px) {
   .metric-strip, .dashboard-grid, .dashboard-grid-2,
