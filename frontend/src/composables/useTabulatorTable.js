@@ -11,6 +11,9 @@ export function useTabulatorTable(containerRef, options) {
     if (!containerRef.value || initialized || destroyed) return
 
     try {
+      const editable = options.editable || false
+      const clipboard = options.clipboard || false
+
       const defaultConfig = {
         pagination: options.pagination !== false ? 'local' : false,
         paginationSize: options.paginationSize || 50,
@@ -36,8 +39,27 @@ export function useTabulatorTable(containerRef, options) {
         },
       }
 
+      const editableOverrides = editable ? {
+        keybindings: {
+          navLeft: 'arrowleft',
+          navRight: 'arrowright',
+          navUp: 'arrowup',
+          navDown: 'arrowdown',
+          navNext: 'tab',
+          navPrev: 'shift+tab',
+        },
+        editTriggerEvent: 'click',
+      } : {}
+
+      const clipboardOverrides = clipboard ? {
+        clipboard: true,
+        clipboardPasteAction: 'insert',
+      } : {}
+
       const instance = new Tabulator(containerRef.value, {
         ...defaultConfig,
+        ...editableOverrides,
+        ...clipboardOverrides,
         ...(options.tabulatorOverrides || {}),
         columns: options.columns || [],
         data: options.data || [],
@@ -92,6 +114,21 @@ export function useTabulatorTable(containerRef, options) {
         instance.on('cellClick', (e, cell) => options.cellClick(e, cell))
       }
 
+      if (options.onCellEdited) {
+        instance.on('cellEdited', (cell) => {
+          const field = cell.getColumn()?.getField()
+          const value = cell.getValue()
+          const rowData = cell.getRow()?.getData()
+          options.onCellEdited({ field, value, rowData })
+        })
+      }
+
+      if (options.onPaste) {
+        instance.on('clipboardPasted', (rows, rowsData) => {
+          options.onPaste(rowsData || [])
+        })
+      }
+
       table.value = instance
       initialized = true
     } catch (err) {
@@ -140,6 +177,46 @@ export function useTabulatorTable(containerRef, options) {
     } catch (e) { console.warn('[useTabulatorTable] clearSelection failed:', e) }
   }
 
+  function addRow(rowData, pos = 'bottom') {
+    if (!table.value || !isReady.value || destroyed) return
+    try {
+      return table.value.addRow(rowData || {}, pos)
+    } catch (e) { console.warn('[useTabulatorTable] addRow failed:', e) }
+  }
+
+  function addRows(rowsData, pos = 'bottom') {
+    if (!table.value || !isReady.value || destroyed) return
+    try {
+      for (const row of (rowsData || [])) {
+        table.value.addRow(row, pos)
+      }
+    } catch (e) { console.warn('[useTabulatorTable] addRows failed:', e) }
+  }
+
+  function deleteRow(rowId) {
+    if (!table.value || !isReady.value || destroyed) return
+    try {
+      table.value.deleteRow(rowId)
+    } catch (e) { console.warn('[useTabulatorTable] deleteRow failed:', e) }
+  }
+
+  function getData() {
+    if (!table.value || !isReady.value || destroyed) return []
+    try {
+      return table.value.getData()
+    } catch (e) {
+      console.warn('[useTabulatorTable] getData failed:', e)
+      return []
+    }
+  }
+
+  function clearData() {
+    if (!table.value || !isReady.value || destroyed) return
+    try {
+      table.value.clearData()
+    } catch (e) { console.warn('[useTabulatorTable] clearData failed:', e) }
+  }
+
   onMounted(() => {
     destroyed = false
     nextTick(createTable)
@@ -163,5 +240,10 @@ export function useTabulatorTable(containerRef, options) {
     destroyTable,
     getSelectedRows,
     clearSelection,
+    addRow,
+    addRows,
+    deleteRow,
+    getData,
+    clearData,
   }
 }

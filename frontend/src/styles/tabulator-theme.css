@@ -224,3 +224,50 @@
     display: none !important;
   }
 }
+
+/* ── 可编辑单元格 ── */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell.tab-editing {
+  border: 1px solid var(--green) !important;
+  background: #fff !important;
+  padding: 4px 6px;
+}
+
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell input,
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell select,
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell .tabulator-edit-select {
+  border: none;
+  background: transparent;
+  font-size: inherit;
+  font-family: inherit;
+  color: inherit;
+  width: 100%;
+  padding: 0;
+  outline: none;
+}
+
+/* ── dirty 行高亮 ── */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.adt-row-dirty {
+  background: #faf8f0 !important;
+}
+
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.adt-row-dirty:hover {
+  background: #f5f2e8 !important;
+}
+
+/* ── 行删除按钮 ── */
+.mf-row-del {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.mf-row-del:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}

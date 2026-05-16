@@ -68,6 +68,12 @@ const props = defineProps({
 
   hiddenFields: { type: Array, default: () => [] },
   allColumnsForSettings: { type: Array, default: () => [] },
+
+  editable: { type: Boolean, default: false },
+  editMode: { type: String, default: 'none' },
+  enableClipboard: { type: Boolean, default: false },
+  enableKeyboardNav: { type: Boolean, default: false },
+  rowIdField: { type: String, default: '_row_id' },
 })
 
 const emit = defineEmits([
@@ -84,6 +90,11 @@ const emit = defineEmits([
   'columnWidthChange',
   'preferencesReset',
   'cellClick',
+  'cellEdited',
+  'rowsChanged',
+  'rowAdded',
+  'rowDeleted',
+  'paste',
 ])
 
 const containerRef = ref(null)
@@ -182,13 +193,15 @@ function toggleColumnPanel() {
   }
 }
 
-const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows, clearSelection } =
+const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows, clearSelection, addRow, addRows, deleteRow, getData, clearData } =
   useTabulatorTable(containerRef, {
     get columns() { return resolvedColumns.value },
     get data() { return props.data },
     pagination: props.pagination,
     paginationSize: props.paginationSize,
     emptyText: props.emptyText,
+    editable: props.editable,
+    clipboard: props.enableClipboard,
     rowClick: (e, data) => emit('rowClick', data),
     rowDblClick: (e, data) => emit('rowDblClick', data),
     onSelectionChange: (data) => emit('selectionChange', data),
@@ -198,8 +211,10 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
     onColumnMoved: (order) => emit('columnOrderChange', order),
     onColumnVisibilityChanged: ({ field, visible }) => emit('columnVisibilityChange', { field, visible }),
     cellClick: (e, cell) => emit('cellClick', { event: e, cell, rowData: cell.getRow()?.getData(), field: cell.getColumn()?.getField() }),
+    onCellEdited: ({ field, value, rowData }) => emit('cellEdited', { field, value, rowData }),
+    onPaste: (rowsData) => emit('paste', rowsData),
     tabulatorOverrides: {
-      index: props.rowKey,
+      index: props.rowKey || (props.editable ? props.rowIdField : 'id'),
       selectableRows: props.enableSelection ? true : false,
       resizableColumns: props.enableColumnResize || props.showToolbar,
       movableColumns: props.enableColumnMove || props.showColumnSettings,
@@ -255,6 +270,11 @@ defineExpose({
   destroyTable,
   getSelectedRows,
   clearSelection,
+  addRow,
+  addRows,
+  deleteRow,
+  getData,
+  clearData,
 })
 </script>
 

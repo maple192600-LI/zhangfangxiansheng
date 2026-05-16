@@ -1,78 +1,64 @@
 <template>
-  <div>
-    <div class="section">
-      <div class="section-title">
-        <h3>手工流水录入</h3>
-        <span>快速录入或 Excel 上传手工流水数据</span>
+  <div class="section table-workspace-page">
+    <div class="section-title">
+      <h3>手工流水录入</h3>
+      <span>快速录入或 Excel 上传手工流水数据</span>
+    </div>
+    <div class="filters-bar">
+      <div style="flex:1"></div>
+      <div class="btn-row">
+        <NButton secondary @click="doExportTemplate">下载录入模板</NButton>
+        <NButton :type="tab==='quick'?'primary':'default'" @click="tab='quick'">快速录入</NButton>
+        <NButton :type="tab==='upload'?'primary':'default'" @click="tab='upload'">Excel 上传</NButton>
       </div>
-      <div class="filters-bar">
-        <div style="flex:1"></div>
-        <div class="btn-row">
-          <NButton secondary @click="doExportTemplate">下载录入模板</NButton>
-          <NButton :type="tab==='quick'?'primary':'default'" @click="tab='quick'">快速录入</NButton>
-          <NButton :type="tab==='upload'?'primary':'default'" @click="tab='upload'">Excel 上传</NButton>
-        </div>
-      </div>
+    </div>
 
-      <!-- Track A: 快速录入 -->
-      <div v-if="tab==='quick'">
-        <!-- 可编辑表格 -->
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th v-for="col in visibleColumns" :key="col.field_code" :style="{minWidth: col.minWidth}">{{ col.field_name_cn }}</th>
-                <th style="width:40px"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, idx) in editableRows" :key="idx">
-                <td v-for="col in visibleColumns" :key="col.field_code">
-                  <template v-if="col.field_code === 'entity_match_key'">
-                    <NSelect filterable v-model:value="row[col.field_code]" :options="entitySelectOptions" placeholder="选择单位简称" size="tiny" />
-                  </template>
-                  <template v-else-if="col.field_code === 'account_match_key'">
-                    <input v-model="row[col.field_code]" class="cell-input" placeholder="账户编号/名称" />
-                  </template>
-                  <template v-else-if="col.data_type === 'number'">
-                    <input v-model="row[col.field_code]" type="number" step="0.01" class="cell-input" />
-                  </template>
-                  <template v-else-if="col.field_code === 'business_date'">
-                    <NDatePicker v-model:value="row[col.field_code]" type="date" value-format="yyyy-MM-dd" size="tiny" style="width:100%" />
-                  </template>
-                  <template v-else>
-                    <input v-model="row[col.field_code]" class="cell-input" :placeholder="col.field_name_cn" />
-                  </template>
-                </td>
-                <td><NButton secondary size="small" @click="editableRows.splice(idx, 1)" title="删除行">x</NButton></td>
-              </tr>
-              <tr v-if="!editableRows.length">
-                <td :colspan="visibleColumns.length + 1" style="text-align:center;color:var(--muted);padding:30px">点击下方"添加行"开始录入</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="bottom-bar">
-          <NButton secondary @click="addRow()">+ 添加行</NButton>
-          <NButton secondary @click="addRows(5)">+ 添加5行</NButton>
-          <NButton type="primary" @click="doSave" :disabled="saving">{{ saving ? '保存中...' : '保存到暂存区' }}</NButton>
-          <span class="count-info">共 {{ editableRows.length }} 行</span>
-        </div>
+    <!-- Track A: 快速录入 -->
+    <div v-if="tab==='quick'" class="mf-edit-area">
+      <div class="mf-toolbar adt-no-print">
+        <span class="mf-toolbar-label"><span class="adt-toolbar-dot"></span>可编辑表格</span>
+        <span class="mf-toolbar-count">{{ rowCountText }}</span>
+        <span class="adt-toolbar-sep"></span>
+        <NButton secondary size="small" @click="onAddRow">+ 添加行</NButton>
+        <NButton secondary size="small" @click="onAddRows(5)">+ 添加5行</NButton>
+        <NButton secondary size="small" @click="onClearData" :disabled="rowCount === 0">清空</NButton>
+        <span style="flex:1"></span>
+        <span class="mf-toolbar-hint">可从 Excel 复制粘贴多行数据</span>
+        <NButton type="primary" size="small" @click="doSave" :disabled="saving || rowCount === 0">{{ saving ? '保存中...' : '保存到暂存区' }}</NButton>
       </div>
 
-      <!-- Track B: Excel 上传 -->
-      <div v-if="tab==='upload'" class="upload-section">
-        <div class="upload-zone" @dragover.prevent @drop.prevent="onDrop" @click="$refs.fileInput.click()">
-          <div class="upload-icon">+</div>
-          <p>将 Excel 文件拖拽到此处，或点击选择文件</p>
-          <input ref="fileInput" type="file" accept=".xls,.xlsx,.csv" style="display:none" @change="onFileChange" />
-        </div>
-        <div v-if="uploadFile" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 14px;background:var(--ok-bg);border:1px solid var(--ok-border);border-radius:var(--radius-sm)">
-          <span>{{ uploadFile.name }} ({{ (uploadFile.size/1024).toFixed(1) }}KB)</span>
-          <div style="display:flex;gap:8px">
-            <NButton type="primary" @click="doUpload" :disabled="uploading">{{ uploading ? '上传中...' : '上传预览' }}</NButton>
-          </div>
+      <div class="mf-table-main">
+        <AdvancedDataTable
+          ref="adtRef"
+          :columns="tabulatorColumns"
+          :data="[]"
+          :rowKey="rowIdField"
+          :pagination="false"
+          :showToolbar="false"
+          :editable="true"
+          :editMode="'cell'"
+          :enableClipboard="true"
+          :emptyText="'点击上方「添加行」开始录入，或直接从 Excel 复制粘贴数据'"
+          :height="'100%'"
+          :fillParent="true"
+          @cellEdited="onCellEdited"
+          @paste="onPaste"
+          @tableReady="onTableReady"
+        />
+      </div>
+    </div>
+
+    <!-- Track B: Excel 上传 -->
+    <div v-if="tab==='upload'" class="upload-section">
+      <div class="upload-zone" @dragover.prevent @drop.prevent="onDrop" @click="$refs.fileInput.click()">
+        <div class="upload-icon">+</div>
+        <p>将 Excel 文件拖拽到此处，或点击选择文件</p>
+        <input ref="fileInput" type="file" accept=".xls,.xlsx,.csv" style="display:none" @change="onFileChange" />
+      </div>
+      <div v-if="uploadFile" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 14px;background:var(--ok-bg);border:1px solid var(--ok-border);border-radius:var(--radius-sm)">
+        <span>{{ uploadFile.name }} ({{ (uploadFile.size/1024).toFixed(1) }}KB)</span>
+        <div style="display:flex;gap:8px">
+          <NButton type="primary" @click="doUpload" :disabled="uploading">{{ uploading ? '上传中...' : '上传预览' }}</NButton>
         </div>
       </div>
     </div>
@@ -81,72 +67,214 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { NDatePicker, NSelect, NButton } from 'naive-ui'
+import { NButton } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import * as master from '@/api/master'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 
 const router = useRouter()
+const rowIdField = '_row_id'
+let idCounter = 0
 
 const schemes = ref([])
 const fieldPool = ref([])
 const currentSchemeCode = ref('manual_multi_subject_basic')
 const entities = ref([])
-const entitySelectOptions = computed(() => entities.value.map(e => ({ label: e.entity_name, value: e.entity_name })))
+const entityOptions = computed(() => entities.value.map(e => e.entity_name))
 const tab = ref('quick')
-const editableRows = ref([])
 const saving = ref(false)
 const uploading = ref(false)
 const uploadFile = ref(null)
-const uploadResult = ref(null)
+const dirtyRowIds = ref(new Set())
+const adtRef = ref(null)
+const rowCount = ref(0)
 
 const currentScheme = computed(() => schemes.value.find(s => s.scheme_code === currentSchemeCode.value))
+
 const visibleColumns = computed(() => {
   if (!currentScheme.value) return []
   return currentScheme.value.selected_fields
     .map(fc => fieldPool.value.find(f => f.field_code === fc))
     .filter(Boolean)
-    .map(f => ({ ...f, minWidth: f.is_core ? '100px' : '80px' }))
 })
 
-function addRow(count = 1) {
-  for (let i = 0; i < count; i++) {
-    const row = {}
-    for (const col of visibleColumns.value) {
-      if (col.field_code === 'entity_match_key') {
-        row[col.field_code] = ''
-      } else if (col.field_code === 'business_date') {
-        row[col.field_code] = new Date().toISOString().slice(0, 10)
-      } else {
-        row[col.field_code] = ''
-      }
+const tabulatorColumns = computed(() => {
+  const cols = visibleColumns.value.map(f => {
+    const col = {
+      field: f.field_code,
+      title: f.field_name_cn,
+      minWidth: f.is_core ? 120 : 90,
+      resizable: true,
     }
-    editableRows.value.push(row)
+
+    if (f.field_code === 'entity_match_key') {
+      col.editor = 'list'
+      col.editorParams = {
+        values: entityOptions.value,
+        autocomplete: true,
+        allowEmpty: true,
+        listOnEmpty: true,
+        clearable: true,
+        defaultValue: '',
+      }
+      col.formatter = 'plaintext'
+    } else if (f.field_code === 'business_date') {
+      col.editor = 'input'
+      col.formatter = 'plaintext'
+    } else if (f.data_type === 'number') {
+      col.editor = 'number'
+      col.editorParams = { step: 0.01 }
+      col.hozAlign = 'right'
+      col.formatter = 'plaintext'
+    } else {
+      col.editor = 'input'
+      col.formatter = 'plaintext'
+    }
+
+    return col
+  })
+
+  cols.push({
+    field: '__action',
+    title: '',
+    width: 50,
+    hozAlign: 'center',
+    headerSort: false,
+    resizable: false,
+    formatter: () => '<button class="mf-row-del" title="删除行">✕</button>',
+    cellClick: (_e, cell) => {
+      const rowId = cell.getRow()?.getData()?.[rowIdField]
+      if (rowId != null) {
+        onDeleteRow(rowId)
+      }
+    },
+  })
+
+  return cols
+})
+
+function newEmptyRow() {
+  idCounter++
+  const row = { [rowIdField]: idCounter }
+  for (const col of visibleColumns.value) {
+    if (col.field_code === 'business_date') {
+      row[col.field_code] = new Date().toISOString().slice(0, 10)
+    } else {
+      row[col.field_code] = ''
+    }
+  }
+  return row
+}
+
+function refreshRowCount() {
+  if (adtRef.value?.isReady) {
+    rowCount.value = adtRef.value.getData().length
   }
 }
-function addRows(n) { addRow(n) }
 
-async function loadData() {
-  try {
-    const [pool, schemeList, tree] = await Promise.all([
-      api.getFieldPool(),
-      api.getSchemes(),
-      master.getAccountsTree(),
-    ])
-    fieldPool.value = pool || []
-    schemes.value = schemeList || []
-    entities.value = tree || []
-  } catch (e) { console.error(e) }
+function onTableReady() {
+  refreshRowCount()
+}
+
+function onAddRow() {
+  if (!adtRef.value?.isReady) return
+  adtRef.value.addRow(newEmptyRow(), 'bottom')
+  refreshRowCount()
+}
+
+function onAddRows(n) {
+  if (!adtRef.value?.isReady) return
+  for (let i = 0; i < n; i++) {
+    const row = newEmptyRow()
+    adtRef.value.addRow(row, 'bottom')
+  }
+  refreshRowCount()
+}
+
+function onDeleteRow(rowId) {
+  if (!adtRef.value?.isReady) return
+  dirtyRowIds.value.delete(rowId)
+  dirtyRowIds.value = new Set(dirtyRowIds.value)
+  adtRef.value.deleteRow(rowId)
+  refreshRowCount()
+}
+
+function onClearData() {
+  if (!adtRef.value?.isReady) return
+  adtRef.value.clearData()
+  dirtyRowIds.value = new Set()
+  rowCount.value = 0
+}
+
+function onCellEdited({ rowData }) {
+  const rowId = rowData?.[rowIdField]
+  if (rowId != null) {
+    dirtyRowIds.value = new Set([...dirtyRowIds.value, rowId])
+  }
+  refreshRowCount()
+}
+
+function onPaste() {
+  refreshRowCount()
+}
+
+const rowCountText = computed(() => {
+  const dirty = dirtyRowIds.value.size
+  if (dirty > 0) return `共 ${rowCount.value} 行，${dirty} 行已编辑`
+  return `共 ${rowCount.value} 行`
+})
+
+function validateRows(rows) {
+  const errors = []
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    const allEmpty = Object.entries(r).every(([k, v]) => k === rowIdField || k === '__action' || v === '' || v == null)
+    if (allEmpty) continue
+
+    const rowNum = i + 1
+    if (r.business_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(r.business_date))) {
+      errors.push(`第 ${rowNum} 行：日期格式错误，应为 yyyy-MM-dd`)
+    }
+    const numericFields = ['income_amount', 'expense_amount', 'previous_balance_input', 'ending_balance_input']
+    for (const f of numericFields) {
+      if (r[f] !== '' && r[f] != null) {
+        const num = Number(r[f])
+        if (isNaN(num)) {
+          errors.push(`第 ${rowNum} 行：${f} 必须是数字`)
+        }
+      }
+    }
+  }
+  return errors
 }
 
 async function doSave() {
-  if (!editableRows.value.length) { alert('请先添加行'); return }
+  if (!adtRef.value?.isReady) return
+
+  const allRows = adtRef.value.getData()
+  const nonEmptyRows = allRows.filter(r => {
+    return Object.entries(r).some(([k, v]) => k !== rowIdField && k !== '__action' && v !== '' && v != null)
+  })
+
+  if (!nonEmptyRows.length) {
+    alert('请至少录入一条有效数据')
+    return
+  }
+
+  const errors = validateRows(nonEmptyRows)
+  if (errors.length) {
+    alert('数据校验失败：\n' + errors.join('\n'))
+    return
+  }
+
   saving.value = true
   try {
-    const rows = editableRows.value.map(r => {
+    const rows = nonEmptyRows.map(r => {
       const obj = {}
       for (const [k, v] of Object.entries(r)) {
-        if (k === 'income_amount' || k === 'expense_amount' || k === 'previous_balance_input' || k === 'ending_balance_input') {
+        if (k === rowIdField || k === '__action') continue
+        if (['income_amount', 'expense_amount', 'previous_balance_input', 'ending_balance_input'].includes(k)) {
           obj[k] = v === '' || v == null ? null : Number(v)
         } else {
           obj[k] = v
@@ -156,7 +284,7 @@ async function doSave() {
     })
     const result = await api.saveQuickEntry({ scheme_code: currentSchemeCode.value, rows })
     alert(`保存成功！共 ${result.inserted_rows} 条记录已保存`)
-    editableRows.value = []
+    onClearData()
     router.push({ path: '/upload-preview', query: { batch_code: result.batch_code } })
   } catch (e) { alert('保存失败: ' + (e.message || e)) }
   saving.value = false
@@ -186,26 +314,69 @@ function doExportTemplate() {
   }).catch(e => alert('下载失败: ' + (e.message || e)))
 }
 
+async function loadData() {
+  try {
+    const [pool, schemeList, tree] = await Promise.all([
+      api.getFieldPool(),
+      api.getSchemes(),
+      master.getAccountsTree(),
+    ])
+    fieldPool.value = pool || []
+    schemes.value = schemeList || []
+    entities.value = tree || []
+  } catch (e) { console.error(e) }
+}
+
 onMounted(() => { loadData() })
 </script>
 
 <style scoped>
 @import './common.css';
 
-.table-wrap {
-  overflow: auto;
-  max-height: calc(100vh - 340px);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+.mf-edit-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.cell-input {
-  width: 100%; border: 1px solid transparent; background: transparent;
-  padding: 4px 6px; font-size: var(--font-size-sm); border-radius: var(--radius-sm);
+.mf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-table);
+  background: var(--thead-bg);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: var(--font-size-sm);
+  user-select: none;
+  flex-shrink: 0;
 }
-.cell-input:focus { border-color: var(--green); outline: none; background: #fff; }
-select.cell-input { font-size: var(--font-size-xs); }
+
+.mf-toolbar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.mf-toolbar-count {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+
+.mf-toolbar-hint {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+
+.mf-table-main {
+  flex: 1;
+  min-height: 300px;
+  overflow: hidden;
+}
 
 .upload-section { padding: 20px 0; }
 </style>
