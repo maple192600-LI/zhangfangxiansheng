@@ -5,9 +5,9 @@
       <span>现金类资金载体的结果视图</span>
     </div>
     <div class="filters-bar">
-      <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable />
+      <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable />
       <span style="color:var(--muted);font-size:13px">至</span>
-      <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable />
+      <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable />
       <MasterAccountSelect v-model="accountId" :entities="entities" />
       <div class="filter-spacer"></div>
       <div class="btn-row">
@@ -181,10 +181,30 @@ const { handlePrint } = useReportPrint()
 
 const TABLE_KEY = 'cash-journal'
 
-const today = new Date().toISOString().slice(0, 10)
-const startDate = ref(today)
-const endDate = ref(today)
+const today = new Date()
+const todayStr = today.toISOString().slice(0, 10)
+const startDate = ref(todayStr)
+const endDate = ref(todayStr)
 const accountId = ref(null)
+
+function dateStringToTs(s) {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+function tsToDateString(ts) {
+  if (ts == null) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const startDateTs = computed({
+  get: () => dateStringToTs(startDate.value),
+  set: (v) => { startDate.value = tsToDateString(v) }
+})
+const endDateTs = computed({
+  get: () => dateStringToTs(endDate.value),
+  set: (v) => { endDate.value = tsToDateString(v) }
+})
 
 const entities = ref([])
 const blocks = ref([])
