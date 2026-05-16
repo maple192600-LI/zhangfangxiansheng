@@ -19,6 +19,8 @@
         :pagination="false"
         :loading="loading"
         fill-parent
+        show-toolbar
+        :total-rows="total"
         empty-text="暂无日志"
       />
     </div>

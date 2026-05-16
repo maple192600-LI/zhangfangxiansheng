@@ -1,5 +1,17 @@
 <template>
   <div class="adt-wrap" :class="[densityClass, { 'adt-fill': isFillMode }]">
+    <div v-if="showToolbar" class="adt-toolbar adt-no-print">
+      <span class="adt-toolbar-label"><span class="adt-toolbar-dot"></span>高级表格</span>
+      <span class="adt-toolbar-count">{{ rowCountText }}</span>
+      <span class="adt-toolbar-sep"></span>
+      <span class="adt-toolbar-density">
+        <button :class="{ active: currentDensity === 'compact' }" @click="setDensity('compact')">紧凑</button>
+        <button :class="{ active: currentDensity === 'default' }" @click="setDensity('default')">默认</button>
+        <button :class="{ active: currentDensity === 'comfortable' }" @click="setDensity('comfortable')">舒适</button>
+      </span>
+      <span class="adt-toolbar-hint">↔ 拖动列边界调整宽度</span>
+      <button v-if="showRefresh" class="adt-toolbar-refresh" @click="emit('refresh')" title="刷新数据">↻</button>
+    </div>
     <div ref="containerRef" class="adt-container" :style="containerStyle"></div>
     <div v-if="loading && !errorText" class="adt-loading">{{ loadingText }}</div>
     <div v-if="errorText" class="adt-error">
@@ -31,6 +43,9 @@ const props = defineProps({
   enableColumnResize: { type: Boolean, default: false },
   enableColumnMove: { type: Boolean, default: false },
   density: { type: String, default: 'default' },
+  showToolbar: { type: Boolean, default: false },
+  showRefresh: { type: Boolean, default: false },
+  totalRows: { type: Number, default: 0 },
   rowClass: { type: Function, default: null },
 })
 
@@ -40,9 +55,29 @@ const emit = defineEmits([
   'selectionChange',
   'tableReady',
   'tableError',
+  'densityChange',
+  'refresh',
 ])
 
 const containerRef = ref(null)
+
+const currentDensity = ref(props.density)
+
+watch(() => props.density, (v) => { currentDensity.value = v })
+
+function setDensity(value) {
+  currentDensity.value = value
+  emit('densityChange', value)
+}
+
+const rowCountText = computed(() => {
+  const total = props.totalRows
+  const current = props.data.length
+  if (total && total !== current) {
+    return `共 ${total} 条，当前页 ${current} 条`
+  }
+  return `共 ${current} 行`
+})
 
 const isFillMode = computed(() => props.fillParent || props.height === '100%')
 
@@ -62,8 +97,8 @@ const SELECTION_COL = {
 }
 
 const densityClass = computed(() => {
-  if (props.density === 'compact') return 'adt-density-compact'
-  if (props.density === 'comfortable') return 'adt-density-comfortable'
+  if (currentDensity.value === 'compact') return 'adt-density-compact'
+  if (currentDensity.value === 'comfortable') return 'adt-density-comfortable'
   return ''
 })
 
@@ -93,7 +128,7 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
     tabulatorOverrides: {
       index: props.rowKey,
       selectableRows: props.enableSelection ? true : false,
-      resizableColumns: props.enableColumnResize,
+      resizableColumns: props.enableColumnResize || props.showToolbar,
       movableColumns: props.enableColumnMove,
       ...(tabulatorHeight.value ? { height: tabulatorHeight.value } : {}),
       ...(props.rowClass ? {
@@ -156,10 +191,18 @@ defineExpose({
 
 .adt-wrap.adt-fill {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.adt-wrap.adt-fill > .adt-toolbar {
+  flex-shrink: 0;
 }
 
 .adt-wrap.adt-fill > .adt-container {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .adt-container {
@@ -196,5 +239,104 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.adt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-table);
+  background: var(--thead-bg);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: var(--font-size-sm);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.adt-toolbar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.adt-toolbar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.adt-toolbar-count {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+
+.adt-toolbar-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line);
+  margin: 0 4px;
+}
+
+.adt-toolbar-density {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.adt-toolbar-density button {
+  padding: 2px 10px;
+  font-size: var(--font-size-xs);
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.adt-toolbar-density button + button {
+  border-left: 1px solid var(--line);
+}
+
+.adt-toolbar-density button.active {
+  background: var(--green);
+  color: #fff;
+}
+
+.adt-toolbar-density button:not(.active):hover {
+  background: var(--green-3);
+}
+
+.adt-toolbar-hint {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+
+.adt-toolbar-refresh {
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.adt-toolbar-refresh:hover {
+  background: var(--green-3);
+  color: var(--green);
+  border-color: var(--green);
 }
 </style>

@@ -17,7 +17,12 @@
         </NSpace>
       </div>
 
-      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+      <div v-if="templateExcelHtml" class="table-workspace-main template-view">
+        <div class="template-hint adt-no-print">
+          当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
+        </div>
+        <div class="excel-host" v-html="templateExcelHtml"></div>
+      </div>
 
       <div v-else class="table-workspace-main">
         <AdvancedDataTable
@@ -25,6 +30,8 @@
           :data="rows"
           :pagination="false"
           fill-parent
+          show-toolbar
+          :total-rows="total"
           empty-text="暂无收入数据"
         />
       </div>

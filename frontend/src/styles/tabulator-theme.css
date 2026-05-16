@@ -185,3 +185,11 @@
 .tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.total-row .tabulator-cell {
   border-top: 2px solid var(--line);
 }
+
+/* ── 工具条打印隐藏 ── */
+@media print {
+  .adt-toolbar,
+  .adt-no-print {
+    display: none !important;
+  }
+}

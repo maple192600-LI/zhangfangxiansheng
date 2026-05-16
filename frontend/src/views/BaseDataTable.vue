@@ -25,7 +25,12 @@
     <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
     <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载数据...</p></div>
 
-    <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+    <div v-else-if="templateExcelHtml" class="table-workspace-main template-view">
+      <div class="template-hint adt-no-print">
+        当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
+      </div>
+      <div class="excel-host" v-html="templateExcelHtml"></div>
+    </div>
 
     <div v-else class="table-workspace-main">
       <AdvancedDataTable
@@ -37,6 +42,8 @@
         :enable-selection="true"
         row-key="id"
         fill-parent
+        show-toolbar
+        :total-rows="total"
         empty-text="暂无数据，请先录入或导入流水"
         @selection-change="onSelectionChange"
       />
