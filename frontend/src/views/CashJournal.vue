@@ -11,145 +11,141 @@
       <MasterAccountSelect v-model="accountId" :entities="entities" />
       <div class="filter-spacer"></div>
       <div class="btn-row">
+        <NButton v-if="hasBookView" secondary @click="togglePreview">{{ previewOpen ? '关闭预览' : '账簿预览' }}</NButton>
         <NButton secondary @click="doExport">导出</NButton>
-        <NButton secondary @click="handlePrint">打印</NButton>
+        <NButton secondary @click="handlePrint">{{ previewOpen ? '打印账簿' : '页面打印' }}</NButton>
         <NButton type="primary" @click="loadReport">生成报表</NButton>
       </div>
     </div>
     <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
     <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成报表...</p></div>
 
-    <!-- 账簿视图：templateExcelHtml 或 hasFullLayout -->
-    <div v-else-if="isBookView" class="table-workspace-main template-view">
-      <div class="template-hint adt-no-print">
-        <span class="template-hint-main">
-          账簿视图 · 当前显示正式账簿版式；高级表格交互未启用。
-        </span>
-        <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
+    <!-- 账簿预览面板 -->
+    <template v-else>
+      <div v-if="previewOpen" class="table-workspace-main book-preview">
+        <div class="preview-note adt-no-print">
+          <span>账簿预览 · 正式账簿以导出文件为准</span>
+          <button class="view-switch-btn" type="button" @click="previewOpen = false">关闭预览</button>
+        </div>
+        <!-- 路径 A：原 Excel 完整渲染 -->
+        <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+        <!-- 路径 B：完整 Excel 布局渲染 -->
+        <div v-else-if="hasFullLayout" class="excel-layout-wrapper">
+          <table class="excel-layout-table" :style="tableStyle">
+            <colgroup>
+              <col v-for="(w, ci) in templateLayout.col_widths" :key="ci" :style="{ width: w + 'px' }" />
+            </colgroup>
+            <tbody>
+              <tr v-for="(lr, lri) in fixedRows" :key="'f'+lri" :class="rowClass(lr)">
+                <td
+                  v-for="cell in toFullRow(lr)"
+                  :key="cell.col"
+                  v-show="!cell._skip"
+                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                  :rowspan="cell.rowspan > 1 ? cell.rowspan : undefined"
+                  :class="fixedCellClass(lr, cell)"
+                  :style="fixedCellStyle(lr, cell)"
+                >{{ fixedCellText(cell) }}</td>
+              </tr>
+              <template v-for="(block, bi) in blocks" :key="'b'+bi">
+                <tr class="data-row block-start">
+                  <td
+                    v-for="cell in firstRowFull"
+                    :key="cell.col"
+                    v-show="!cell._skip"
+                    :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                    :class="dataCellClass(cell)"
+                    :style="dataCellStyle(cell)"
+                  >{{ firstRowCellText(cell, block) }}</td>
+                </tr>
+                <tr v-for="(r, ri) in block.rows" :key="'r'+ri" class="data-row">
+                  <td
+                    v-for="cell in detailRowFull"
+                    :key="cell.col"
+                    v-show="!cell._skip"
+                    :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                    :class="dataCellClass(cell)"
+                    :style="dataCellStyle(cell)"
+                  >{{ detailCellText(cell, r) }}</td>
+                </tr>
+                <tr class="subtotal-row">
+                  <td
+                    v-for="cell in subtotalRowFull"
+                    :key="cell.col"
+                    v-show="!cell._skip"
+                    :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                    :class="subtotalCellClass(cell)"
+                    :style="dataCellStyle(cell)"
+                  >{{ subtotalCellText(cell, block) }}</td>
+                </tr>
+              </template>
+              <template v-if="!blocks.length">
+                <tr class="data-row block-start">
+                  <td
+                    v-for="cell in firstRowFull"
+                    :key="cell.col"
+                    v-show="!cell._skip"
+                    :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                    :class="dataCellClass(cell)"
+                    :style="dataCellStyle(cell)"
+                  >{{ emptyCellText(cell) }}</td>
+                </tr>
+                <tr v-for="n in 3" :key="'empty'+n" class="data-row">
+                  <td
+                    v-for="cell in detailRowFull"
+                    :key="cell.col"
+                    v-show="!cell._skip"
+                    :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                    :class="dataCellClass(cell)"
+                    :style="dataCellStyle(cell)"
+                  > </td>
+                </tr>
+                <tr class="subtotal-row">
+                  <td
+                    v-for="cell in subtotalRowFull"
+                    :key="cell.col"
+                    v-show="!cell._skip"
+                    :colspan="cell.colspan > 1 ? cell.colspan : undefined"
+                    :class="subtotalCellClass(cell)"
+                    :style="dataCellStyle(cell)"
+                  >{{ cell.text || ' ' }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <!-- 路径 A：原 Excel 完整渲染 -->
-      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <!-- 路径 B：完整 Excel 布局渲染 -->
-      <div v-else-if="hasFullLayout" class="excel-layout-wrapper">
-        <table class="excel-layout-table" :style="tableStyle">
-          <colgroup>
-            <col v-for="(w, ci) in templateLayout.col_widths" :key="ci" :style="{ width: w + 'px' }" />
-          </colgroup>
-          <tbody>
-            <tr v-for="(lr, lri) in fixedRows" :key="'f'+lri" :class="rowClass(lr)">
-              <td
-                v-for="cell in toFullRow(lr)"
-                :key="cell.col"
-                v-show="!cell._skip"
-                :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                :rowspan="cell.rowspan > 1 ? cell.rowspan : undefined"
-                :class="fixedCellClass(lr, cell)"
-                :style="fixedCellStyle(lr, cell)"
-              >{{ fixedCellText(cell) }}</td>
-            </tr>
-            <template v-for="(block, bi) in blocks" :key="'b'+bi">
-              <tr class="data-row block-start">
-                <td
-                  v-for="cell in firstRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ firstRowCellText(cell, block) }}</td>
-              </tr>
-              <tr v-for="(r, ri) in block.rows" :key="'r'+ri" class="data-row">
-                <td
-                  v-for="cell in detailRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ detailCellText(cell, r) }}</td>
-              </tr>
-              <tr class="subtotal-row">
-                <td
-                  v-for="cell in subtotalRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="subtotalCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ subtotalCellText(cell, block) }}</td>
-              </tr>
-            </template>
-            <template v-if="!blocks.length">
-              <tr class="data-row block-start">
-                <td
-                  v-for="cell in firstRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ emptyCellText(cell) }}</td>
-              </tr>
-              <tr v-for="n in 3" :key="'empty'+n" class="data-row">
-                <td
-                  v-for="cell in detailRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                > </td>
-              </tr>
-              <tr class="subtotal-row">
-                <td
-                  v-for="cell in subtotalRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="subtotalCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ cell.text || ' ' }}</td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
 
-    <!-- 数据视图：AdvancedDataTable -->
-    <div v-else-if="hasColumns" class="table-workspace-main data-view">
-      <div v-if="hasBookView" class="view-mode-strip adt-no-print">
-        <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
-        <button class="view-switch-btn" type="button" @click="setView('book')">切换到账簿视图</button>
+      <!-- ADT 主视图 -->
+      <div v-else-if="hasColumns" class="table-workspace-main">
+        <AdvancedDataTable
+          :columns="appliedColumns"
+          :data="displayRows"
+          :pagination="false"
+          fill-parent
+          show-toolbar
+          :density="tableDensity"
+          :table-key="TABLE_KEY"
+          show-column-settings
+          show-reset-preferences
+          :hidden-fields="hiddenFields"
+          :all-columns-for-settings="tabulatorColumns"
+          empty-text="暂无日记账数据，选择日期范围和账户后点击'生成报表'"
+          :row-key="'__row_key'"
+          @density-change="onDensityChange"
+          @column-width-change="onColumnWidthChange"
+          @column-order-change="onColumnOrderChange"
+          @column-visibility-change="onColumnVisibilityChange"
+          @preferences-reset="onPreferencesReset"
+        />
       </div>
-      <AdvancedDataTable
-        :columns="appliedColumns"
-        :data="displayRows"
-        :pagination="false"
-        fill-parent
-        show-toolbar
-        :density="tableDensity"
-        :table-key="TABLE_KEY"
-        show-column-settings
-        show-reset-preferences
-        :is-in-data-view="isDataView"
-        :hidden-fields="hiddenFields"
-        :all-columns-for-settings="tabulatorColumns"
-        empty-text="暂无日记账数据，选择日期范围和账户后点击'生成报表'"
-        :row-key="'__row_key'"
-        @density-change="onDensityChange"
-        @column-width-change="onColumnWidthChange"
-        @column-order-change="onColumnOrderChange"
-        @column-visibility-change="onColumnVisibilityChange"
-        @preferences-reset="onPreferencesReset"
-      />
-    </div>
 
-    <div v-else class="empty-state">
-      <div class="empty-icon">📊</div>
-      <h4>暂无日记账数据</h4>
-      <p>选择日期范围和账户后点击"生成报表"</p>
-    </div>
+      <div v-else class="empty-state">
+        <div class="empty-icon">📊</div>
+        <h4>暂无日记账数据</h4>
+        <p>选择日期范围和账户后点击"生成报表"</p>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -215,7 +211,7 @@ const { templateColumns, templateLayout, templateExcelHtml, templateLoaded, load
 
 // ── 视图状态 ──────────────────────────────
 
-const viewMode = ref('book')
+const previewOpen = ref(false)
 
 const hasFullLayout = computed(() => {
   const layout = templateLayout.value
@@ -225,12 +221,9 @@ const hasFullLayout = computed(() => {
 })
 
 const hasBookView = computed(() => !!templateExcelHtml.value || hasFullLayout.value)
-const isBookView = computed(() => hasBookView.value && viewMode.value === 'book')
-const isDataView = computed(() => !isBookView.value)
 
-function setView(mode) {
-  if (mode === 'book' && !hasBookView.value) return
-  viewMode.value = mode
+function togglePreview() {
+  previewOpen.value = !previewOpen.value
 }
 
 // ── 数据视图列定义 ──────────────────────────────
@@ -525,9 +518,9 @@ onMounted(async () => {
 <style scoped>
 @import './common.css';
 
-/* CashJournal 双视图本地样式（common.css 中已移除公共版本） */
+/* CashJournal 账簿预览本地样式 */
 
-.template-hint {
+.preview-note {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -540,26 +533,6 @@ onMounted(async () => {
   font-size: var(--font-size-sm);
   line-height: 1.6;
   margin-bottom: var(--space-sm);
-}
-
-.template-hint-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.view-mode-strip {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-bottom: none;
-  background: var(--thead-bg);
-  color: var(--muted);
-  font-size: var(--font-size-sm);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .view-switch-btn {
@@ -585,34 +558,22 @@ onMounted(async () => {
   color: var(--green);
 }
 
-.table-workspace-main.template-view {
+.table-workspace-main.book-preview {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
-.table-workspace-main.template-view > .template-hint {
+.table-workspace-main.book-preview > .preview-note {
   flex-shrink: 0;
 }
 
-.table-workspace-main.template-view > .excel-host {
+.table-workspace-main.book-preview > .excel-host {
   flex: 1;
   min-height: 0;
   overflow: auto;
   margin-top: 0;
-}
-
-.table-workspace-main.data-view {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.table-workspace-main.data-view > .adt-wrap {
-  flex: 1;
-  min-height: 0;
 }
 
 .excel-host {
