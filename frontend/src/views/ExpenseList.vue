@@ -17,21 +17,7 @@
         </NSpace>
       </div>
 
-      <div v-if="isTemplateView" class="table-workspace-main template-view">
-        <div class="template-hint adt-no-print">
-          <span class="template-hint-main">
-            模板视图 · 当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
-          </span>
-          <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
-        </div>
-        <div class="excel-host" v-html="templateExcelHtml"></div>
-      </div>
-
-      <div v-else class="table-workspace-main data-view">
-        <div v-if="hasTemplate" class="view-mode-strip adt-no-print">
-          <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
-          <button class="view-switch-btn" type="button" @click="setView('template')">切换到模板视图</button>
-        </div>
+      <div class="table-workspace-main">
         <AdvancedDataTable
           :columns="appliedColumns"
           :data="rows"
@@ -43,7 +29,7 @@
           :table-key="TABLE_KEY"
           show-column-settings
           show-reset-preferences
-          :is-in-data-view="isDataView"
+          :is-in-data-view="true"
           :hidden-fields="hiddenFields"
           :all-columns-for-settings="tabulatorColumns"
           empty-text="暂无支出数据"
@@ -55,7 +41,7 @@
         />
       </div>
 
-      <div class="bottom-bar" v-if="total > 0 && isDataView">
+      <div class="bottom-bar" v-if="total > 0">
         <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
         <NButton size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
         <NButton size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
@@ -71,7 +57,6 @@ import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
 import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
 import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
-import { useDualView } from '@/composables/useDualView'
 import {
   getPreferences,
   applyPreferences,
@@ -100,7 +85,7 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const totalPages = ref(1)
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('expense_list')
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('expense_list')
 
 function dateStringToTs(s) {
   if (!s) return null
@@ -139,8 +124,6 @@ const tabulatorColumns = computed(() =>
     moneyFields: MONEY_FIELDS,
   })
 )
-
-const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
 
 const preferencesVersion = ref(0)
 const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')

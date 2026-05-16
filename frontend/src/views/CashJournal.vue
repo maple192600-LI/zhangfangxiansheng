@@ -19,109 +19,7 @@
     <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
     <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成报表...</p></div>
 
-    <!-- 账簿视图：templateExcelHtml 或 hasFullLayout -->
-    <div v-else-if="isBookView" class="table-workspace-main template-view">
-      <div class="template-hint adt-no-print">
-        <span class="template-hint-main">
-          账簿视图 · 当前显示正式账簿版式；高级表格交互未启用。
-        </span>
-        <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
-      </div>
-      <!-- 路径 A：原 Excel 完整渲染 -->
-      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-      <!-- 路径 B：完整 Excel 布局渲染 -->
-      <div v-else-if="hasFullLayout" class="excel-layout-wrapper">
-        <table class="excel-layout-table" :style="tableStyle">
-          <colgroup>
-            <col v-for="(w, ci) in templateLayout.col_widths" :key="ci" :style="{ width: w + 'px' }" />
-          </colgroup>
-          <tbody>
-            <tr v-for="(lr, lri) in fixedRows" :key="'f'+lri" :class="rowClass(lr)">
-              <td
-                v-for="cell in toFullRow(lr)"
-                :key="cell.col"
-                v-show="!cell._skip"
-                :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                :rowspan="cell.rowspan > 1 ? cell.rowspan : undefined"
-                :class="fixedCellClass(lr, cell)"
-                :style="fixedCellStyle(lr, cell)"
-              >{{ fixedCellText(cell) }}</td>
-            </tr>
-            <template v-for="(block, bi) in blocks" :key="'b'+bi">
-              <tr class="data-row block-start">
-                <td
-                  v-for="cell in firstRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ firstRowCellText(cell, block) }}</td>
-              </tr>
-              <tr v-for="(r, ri) in block.rows" :key="'r'+ri" class="data-row">
-                <td
-                  v-for="cell in detailRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ detailCellText(cell, r) }}</td>
-              </tr>
-              <tr class="subtotal-row">
-                <td
-                  v-for="cell in subtotalRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="subtotalCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ subtotalCellText(cell, block) }}</td>
-              </tr>
-            </template>
-            <template v-if="!blocks.length">
-              <tr class="data-row block-start">
-                <td
-                  v-for="cell in firstRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ emptyCellText(cell) }}</td>
-              </tr>
-              <tr v-for="n in 3" :key="'empty'+n" class="data-row">
-                <td
-                  v-for="cell in detailRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="dataCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                > </td>
-              </tr>
-              <tr class="subtotal-row">
-                <td
-                  v-for="cell in subtotalRowFull"
-                  :key="cell.col"
-                  v-show="!cell._skip"
-                  :colspan="cell.colspan > 1 ? cell.colspan : undefined"
-                  :class="subtotalCellClass(cell)"
-                  :style="dataCellStyle(cell)"
-                >{{ cell.text || ' ' }}</td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 数据视图：AdvancedDataTable -->
-    <div v-else-if="hasColumns" class="table-workspace-main data-view">
-      <div v-if="hasBookView" class="view-mode-strip adt-no-print">
-        <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
-        <button class="view-switch-btn" type="button" @click="setView('book')">切换到账簿视图</button>
-      </div>
+    <div v-else-if="hasColumns" class="table-workspace-main">
       <AdvancedDataTable
         :columns="appliedColumns"
         :data="displayRows"
@@ -132,7 +30,7 @@
         :table-key="TABLE_KEY"
         show-column-settings
         show-reset-preferences
-        :is-in-data-view="isDataView"
+        :is-in-data-view="true"
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无日记账数据，选择日期范围和账户后点击'生成报表'"
@@ -172,7 +70,6 @@ import {
 } from '@/composables/useAdvancedTablePreferences'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
-import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 import { getReportFilename } from '@/utils/reportFilename'
@@ -207,33 +104,10 @@ const endDateTs = computed({
 })
 
 const entities = ref([])
-const blocks = ref([])
 const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
-const { templateColumns, templateLayout, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('cash_journal')
-
-// ── 视图状态 ──────────────────────────────
-
-const viewMode = ref('book')
-
-const hasFullLayout = computed(() => {
-  const layout = templateLayout.value
-  if (!layout || !layout.rows) return false
-  const types = new Set(layout.rows.map(r => r.type))
-  return types.has('header') && (types.has('data') || types.has('title'))
-})
-
-const hasBookView = computed(() => !!templateExcelHtml.value || hasFullLayout.value)
-const isBookView = computed(() => hasBookView.value && viewMode.value === 'book')
-const isDataView = computed(() => !isBookView.value)
-
-function setView(mode) {
-  if (mode === 'book' && !hasBookView.value) return
-  viewMode.value = mode
-}
-
-// ── 数据视图列定义 ──────────────────────────────
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('cash_journal')
 
 const MONEY_KEYS = new Set(['prev_balance', 'income', 'expense', 'day_balance', 'amount', 'rolling_balance'])
 
@@ -255,8 +129,6 @@ const tabulatorColumns = computed(() =>
 )
 
 const hasColumns = computed(() => tabulatorColumns.value.length > 0)
-
-// ── 偏好系统 ──────────────────────────────
 
 const preferencesVersion = ref(0)
 const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')
@@ -299,181 +171,12 @@ function onPreferencesReset() {
   touchPreferences()
 }
 
-// ── 数据行 ──────────────────────────────
-
 const displayRows = computed(() =>
   rows.value.map((r, idx) => ({
     ...r,
     __row_key: `cj-${idx}`,
   }))
 )
-
-// ── Excel 布局渲染核心（账簿视图专用，保持不变） ──────────────────────────────
-
-const tableStyle = computed(() => {
-  if (!templateLayout.value) return {}
-  const totalW = templateLayout.value.col_widths.reduce((s, w) => s + w, 0)
-  return { width: totalW + 'px' }
-})
-
-const fixedRows = computed(() => {
-  const layout = templateLayout.value
-  if (!layout) return []
-  return layout.rows.filter(r => ['title', 'info', 'header'].includes(r.type))
-})
-
-function toFullRow(lr) {
-  const layout = templateLayout.value
-  if (!layout) return []
-  const colCount = layout.col_count
-  const result = new Array(colCount).fill(null)
-  const skipSet = new Set()
-
-  for (const cell of lr.cells) {
-    if (skipSet.has(cell.col)) continue
-    result[cell.col] = { ...cell, _skip: false }
-    if (cell.colspan > 1) {
-      for (let i = 1; i < cell.colspan; i++) {
-        result[cell.col + i] = { col: cell.col + i, _skip: true, text: '', colspan: 1, rowspan: 1, is_placeholder: false, field_key: null }
-      }
-    }
-  }
-
-  for (let i = 0; i < colCount; i++) {
-    if (!result[i]) {
-      result[i] = { col: i, _skip: false, text: '', colspan: 1, rowspan: 1, is_placeholder: false, field_key: null }
-    }
-  }
-  return result
-}
-
-const firstRowFull = computed(() => {
-  const layout = templateLayout.value
-  if (!layout) return []
-  const dataRows = layout.rows.filter(r => r.type === 'data')
-  if (!dataRows.length) return []
-  return toFullRow(dataRows[0])
-})
-
-const detailRowFull = computed(() => {
-  const layout = templateLayout.value
-  if (!layout) return []
-  const dataRows = layout.rows.filter(r => r.type === 'data')
-  const tpl = dataRows[1] || dataRows[0]
-  if (!tpl) return []
-  return toFullRow(tpl)
-})
-
-const subtotalRowFull = computed(() => {
-  const layout = templateLayout.value
-  if (!layout) return []
-  const stRows = layout.rows.filter(r => r.type === 'subtotal')
-  if (!stRows.length) return []
-  return toFullRow(stRows[0])
-})
-
-function rowClass(lr) {
-  if (lr.type === 'header') return 'excel-header-row'
-  if (lr.type === 'title') return 'excel-title-row'
-  return ''
-}
-
-function fixedCellClass(lr, cell) {
-  const cls = []
-  if (lr.type === 'header') cls.push('excel-header-cell')
-  if (lr.type === 'title') cls.push('excel-title-cell')
-  return cls
-}
-
-function fixedCellStyle(lr, cell) {
-  const s = {}
-  if (cell.colspan > 1) s.textAlign = 'left'
-  if (lr.type === 'header') s.textAlign = 'center'
-  return s
-}
-
-function fixedCellText(cell) {
-  if (cell.is_placeholder) {
-    if (cell.text && cell.text.includes('{{报表标题}}')) {
-      return '现金日记账    ' + startDate.value + '—' + endDate.value
-    }
-    return cell.text.replace(/\{\{报表标题\}\}/g, '现金日记账')
-      .replace(/\{\{开始期间\}\}/g, startDate.value)
-      .replace(/\{\{结束期间\}\}/g, endDate.value)
-  }
-  return cell.text
-}
-
-function dataCellClass(cell) {
-  const cls = ['excel-data-cell']
-  if (cell.field_key && MONEY_KEYS.has(cell.field_key)) cls.push('money')
-  return cls
-}
-
-function dataCellStyle(cell) {
-  const s = {}
-  if (cell.field_key && MONEY_KEYS.has(cell.field_key)) s.textAlign = 'right'
-  return s
-}
-
-function subtotalCellClass(cell) {
-  return ['excel-subtotal-cell']
-}
-
-function firstRowCellText(cell, block) {
-  if (!cell.is_placeholder) return cell.text
-  const key = cell.field_key
-  if (!key) return ''
-  if (key === 'entity_name') return block.entity_name || ''
-  if (key === 'account_name') return block.account_name || ''
-  if (key === 'account_bank') return block.account_bank || ''
-  if (key === 'account_code') return block.account_code || ''
-  if (key === 'month') {
-    if (block.rows && block.rows.length) {
-      const parts = (block.rows[0].business_date || '').split('-')
-      return parts[1] ? parseInt(parts[1], 10) : ''
-    }
-    return ''
-  }
-  if (key === 'prev_balance') return fmtAmt(block.opening_balance)
-  return ''
-}
-
-function detailCellText(cell, r) {
-  if (!cell.is_placeholder) return cell.text
-  const key = cell.field_key
-  if (!key) return ''
-  if (key === 'month') {
-    const parts = (r.business_date || '').split('-')
-    return parts[1] ? parseInt(parts[1], 10) : ''
-  }
-  if (key === 'day') {
-    const parts = (r.business_date || '').split('-')
-    return parts[2] ? parseInt(parts[2], 10) : ''
-  }
-  if (key === 'summary_text') return r.summary_text || ''
-  if (key === 'income') return fmtAmt(r.income)
-  if (key === 'expense') return fmtAmt(r.expense)
-  if (key === 'day_balance') return fmtAmt(r.day_balance)
-  return r[key] != null ? r[key] : ''
-}
-
-function subtotalCellText(cell, block) {
-  if (!cell.is_placeholder) return cell.text
-  const key = cell.field_key
-  if (!key) return ''
-  if (key === 'income') return fmtAmt(block.total_income)
-  if (key === 'expense') return fmtAmt(block.total_expense)
-  if (key === 'day_balance') return fmtAmt(block.ending_balance)
-  return ''
-}
-
-function emptyCellText(cell) {
-  if (!cell.is_placeholder) return cell.text
-  return ''
-}
-
-// ── 数据加载 ──────────────────────────────
 
 async function loadReport() {
   loading.value = true
@@ -482,17 +185,13 @@ async function loadReport() {
     const params = { start_date: startDate.value, end_date: endDate.value }
     if (accountId.value) params.account_id = accountId.value
     const raw = await api.getCashJournal(params) || []
-    blocks.value = raw
     const result = []
     for (const block of raw) {
       for (const row of (block.rows || [])) {
-        const parts = (row.business_date || '').split('-')
         result.push({
           ...row,
           entity_name: block.entity_name || '',
           account_name: block.account_name || '',
-          month: parts[1] ? parseInt(parts[1], 10) : '',
-          day: parts[2] ? parseInt(parts[2], 10) : '',
         })
       }
     }
@@ -524,44 +223,4 @@ onMounted(async () => {
 
 <style scoped>
 @import './common.css';
-
-/* Excel 布局专用样式 */
-.excel-layout-wrapper {
-  overflow-x: auto;
-  margin-top: 0;
-}
-.excel-layout-table {
-  border-collapse: collapse;
-  font-size: 13px;
-  border: 1px solid #c0b9ae;
-}
-.excel-layout-table th,
-.excel-layout-table td {
-  border: 1px solid #c0b9ae;
-  padding: 4px 8px;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-.excel-title-row td {
-  font-weight: 700;
-  font-size: 15px;
-  padding: 8px 10px;
-  background: #faf8f3;
-}
-.excel-header-row td {
-  background: #e8e2d6;
-  font-weight: 600;
-  text-align: center;
-  padding: 6px 8px;
-}
-.excel-subtotal-cell {
-  font-weight: 600;
-  background: #f0ede6;
-}
-.excel-data-cell {
-  padding: 3px 8px;
-}
-.block-start td {
-  border-top: 2px solid #a09888;
-}
 </style>

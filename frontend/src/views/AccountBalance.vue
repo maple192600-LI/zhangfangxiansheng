@@ -18,21 +18,7 @@
       </NSpace>
     </div>
 
-    <div v-if="isTemplateView" class="table-workspace-main template-view">
-      <div class="template-hint adt-no-print">
-        <span class="template-hint-main">
-          模板视图 · 当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
-        </span>
-        <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
-      </div>
-      <div class="excel-host" v-html="templateExcelHtml"></div>
-    </div>
-
-    <div v-else class="table-workspace-main data-view">
-      <div v-if="hasTemplate" class="view-mode-strip adt-no-print">
-        <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
-        <button class="view-switch-btn" type="button" @click="setView('template')">切换到模板视图</button>
-      </div>
+    <div class="table-workspace-main">
       <AdvancedDataTable
         :columns="appliedColumns"
         :data="rows"
@@ -43,7 +29,7 @@
         :table-key="TABLE_KEY"
         show-column-settings
         show-reset-preferences
-        :is-in-data-view="isDataView"
+        :is-in-data-view="true"
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无数据，请调整查询条件后重试"
@@ -66,7 +52,6 @@ import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
 import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
 import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
-import { useDualView } from '@/composables/useDualView'
 import {
   getPreferences,
   applyPreferences,
@@ -92,7 +77,7 @@ const endDate = ref(today)
 const entityId = ref(null)
 const entities = ref([])
 const rows = ref([])
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
 
 function dateStringToTs(s) {
   if (!s) return null
@@ -130,8 +115,6 @@ const tabulatorColumns = computed(() =>
     moneyFields: MONEY_FIELDS,
   })
 )
-
-const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
 
 const preferencesVersion = ref(0)
 const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')
