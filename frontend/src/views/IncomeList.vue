@@ -29,7 +29,6 @@
           :table-key="TABLE_KEY"
           show-column-settings
           show-reset-preferences
-          :is-in-data-view="true"
           :hidden-fields="hiddenFields"
           :all-columns-for-settings="tabulatorColumns"
           empty-text="暂无收入数据"

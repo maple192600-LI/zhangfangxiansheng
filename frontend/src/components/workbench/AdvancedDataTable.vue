@@ -10,15 +10,15 @@
         <button :class="{ active: currentDensity === 'comfortable' }" @click="setDensity('comfortable')">舒适</button>
       </span>
       <span class="adt-toolbar-hint">↔ 拖动列边界调整宽度</span>
-      <button v-if="showColumnSettings && isInDataView" ref="columnBtnRef" class="adt-toolbar-action" @click="toggleColumnPanel" title="列设置">☰ 列</button>
-      <button v-if="showResetPreferences && isInDataView" class="adt-toolbar-action adt-toolbar-action-reset" @click="emit('preferencesReset')" title="恢复默认设置">↺ 重置</button>
+      <button v-if="showColumnSettings" ref="columnBtnRef" class="adt-toolbar-action" @click="toggleColumnPanel" title="列设置">☰ 列</button>
+      <button v-if="showResetPreferences" class="adt-toolbar-action adt-toolbar-action-reset" @click="emit('preferencesReset')" title="恢复默认设置">↺ 重置</button>
       <button v-if="showRefresh" class="adt-toolbar-refresh" @click="emit('refresh')" title="刷新数据">↻</button>
     </div>
 
     <!-- 列设置面板（Teleport 到 body 避免 overflow:hidden 裁剪） -->
     <Teleport to="body">
       <div v-if="columnPanelOpen" class="adt-col-panel-overlay adt-no-print" @click="columnPanelOpen = false"></div>
-      <div v-if="columnPanelOpen && showColumnSettings && isInDataView" class="adt-col-panel adt-no-print" :style="panelStyle">
+      <div v-if="columnPanelOpen && showColumnSettings" class="adt-col-panel adt-no-print" :style="panelStyle">
         <div class="adt-col-panel-title">列显示设置</div>
         <label v-for="col in configurableColumns" :key="col.field" class="adt-col-item">
           <input type="checkbox" :checked="isColumnVisible(col.field)" :disabled="visibleCount <= 1 && isColumnVisible(col.field)" @change="toggleColumnVisibility(col.field, $event)" />
@@ -65,7 +65,7 @@ const props = defineProps({
   tableKey: { type: String, default: '' },
   showColumnSettings: { type: Boolean, default: false },
   showResetPreferences: { type: Boolean, default: false },
-  isInDataView: { type: Boolean, default: true },
+
   hiddenFields: { type: Array, default: () => [] },
   allColumnsForSettings: { type: Array, default: () => [] },
 })
@@ -245,9 +245,7 @@ watch(() => props.selectedRowKeys, (keys) => {
   } catch (e) { console.warn('[AdvancedDataTable] selectedRowKeys sync failed:', e) }
 })
 
-watch(() => props.isInDataView, (val) => {
-  if (!val) columnPanelOpen.value = false
-})
+
 
 defineExpose({
   table,
