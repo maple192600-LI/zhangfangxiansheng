@@ -233,7 +233,19 @@ function validateRows(rows) {
     if (allEmpty) continue
 
     const rowNum = i + 1
-    if (r.business_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(r.business_date))) {
+
+    const entityVal = String(r.entity_match_key || '').trim()
+    if (!entityVal) {
+      errors.push(`第 ${rowNum} 行：单位编码不能为空`)
+    }
+    const accountVal = String(r.account_match_key || '').trim()
+    if (!accountVal) {
+      errors.push(`第 ${rowNum} 行：账户编码不能为空`)
+    }
+    const dateVal = String(r.business_date || '').trim()
+    if (!dateVal) {
+      errors.push(`第 ${rowNum} 行：业务日期不能为空`)
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
       errors.push(`第 ${rowNum} 行：日期格式错误，应为 yyyy-MM-dd`)
     }
     const numericFields = ['income_amount', 'expense_amount', 'previous_balance_input', 'ending_balance_input']
