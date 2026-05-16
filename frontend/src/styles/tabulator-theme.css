@@ -173,3 +173,15 @@
   cursor: pointer;
   accent-color: var(--green);
 }
+
+/* ── 小计/合计行 ── */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.subtotal-row,
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.total-row {
+  background: var(--thead-bg);
+  font-weight: 600;
+}
+
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.subtotal-row .tabulator-cell,
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.total-row .tabulator-cell {
+  border-top: 2px solid var(--line);
+}

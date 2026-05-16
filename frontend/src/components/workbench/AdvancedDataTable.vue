@@ -31,6 +31,7 @@ const props = defineProps({
   enableColumnResize: { type: Boolean, default: false },
   enableColumnMove: { type: Boolean, default: false },
   density: { type: String, default: 'default' },
+  rowClass: { type: Function, default: null },
 })
 
 const emit = defineEmits([
@@ -95,6 +96,12 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
       resizableColumns: props.enableColumnResize,
       movableColumns: props.enableColumnMove,
       ...(tabulatorHeight.value ? { height: tabulatorHeight.value } : {}),
+      ...(props.rowClass ? {
+        rowFormatter: (row) => {
+          const cls = props.rowClass(row.getData())
+          if (cls) row.getElement().classList.add(...cls.split(/\s+/).filter(Boolean))
+        }
+      } : {}),
     },
   })
 
