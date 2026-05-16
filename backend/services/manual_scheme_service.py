@@ -98,7 +98,11 @@ def _scheme_to_out(row: ManualTemplateScheme) -> ManualSchemeOut:
     fields = []
     if row.selected_fields_json:
         try:
-            fields = json.loads(row.selected_fields_json)
+            parsed = json.loads(row.selected_fields_json)
+            if isinstance(parsed, list):
+                fields = parsed
+            elif isinstance(parsed, dict) and "fields" in parsed:
+                fields = parsed["fields"]
         except (json.JSONDecodeError, TypeError):
             fields = []
     return ManualSchemeOut(
