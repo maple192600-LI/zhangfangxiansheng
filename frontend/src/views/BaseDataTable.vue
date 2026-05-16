@@ -42,7 +42,7 @@
       </div>
       <AdvancedDataTable
         ref="tableRef"
-        :columns="tabulatorColumns"
+        :columns="appliedColumns"
         :data="rows"
         :pagination="false"
         :loading="false"
@@ -51,8 +51,19 @@
         fill-parent
         show-toolbar
         :total-rows="total"
+        :density="tableDensity"
+        :table-key="TABLE_KEY"
+        show-column-settings
+        show-reset-preferences
+        :is-in-data-view="isDataView"
+        :hidden-fields="hiddenFields"
         empty-text="暂无数据，请先录入或导入流水"
         @selection-change="onSelectionChange"
+        @density-change="onDensityChange"
+        @column-width-change="onColumnWidthChange"
+        @column-order-change="onColumnOrderChange"
+        @column-visibility-change="onColumnVisibilityChange"
+        @preferences-reset="onPreferencesReset"
       />
     </div>
 
@@ -73,11 +84,22 @@ import { useReportPrint } from '@/composables/useReportPrint'
 import { emptyDashFormatter, moneyFormatter, directionFormatter, abnormalCodeFormatter } from '@/utils/tabulatorFormatters'
 import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
 import { useDualView } from '@/composables/useDualView'
+import {
+  getPreferences,
+  applyPreferences,
+  saveColumnWidth,
+  saveColumnVisibility,
+  saveColumnOrder,
+  saveDensity,
+  resetPreferences,
+} from '@/composables/useAdvancedTablePreferences'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 import { getReportFilename } from '@/utils/reportFilename'
+
+const TABLE_KEY = 'base-data-table'
 
 const { handlePrint } = useReportPrint()
 
@@ -114,6 +136,46 @@ const tabulatorColumns = computed(() =>
 )
 
 const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
+
+const preferencesVersion = ref(0)
+const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')
+
+function touchPreferences() { preferencesVersion.value++ }
+
+const appliedColumns = computed(() => {
+  preferencesVersion.value
+  return applyPreferences(tabulatorColumns.value, getPreferences(TABLE_KEY))
+})
+
+const hiddenFields = computed(() => {
+  const prefs = getPreferences(TABLE_KEY)
+  const visibility = prefs.visibility || {}
+  return Object.entries(visibility).filter(([, v]) => !v).map(([f]) => f)
+})
+
+function onDensityChange(value) {
+  tableDensity.value = value
+  saveDensity(TABLE_KEY, value)
+}
+
+function onColumnWidthChange({ field, width }) {
+  saveColumnWidth(TABLE_KEY, field, width)
+}
+
+function onColumnOrderChange(order) {
+  saveColumnOrder(TABLE_KEY, order)
+}
+
+function onColumnVisibilityChange({ field, visible }) {
+  saveColumnVisibility(TABLE_KEY, field, visible)
+  touchPreferences()
+}
+
+function onPreferencesReset() {
+  resetPreferences(TABLE_KEY)
+  tableDensity.value = 'default'
+  touchPreferences()
+}
 
 function onSelectionChange(data) {
   selectedIds.value = data.map(r => r.id)

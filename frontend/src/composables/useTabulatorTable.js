@@ -63,6 +63,31 @@ export function useTabulatorTable(containerRef, options) {
         })
       }
 
+      if (options.onColumnResized) {
+        instance.on('columnResized', (column) => {
+          const field = column.getField?.()
+          const width = column.getWidth?.()
+          if (field) options.onColumnResized({ field, width })
+        })
+      }
+
+      if (options.onColumnMoved) {
+        instance.on('columnMoved', () => {
+          const order = instance
+            .getColumns()
+            .map(col => col.getField?.())
+            .filter(Boolean)
+          options.onColumnMoved(order)
+        })
+      }
+
+      if (options.onColumnVisibilityChanged) {
+        instance.on('columnVisibilityChanged', (column, visible) => {
+          const field = column.getField?.()
+          if (field) options.onColumnVisibilityChanged({ field, visible })
+        })
+      }
+
       table.value = instance
       initialized = true
     } catch (err) {

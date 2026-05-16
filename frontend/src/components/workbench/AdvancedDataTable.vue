@@ -10,8 +10,23 @@
         <button :class="{ active: currentDensity === 'comfortable' }" @click="setDensity('comfortable')">舒适</button>
       </span>
       <span class="adt-toolbar-hint">↔ 拖动列边界调整宽度</span>
+      <button v-if="showColumnSettings && isInDataView" ref="columnBtnRef" class="adt-toolbar-action" @click="toggleColumnPanel" title="列设置">☰ 列</button>
+      <button v-if="showResetPreferences && isInDataView" class="adt-toolbar-action adt-toolbar-action-reset" @click="emit('preferencesReset')" title="恢复默认设置">↺ 重置</button>
       <button v-if="showRefresh" class="adt-toolbar-refresh" @click="emit('refresh')" title="刷新数据">↻</button>
     </div>
+
+    <!-- 列设置面板（Teleport 到 body 避免 overflow:hidden 裁剪） -->
+    <Teleport to="body">
+      <div v-if="columnPanelOpen" class="adt-col-panel-overlay adt-no-print" @click="columnPanelOpen = false"></div>
+      <div v-if="columnPanelOpen && showColumnSettings && isInDataView" class="adt-col-panel adt-no-print" :style="panelStyle">
+        <div class="adt-col-panel-title">列显示设置</div>
+        <label v-for="col in configurableColumns" :key="col.field" class="adt-col-item">
+          <input type="checkbox" :checked="isColumnVisible(col.field)" :disabled="visibleCount <= 1 && isColumnVisible(col.field)" @change="toggleColumnVisibility(col.field, $event)" />
+          <span>{{ col.title }}</span>
+        </label>
+      </div>
+    </Teleport>
+
     <div ref="containerRef" class="adt-container" :style="containerStyle"></div>
     <div v-if="loading && !errorText" class="adt-loading">{{ loadingText }}</div>
     <div v-if="errorText" class="adt-error">
@@ -47,6 +62,11 @@ const props = defineProps({
   showRefresh: { type: Boolean, default: false },
   totalRows: { type: Number, default: 0 },
   rowClass: { type: Function, default: null },
+  tableKey: { type: String, default: '' },
+  showColumnSettings: { type: Boolean, default: false },
+  showResetPreferences: { type: Boolean, default: false },
+  isInDataView: { type: Boolean, default: true },
+  hiddenFields: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits([
@@ -57,9 +77,17 @@ const emit = defineEmits([
   'tableError',
   'densityChange',
   'refresh',
+  'columnSettingsOpen',
+  'columnVisibilityChange',
+  'columnOrderChange',
+  'columnWidthChange',
+  'preferencesReset',
 ])
 
 const containerRef = ref(null)
+const columnPanelOpen = ref(false)
+const columnBtnRef = ref(null)
+const panelStyle = ref({})
 
 const currentDensity = ref(props.density)
 
@@ -113,6 +141,42 @@ const tabulatorHeight = computed(() => {
   return ''
 })
 
+// Columns available for show/hide configuration (only data columns with field)
+const configurableColumns = computed(() =>
+  (props.columns || []).filter(c => c.field)
+)
+
+const hiddenFieldsSet = computed(() => new Set(props.hiddenFields))
+
+const visibleCount = computed(() =>
+  configurableColumns.value.filter(c => !hiddenFieldsSet.value.has(c.field)).length
+)
+
+function isColumnVisible(field) {
+  return !hiddenFieldsSet.value.has(field)
+}
+
+function toggleColumnVisibility(field, event) {
+  const visible = event.target.checked
+  emit('columnVisibilityChange', { field, visible })
+}
+
+function toggleColumnPanel() {
+  columnPanelOpen.value = !columnPanelOpen.value
+  if (columnPanelOpen.value) {
+    emit('columnSettingsOpen')
+    const btn = columnBtnRef.value
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      panelStyle.value = {
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        right: `${window.innerWidth - rect.right}px`,
+      }
+    }
+  }
+}
+
 const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows, clearSelection } =
   useTabulatorTable(containerRef, {
     get columns() { return resolvedColumns.value },
@@ -125,11 +189,14 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
     onSelectionChange: (data) => emit('selectionChange', data),
     onTableReady: () => emit('tableReady'),
     onTableError: (msg) => emit('tableError', msg),
+    onColumnResized: ({ field, width }) => emit('columnWidthChange', { field, width }),
+    onColumnMoved: (order) => emit('columnOrderChange', order),
+    onColumnVisibilityChanged: ({ field, visible }) => emit('columnVisibilityChange', { field, visible }),
     tabulatorOverrides: {
       index: props.rowKey,
       selectableRows: props.enableSelection ? true : false,
       resizableColumns: props.enableColumnResize || props.showToolbar,
-      movableColumns: props.enableColumnMove,
+      movableColumns: props.enableColumnMove || props.showColumnSettings,
       ...(tabulatorHeight.value ? { height: tabulatorHeight.value } : {}),
       ...(props.rowClass ? {
         rowFormatter: (row) => {
@@ -321,6 +388,35 @@ defineExpose({
   font-size: var(--font-size-xs);
 }
 
+.adt-toolbar-action {
+  padding: 2px 10px;
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.adt-toolbar-action:hover {
+  background: var(--green-3);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.adt-toolbar-action-reset {
+  color: var(--muted);
+}
+
+.adt-toolbar-action-reset:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--tag-warn-bg, #fffbeb);
+}
+
 .adt-toolbar-refresh {
   padding: 2px 8px;
   font-size: 16px;
@@ -338,5 +434,61 @@ defineExpose({
   background: var(--green-3);
   color: var(--green);
   border-color: var(--green);
+}
+
+/* 列设置面板 */
+.adt-col-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+
+.adt-col-panel {
+  z-index: 9999;
+  min-width: 200px;
+  max-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 8px 0;
+}
+
+.adt-col-panel-title {
+  padding: 4px 12px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.adt-col-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.adt-col-item:hover {
+  background: var(--green-3);
+}
+
+.adt-col-item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--green);
+}
+
+.adt-col-item input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>
