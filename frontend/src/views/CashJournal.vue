@@ -107,7 +107,7 @@ const entities = ref([])
 const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
-const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('cash_journal')
+const { templateColumns, loadTemplate } = useTemplateColumns('cash_journal')
 
 const MONEY_KEYS = new Set(['prev_balance', 'income', 'expense', 'day_balance', 'amount', 'rolling_balance'])
 

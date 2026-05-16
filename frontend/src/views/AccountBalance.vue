@@ -77,7 +77,7 @@ const endDate = ref(today)
 const entityId = ref(null)
 const entities = ref([])
 const rows = ref([])
-const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('account_balance')
+const { templateColumns, loadTemplate } = useTemplateColumns('account_balance')
 
 function dateStringToTs(s) {
   if (!s) return null

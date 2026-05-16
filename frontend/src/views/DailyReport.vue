@@ -89,7 +89,7 @@ const entities = ref([])
 const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
-const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('daily_report')
+const { templateColumns, loadTemplate } = useTemplateColumns('daily_report')
 
 function dateStringToTs(s) {
   if (!s) return null

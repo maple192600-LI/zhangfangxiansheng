@@ -543,14 +543,6 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   overflow: hidden;
 }
 
-/* Excel 模板路径：在数据页 flex 布局下也要受约束 */
-.table-workspace-page > .excel-host {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  margin-top: 0;
-}
-
 /* ===== 响应式 ===== */
 @media (max-width: 1200px) {
   .metric-strip, .dashboard-grid, .dashboard-grid-2,
@@ -559,21 +551,6 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
 
 /* ===== 打印 ===== */
 /* 打印样式已移至全局 theme.css（scoped 导入无法匹配全局元素如 .sidebar） */
-
-/* ======= Excel 模板原表渲染（v-html 注入） ======= */
-.excel-host {
-  overflow-x: auto;
-  margin-top: 8px;
-}
-.excel-host .excel-template-wrap {
-  display: inline-block;
-  min-width: 100%;
-}
-.excel-host .excel-template-table td {
-  border: 1px solid #c8c2b5;
-  padding: 4px 6px;
-  word-break: break-word;
-}
 
 /* ===== 表格工作区主内容 ===== */
 .table-workspace-main {

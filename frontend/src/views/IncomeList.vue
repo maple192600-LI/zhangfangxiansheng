@@ -85,7 +85,7 @@ const rows = ref([])
 const total = ref(0)
 const page = ref(1)
 const totalPages = ref(1)
-const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns('income_list')
+const { templateColumns, loadTemplate } = useTemplateColumns('income_list')
 
 function dateStringToTs(s) {
   if (!s) return null
