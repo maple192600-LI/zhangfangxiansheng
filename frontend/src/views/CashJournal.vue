@@ -1,36 +1,41 @@
 <template>
-  <div class="report-print-root-wrapper">
-    <div class="section report-print-root">
-      <div class="section-title">
-        <h3>现金日记账</h3>
-        <span>现金类资金载体的结果视图</span>
+  <div class="section report-print-root table-workspace-page">
+    <div class="section-title">
+      <h3>现金日记账</h3>
+      <span>现金类资金载体的结果视图</span>
+    </div>
+    <div class="filters-bar">
+      <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable />
+      <span style="color:var(--muted);font-size:13px">至</span>
+      <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable />
+      <MasterAccountSelect v-model="accountId" :entities="entities" />
+      <div class="filter-spacer"></div>
+      <div class="btn-row">
+        <NButton secondary @click="doExport">导出</NButton>
+        <NButton secondary @click="handlePrint">打印</NButton>
+        <NButton type="primary" @click="loadReport">生成报表</NButton>
       </div>
-      <div class="filters-bar">
-        <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable />
-        <span style="color:var(--muted);font-size:13px">至</span>
-        <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable />
-        <MasterAccountSelect v-model="accountId" :entities="entities" />
-        <div class="filter-spacer"></div>
-        <div class="btn-row">
-          <NButton secondary @click="doExport">导出</NButton>
-          <NButton secondary @click="handlePrint">打印</NButton>
-          <NButton type="primary" @click="loadReport">生成报表</NButton>
-        </div>
+    </div>
+    <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
+    <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成报表...</p></div>
+
+    <!-- 账簿视图：templateExcelHtml 或 hasFullLayout -->
+    <div v-else-if="isBookView" class="table-workspace-main template-view">
+      <div class="template-hint adt-no-print">
+        <span class="template-hint-main">
+          账簿视图 · 当前显示正式账簿版式；高级表格交互未启用。
+        </span>
+        <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
       </div>
-      <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
-      <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在生成报表...</p></div>
-
-      <!-- 优先：原 Excel 完整渲染（保留所有账户块、签字栏、合并单元格等） -->
-      <div v-else-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
-
-      <!-- 完整 Excel 布局渲染模式 -->
+      <!-- 路径 A：原 Excel 完整渲染 -->
+      <div v-if="templateExcelHtml" class="excel-host" v-html="templateExcelHtml"></div>
+      <!-- 路径 B：完整 Excel 布局渲染 -->
       <div v-else-if="hasFullLayout" class="excel-layout-wrapper">
         <table class="excel-layout-table" :style="tableStyle">
           <colgroup>
             <col v-for="(w, ci) in templateLayout.col_widths" :key="ci" :style="{ width: w + 'px' }" />
           </colgroup>
           <tbody>
-            <!-- 布局固定行：标题/描述/信息/表头 -->
             <tr v-for="(lr, lri) in fixedRows" :key="'f'+lri" :class="rowClass(lr)">
               <td
                 v-for="cell in toFullRow(lr)"
@@ -42,10 +47,7 @@
                 :style="fixedCellStyle(lr, cell)"
               >{{ fixedCellText(cell) }}</td>
             </tr>
-
-            <!-- 数据行（按块渲染） -->
             <template v-for="(block, bi) in blocks" :key="'b'+bi">
-              <!-- 月初余额行（block 首行，全列） -->
               <tr class="data-row block-start">
                 <td
                   v-for="cell in firstRowFull"
@@ -56,7 +58,6 @@
                   :style="dataCellStyle(cell)"
                 >{{ firstRowCellText(cell, block) }}</td>
               </tr>
-              <!-- 明细行（只显示右侧列） -->
               <tr v-for="(r, ri) in block.rows" :key="'r'+ri" class="data-row">
                 <td
                   v-for="cell in detailRowFull"
@@ -67,7 +68,6 @@
                   :style="dataCellStyle(cell)"
                 >{{ detailCellText(cell, r) }}</td>
               </tr>
-              <!-- 小计行 -->
               <tr class="subtotal-row">
                 <td
                   v-for="cell in subtotalRowFull"
@@ -79,8 +79,6 @@
                 >{{ subtotalCellText(cell, block) }}</td>
               </tr>
             </template>
-
-            <!-- 无数据时：仍然渲染空的数据行和小计行以显示完整模板 -->
             <template v-if="!blocks.length">
               <tr class="data-row block-start">
                 <td
@@ -116,25 +114,41 @@
           </tbody>
         </table>
       </div>
+    </div>
 
-      <!-- 简化表头模式（无 layout 或 layout 只有表头） -->
-      <table v-else-if="displayColumns.length">
-        <thead>
-          <tr>
-            <th v-for="col in displayColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-if="rows.length">
-            <tr v-for="(r, idx) in rows" :key="idx">
-              <td v-for="col in displayColumns" :key="col.field_key" :class="colClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
-            </tr>
-          </template>
-          <tr v-else>
-            <td :colspan="displayColumns.length" class="empty-cell">暂无日记账数据，选择日期范围和账户后点击"生成报表"</td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- 数据视图：AdvancedDataTable -->
+    <div v-else-if="hasColumns" class="table-workspace-main data-view">
+      <div v-if="hasBookView" class="view-mode-strip adt-no-print">
+        <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
+        <button class="view-switch-btn" type="button" @click="setView('book')">切换到账簿视图</button>
+      </div>
+      <AdvancedDataTable
+        :columns="appliedColumns"
+        :data="displayRows"
+        :pagination="false"
+        fill-parent
+        show-toolbar
+        :density="tableDensity"
+        :table-key="TABLE_KEY"
+        show-column-settings
+        show-reset-preferences
+        :is-in-data-view="isDataView"
+        :hidden-fields="hiddenFields"
+        :all-columns-for-settings="tabulatorColumns"
+        empty-text="暂无日记账数据，选择日期范围和账户后点击'生成报表'"
+        :row-key="'__row_key'"
+        @density-change="onDensityChange"
+        @column-width-change="onColumnWidthChange"
+        @column-order-change="onColumnOrderChange"
+        @column-visibility-change="onColumnVisibilityChange"
+        @preferences-reset="onPreferencesReset"
+      />
+    </div>
+
+    <div v-else class="empty-state">
+      <div class="empty-icon">📊</div>
+      <h4>暂无日记账数据</h4>
+      <p>选择日期范围和账户后点击"生成报表"</p>
     </div>
   </div>
 </template>
@@ -143,7 +157,19 @@
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NButton } from 'naive-ui'
 import MasterAccountSelect from '@/components/MasterAccountSelect.vue'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
+import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
+import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
+import {
+  getPreferences,
+  applyPreferences,
+  saveColumnWidth,
+  saveColumnVisibility,
+  saveColumnOrder,
+  saveDensity,
+  resetPreferences,
+} from '@/composables/useAdvancedTablePreferences'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { fmtAmt } from '@/utils/format'
@@ -152,6 +178,8 @@ import { useTemplateColumns } from '@/composables/useTemplateColumns'
 import { getReportFilename } from '@/utils/reportFilename'
 
 const { handlePrint } = useReportPrint()
+
+const TABLE_KEY = 'cash-journal'
 
 const today = new Date().toISOString().slice(0, 10)
 const startDate = ref(today)
@@ -165,29 +193,10 @@ const loading = ref(false)
 const errorMsg = ref('')
 const { templateColumns, templateLayout, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('cash_journal')
 
-const DEFAULT_COLUMNS = [
-  { field_key: 'business_date', header_name: '日期', width: 120, align: 'center' },
-  { field_key: 'entity_name', header_name: '单位', width: 120, align: 'left' },
-  { field_key: 'account_name', header_name: '账户', width: 150, align: 'left' },
-  { field_key: 'summary_text', header_name: '摘要', width: 200, align: 'left' },
-  { field_key: 'income', header_name: '收入', width: 130, align: 'right' },
-  { field_key: 'expense', header_name: '支出', width: 130, align: 'right' },
-  { field_key: 'day_balance', header_name: '余额', width: 130, align: 'right' },
-]
+// ── 视图状态 ──────────────────────────────
 
-const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
+const viewMode = ref('book')
 
-const MONEY_KEYS = new Set(['prev_balance', 'income', 'expense', 'day_balance', 'amount', 'rolling_balance'])
-function colClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }
-function cellVal(r, key) {
-  if (MONEY_KEYS.has(key)) return fmtAmt(r[key])
-  if (r[key] === undefined || r[key] === null) return ''
-  return r[key]
-}
-
-// ── Excel 布局渲染核心 ──────────────────────────────
-
-// 是否有完整布局（>1行，含 title/info/header/data/subtotal）
 const hasFullLayout = computed(() => {
   const layout = templateLayout.value
   if (!layout || !layout.rows) return false
@@ -195,22 +204,104 @@ const hasFullLayout = computed(() => {
   return types.has('header') && (types.has('data') || types.has('title'))
 })
 
-// 表格总宽度样式
+const hasBookView = computed(() => !!templateExcelHtml.value || hasFullLayout.value)
+const isBookView = computed(() => hasBookView.value && viewMode.value === 'book')
+const isDataView = computed(() => !isBookView.value)
+
+function setView(mode) {
+  if (mode === 'book' && !hasBookView.value) return
+  viewMode.value = mode
+}
+
+// ── 数据视图列定义 ──────────────────────────────
+
+const MONEY_KEYS = new Set(['prev_balance', 'income', 'expense', 'day_balance', 'amount', 'rolling_balance'])
+
+const DEFAULT_TABULATOR_COLUMNS = [
+  { field: 'business_date', title: '日期', width: 120, hozAlign: 'center', formatter: emptyDashFormatter, headerSort: false },
+  { field: 'entity_name', title: '单位', width: 120, formatter: emptyDashFormatter, headerSort: false },
+  { field: 'account_name', title: '账户', width: 150, formatter: emptyDashFormatter, headerSort: false },
+  { field: 'summary_text', title: '摘要', width: 200, formatter: emptyDashFormatter, headerSort: false },
+  { field: 'prev_balance', title: '上日余额', width: 130, hozAlign: 'right', formatter: moneyFormatter, headerSort: false },
+  { field: 'income', title: '收入', width: 130, hozAlign: 'right', formatter: moneyFormatter, headerSort: false },
+  { field: 'expense', title: '支出', width: 130, hozAlign: 'right', formatter: moneyFormatter, headerSort: false },
+  { field: 'day_balance', title: '本日余额', width: 130, hozAlign: 'right', formatter: moneyFormatter, headerSort: false },
+]
+
+const tabulatorColumns = computed(() =>
+  adaptTemplateColumns(templateColumns.value, DEFAULT_TABULATOR_COLUMNS, {
+    moneyFields: MONEY_KEYS,
+  }).map(col => ({ ...col, headerSort: false }))
+)
+
+const hasColumns = computed(() => tabulatorColumns.value.length > 0)
+
+// ── 偏好系统 ──────────────────────────────
+
+const preferencesVersion = ref(0)
+const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')
+
+function touchPreferences() { preferencesVersion.value++ }
+
+const appliedColumns = computed(() => {
+  preferencesVersion.value
+  return applyPreferences(tabulatorColumns.value, getPreferences(TABLE_KEY))
+})
+
+const hiddenFields = computed(() => {
+  preferencesVersion.value
+  const prefs = getPreferences(TABLE_KEY)
+  const visibility = prefs.visibility || {}
+  return Object.entries(visibility).filter(([, v]) => !v).map(([f]) => f)
+})
+
+function onDensityChange(value) {
+  tableDensity.value = value
+  saveDensity(TABLE_KEY, value)
+}
+
+function onColumnWidthChange({ field, width }) {
+  saveColumnWidth(TABLE_KEY, field, width)
+}
+
+function onColumnOrderChange(order) {
+  saveColumnOrder(TABLE_KEY, order)
+}
+
+function onColumnVisibilityChange({ field, visible }) {
+  saveColumnVisibility(TABLE_KEY, field, visible)
+  touchPreferences()
+}
+
+function onPreferencesReset() {
+  resetPreferences(TABLE_KEY)
+  tableDensity.value = 'default'
+  touchPreferences()
+}
+
+// ── 数据行 ──────────────────────────────
+
+const displayRows = computed(() =>
+  rows.value.map((r, idx) => ({
+    ...r,
+    __row_key: `cj-${idx}`,
+  }))
+)
+
+// ── Excel 布局渲染核心（账簿视图专用，保持不变） ──────────────────────────────
+
 const tableStyle = computed(() => {
   if (!templateLayout.value) return {}
   const totalW = templateLayout.value.col_widths.reduce((s, w) => s + w, 0)
   return { width: totalW + 'px' }
 })
 
-// 布局中固定行（标题/描述/信息/表头）
 const fixedRows = computed(() => {
   const layout = templateLayout.value
   if (!layout) return []
   return layout.rows.filter(r => ['title', 'info', 'header'].includes(r.type))
 })
 
-// 将稀疏 cell 数组转为完整的 col_count 长度数组
-// 填充空列，保留 colspan/rowspan 信息
 function toFullRow(lr) {
   const layout = templateLayout.value
   if (!layout) return []
@@ -221,7 +312,6 @@ function toFullRow(lr) {
   for (const cell of lr.cells) {
     if (skipSet.has(cell.col)) continue
     result[cell.col] = { ...cell, _skip: false }
-    // 标记被 colspan 占用的列
     if (cell.colspan > 1) {
       for (let i = 1; i < cell.colspan; i++) {
         result[cell.col + i] = { col: cell.col + i, _skip: true, text: '', colspan: 1, rowspan: 1, is_placeholder: false, field_key: null }
@@ -229,7 +319,6 @@ function toFullRow(lr) {
     }
   }
 
-  // 填充空位
   for (let i = 0; i < colCount; i++) {
     if (!result[i]) {
       result[i] = { col: i, _skip: false, text: '', colspan: 1, rowspan: 1, is_placeholder: false, field_key: null }
@@ -238,7 +327,6 @@ function toFullRow(lr) {
   return result
 }
 
-// 第一行数据模板（月初余额行），补全为完整12列
 const firstRowFull = computed(() => {
   const layout = templateLayout.value
   if (!layout) return []
@@ -247,7 +335,6 @@ const firstRowFull = computed(() => {
   return toFullRow(dataRows[0])
 })
 
-// 明细行模板（第二行数据模板），补全为完整12列
 const detailRowFull = computed(() => {
   const layout = templateLayout.value
   if (!layout) return []
@@ -257,7 +344,6 @@ const detailRowFull = computed(() => {
   return toFullRow(tpl)
 })
 
-// 小计行模板，补全为完整12列
 const subtotalRowFull = computed(() => {
   const layout = templateLayout.value
   if (!layout) return []
@@ -265,8 +351,6 @@ const subtotalRowFull = computed(() => {
   if (!stRows.length) return []
   return toFullRow(stRows[0])
 })
-
-// ── 固定行渲染 ──────────────────────────────
 
 function rowClass(lr) {
   if (lr.type === 'header') return 'excel-header-row'
@@ -300,8 +384,6 @@ function fixedCellText(cell) {
   return cell.text
 }
 
-// ── 数据行渲染 ──────────────────────────────
-
 function dataCellClass(cell) {
   const cls = ['excel-data-cell']
   if (cell.field_key && MONEY_KEYS.has(cell.field_key)) cls.push('money')
@@ -318,7 +400,6 @@ function subtotalCellClass(cell) {
   return ['excel-subtotal-cell']
 }
 
-// 月初余额行文本
 function firstRowCellText(cell, block) {
   if (!cell.is_placeholder) return cell.text
   const key = cell.field_key
@@ -338,7 +419,6 @@ function firstRowCellText(cell, block) {
   return ''
 }
 
-// 明细行文本
 function detailCellText(cell, r) {
   if (!cell.is_placeholder) return cell.text
   const key = cell.field_key
@@ -358,7 +438,6 @@ function detailCellText(cell, r) {
   return r[key] != null ? r[key] : ''
 }
 
-// 小计行文本
 function subtotalCellText(cell, block) {
   if (!cell.is_placeholder) return cell.text
   const key = cell.field_key
@@ -369,7 +448,6 @@ function subtotalCellText(cell, block) {
   return ''
 }
 
-// 无数据时的空行文本（去掉占位符显示空白）
 function emptyCellText(cell) {
   if (!cell.is_placeholder) return cell.text
   return ''
@@ -385,7 +463,6 @@ async function loadReport() {
     if (accountId.value) params.account_id = accountId.value
     const raw = await api.getCashJournal(params) || []
     blocks.value = raw
-    // 扁平化用于简化模式
     const result = []
     for (const block of raw) {
       for (const row of (block.rows || [])) {
@@ -431,7 +508,7 @@ onMounted(async () => {
 /* Excel 布局专用样式 */
 .excel-layout-wrapper {
   overflow-x: auto;
-  margin-top: 8px;
+  margin-top: 0;
 }
 .excel-layout-table {
   border-collapse: collapse;
@@ -467,5 +544,4 @@ onMounted(async () => {
 .block-start td {
   border-top: 2px solid #a09888;
 }
-.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-size: 14px; }
 </style>
