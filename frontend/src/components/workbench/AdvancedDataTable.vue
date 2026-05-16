@@ -67,6 +67,7 @@ const props = defineProps({
   showResetPreferences: { type: Boolean, default: false },
   isInDataView: { type: Boolean, default: true },
   hiddenFields: { type: Array, default: () => [] },
+  allColumnsForSettings: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits([
@@ -141,10 +142,13 @@ const tabulatorHeight = computed(() => {
   return ''
 })
 
-// Columns available for show/hide configuration (only data columns with field)
-const configurableColumns = computed(() =>
-  (props.columns || []).filter(c => c.field)
-)
+// Columns available for show/hide configuration (all columns, including hidden ones)
+const configurableColumns = computed(() => {
+  const source = props.allColumnsForSettings?.length
+    ? props.allColumnsForSettings
+    : props.columns
+  return source.filter(c => c.field)
+})
 
 const hiddenFieldsSet = computed(() => new Set(props.hiddenFields))
 
@@ -237,6 +241,10 @@ watch(() => props.selectedRowKeys, (keys) => {
       table.value.deselectRow()
     }
   } catch (e) { console.warn('[AdvancedDataTable] selectedRowKeys sync failed:', e) }
+})
+
+watch(() => props.isInDataView, (val) => {
+  if (!val) columnPanelOpen.value = false
 })
 
 defineExpose({

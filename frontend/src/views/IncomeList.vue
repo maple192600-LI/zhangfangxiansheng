@@ -45,6 +45,7 @@
           show-reset-preferences
           :is-in-data-view="isDataView"
           :hidden-fields="hiddenFields"
+          :all-columns-for-settings="tabulatorColumns"
           empty-text="暂无收入数据"
           @density-change="onDensityChange"
           @column-width-change="onColumnWidthChange"
@@ -152,6 +153,7 @@ const appliedColumns = computed(() => {
 })
 
 const hiddenFields = computed(() => {
+  preferencesVersion.value
   const prefs = getPreferences(TABLE_KEY)
   const visibility = prefs.visibility || {}
   return Object.entries(visibility).filter(([, v]) => !v).map(([f]) => f)
