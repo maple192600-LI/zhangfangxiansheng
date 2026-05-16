@@ -26,7 +26,7 @@
         <div class="loading-spinner"></div>
         <p>正在加载异常流水...</p>
       </div>
-      <div v-else class="table-workspace-main data-view">
+      <div v-else class="table-workspace-main">
         <AdvancedDataTable
           ref="tableRef"
           :columns="appliedColumns"

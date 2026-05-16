@@ -25,21 +25,7 @@
     <div v-if="errorMsg" class="error-bar">{{ errorMsg }}</div>
     <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载数据...</p></div>
 
-    <div v-else-if="isTemplateView" class="table-workspace-main template-view">
-      <div class="template-hint adt-no-print">
-        <span class="template-hint-main">
-          模板视图 · 当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
-        </span>
-        <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
-      </div>
-      <div class="excel-host" v-html="templateExcelHtml"></div>
-    </div>
-
-    <div v-else class="table-workspace-main data-view">
-      <div v-if="hasTemplate" class="view-mode-strip adt-no-print">
-        <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
-        <button class="view-switch-btn" type="button" @click="setView('template')">切换到模板视图</button>
-      </div>
+    <div v-else class="table-workspace-main">
       <AdvancedDataTable
         ref="tableRef"
         :columns="appliedColumns"
@@ -55,7 +41,7 @@
         :table-key="TABLE_KEY"
         show-column-settings
         show-reset-preferences
-        :is-in-data-view="isDataView"
+        :is-in-data-view="true"
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无数据，请先录入或导入流水"
@@ -68,7 +54,7 @@
       />
     </div>
 
-    <div class="bottom-bar" v-if="total > 0 && isDataView && !loading">
+    <div class="bottom-bar" v-if="total > 0 && !loading">
       <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
       <NButton secondary size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
       <NButton secondary size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
@@ -84,7 +70,6 @@ import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
 import { emptyDashFormatter, moneyFormatter, directionFormatter, abnormalCodeFormatter } from '@/utils/tabulatorFormatters'
 import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
-import { useDualView } from '@/composables/useDualView'
 import {
   getPreferences,
   applyPreferences,
@@ -114,7 +99,7 @@ const loading = ref(false)
 const errorMsg = ref('')
 const selectedIds = ref([])
 const tableRef = ref(null)
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns('base_data')
+const { templateColumns, loadTemplate } = useTemplateColumns('base_data')
 
 const MONEY_FIELDS = new Set(['income_amount', 'expense_amount', 'rolling_balance'])
 
@@ -135,8 +120,6 @@ const tabulatorColumns = computed(() =>
     abnormalField: 'abnormal_code',
   })
 )
-
-const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
 
 const preferencesVersion = ref(0)
 const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')

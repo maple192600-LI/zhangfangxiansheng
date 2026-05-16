@@ -525,6 +525,112 @@ onMounted(async () => {
 <style scoped>
 @import './common.css';
 
+/* CashJournal 双视图本地样式（common.css 中已移除公共版本） */
+
+.template-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 8px 14px;
+  background: var(--info-bg, #eff6ff);
+  border: 1px solid var(--info-border, #bfdbfe);
+  border-radius: var(--radius-sm);
+  color: var(--info-text, #1e40af);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  margin-bottom: var(--space-sm);
+}
+
+.template-hint-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.view-mode-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  background: var(--thead-bg);
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.view-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.view-switch-btn:hover {
+  background: var(--green-3);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.table-workspace-main.template-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.table-workspace-main.template-view > .template-hint {
+  flex-shrink: 0;
+}
+
+.table-workspace-main.template-view > .excel-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0;
+}
+
+.table-workspace-main.data-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.table-workspace-main.data-view > .adt-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.excel-host {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.excel-host .excel-template-wrap {
+  display: inline-block;
+  min-width: 100%;
+}
+
+.excel-host .excel-template-table td {
+  border: 1px solid #c8c2b5;
+  padding: 4px 6px;
+  word-break: break-word;
+}
+
 /* Excel 布局专用样式 */
 .excel-layout-wrapper {
   overflow-x: auto;

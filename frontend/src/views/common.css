@@ -543,14 +543,6 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
   overflow: hidden;
 }
 
-/* Excel 模板路径：在数据页 flex 布局下也要受约束 */
-.table-workspace-page > .excel-host {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  margin-top: 0;
-}
-
 /* ===== 响应式 ===== */
 @media (max-width: 1200px) {
   .metric-strip, .dashboard-grid, .dashboard-grid-2,
@@ -560,109 +552,15 @@ td.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-siz
 /* ===== 打印 ===== */
 /* 打印样式已移至全局 theme.css（scoped 导入无法匹配全局元素如 .sidebar） */
 
-/* ======= Excel 模板原表渲染（v-html 注入） ======= */
-.excel-host {
-  overflow-x: auto;
-  margin-top: 8px;
-}
-.excel-host .excel-template-wrap {
-  display: inline-block;
-  min-width: 100%;
-}
-.excel-host .excel-template-table td {
-  border: 1px solid #c8c2b5;
-  padding: 4px 6px;
-  word-break: break-word;
-}
-
-/* ===== 模板提示条 ===== */
-.template-hint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: 8px 14px;
-  background: var(--info-bg, #eff6ff);
-  border: 1px solid var(--info-border, #bfdbfe);
-  border-radius: var(--radius-sm);
-  color: var(--info-text, #1e40af);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  margin-bottom: var(--space-sm);
-}
-
-.template-hint-main {
-  min-width: 0;
-  flex: 1;
-}
-
-/* ===== 数据视图提示条 ===== */
-.view-mode-strip {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-bottom: none;
-  background: var(--thead-bg);
-  color: var(--muted);
-  font-size: var(--font-size-sm);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-}
-
-/* ===== 视图切换按钮 ===== */
-.view-switch-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 4px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-}
-
-.view-switch-btn:hover {
-  background: var(--green-3);
-  border-color: var(--green);
-  color: var(--green);
-}
-
-/* 模板路径 flex 滚动约束 */
-.table-workspace-main.template-view {
+/* ===== 表格工作区主内容 ===== */
+.table-workspace-main {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
-.table-workspace-main.template-view > .template-hint {
-  flex-shrink: 0;
-}
-
-.table-workspace-main.template-view > .excel-host {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  margin-top: 0;
-}
-
-.table-workspace-main.data-view {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.table-workspace-main.data-view > .adt-wrap {
+.table-workspace-main > .adt-wrap {
   flex: 1;
   min-height: 0;
 }
