@@ -32,21 +32,7 @@
       <p>正在加载...</p>
     </div>
 
-    <div v-else-if="isTemplateView" class="table-workspace-main template-view">
-      <div class="template-hint adt-no-print">
-        <span class="template-hint-main">
-          模板视图 · 当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
-        </span>
-        <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
-      </div>
-      <div class="excel-host" v-html="templateExcelHtml"></div>
-    </div>
-
     <div v-else-if="hasColumns" class="table-workspace-main data-view">
-      <div v-if="hasTemplate" class="view-mode-strip adt-no-print">
-        <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
-        <button class="view-switch-btn" type="button" @click="setView('template')">切换到模板视图</button>
-      </div>
       <AdvancedDataTable
         :columns="appliedColumns"
         :data="displayRows"
@@ -57,7 +43,6 @@
         :table-key="effectiveTableKey"
         show-column-settings
         show-reset-preferences
-        :is-in-data-view="isDataView"
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无数据，请调整查询条件后重试"
@@ -90,7 +75,6 @@ import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
 import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
 import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
-import { useDualView } from '@/composables/useDualView'
 import {
   getPreferences,
   applyPreferences,
@@ -157,8 +141,7 @@ const yearSelectOptions = computed(() => {
 })
 const monthSelectOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
 
-const { templateColumns, templateExcelHtml, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
-const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
 
 const moneyFieldsSet = new Set(props.moneyKeys)
 
