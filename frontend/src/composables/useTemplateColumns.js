@@ -28,6 +28,15 @@ export function useTemplateColumns(reportType) {
     templateLayout.value = null
     templateMeta.value = null
 
+    // dev-only: ?debug_no_template=1 强制跳过模板，走 AdvancedDataTable fallback
+    if (import.meta.env.DEV) {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('debug_no_template') === '1') {
+        templateLoaded.value = true
+        return
+      }
+    }
+
     try {
       const res = await http.get(`/report-templates/default/${reportType}/excel-html`)
       if (res?.html) {
