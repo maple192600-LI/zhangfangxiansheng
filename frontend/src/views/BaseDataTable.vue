@@ -99,7 +99,7 @@ const loading = ref(false)
 const errorMsg = ref('')
 const selectedIds = ref([])
 const tableRef = ref(null)
-const { templateColumns, loadTemplate } = useTemplateColumns('base_data')
+const { templateColumns, loadTemplate } = useTemplateColumns('base_data', { loadExcelHtml: false })
 
 const MONEY_FIELDS = new Set(['income_amount', 'expense_amount', 'rolling_balance'])
 

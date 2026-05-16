@@ -142,7 +142,7 @@ const yearSelectOptions = computed(() => {
 })
 const monthSelectOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
 
-const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
+const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType, { loadExcelHtml: false })
 
 const moneyFieldsSet = new Set(props.moneyKeys)
 

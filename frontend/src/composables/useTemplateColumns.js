@@ -14,7 +14,8 @@ import { ref, onMounted, onActivated } from 'vue'
 import http from '@/api'
 import { getDefaultTemplate } from '@/api/reportTemplate'
 
-export function useTemplateColumns(reportType) {
+export function useTemplateColumns(reportType, options = {}) {
+  const { loadExcelHtml = true } = options
   const templateColumns = ref(null)
   const templateLayout = ref(null)
   const templateExcelHtml = ref(null)
@@ -37,18 +38,20 @@ export function useTemplateColumns(reportType) {
       }
     }
 
-    try {
-      const res = await http.get(`/report-templates/default/${reportType}/excel-html`)
-      if (res?.html) {
-        templateExcelHtml.value = res.html
-        templateMeta.value = {
-          template_id: res.template_id,
-          template_code: res.template_code,
-          template_name: res.template_name,
+    if (loadExcelHtml) {
+      try {
+        const res = await http.get(`/report-templates/default/${reportType}/excel-html`)
+        if (res?.html) {
+          templateExcelHtml.value = res.html
+          templateMeta.value = {
+            template_id: res.template_id,
+            template_code: res.template_code,
+            template_name: res.template_name,
+          }
         }
+      } catch {
+        // 没有原 Excel 文件就降级
       }
-    } catch {
-      // 没有原 Excel 文件就降级
     }
 
     try {
