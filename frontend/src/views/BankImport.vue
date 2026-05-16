@@ -61,34 +61,21 @@
     </div>
 
     <!-- Step 3: 预览确认 -->
-    <div v-if="step === 3" class="panel" style="margin-top:14px">
-      <div class="panel-title">解析预览（有效 {{ previewResult.valid_count }} 条，异常 {{ previewResult.abnormal_count }} 条）</div>
-      <div v-if="previewResult.parsed_rows?.length" style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr>
-              <th>日期</th>
-              <th>摘要</th>
-              <th>对方</th>
-              <th class="money">收入</th>
-              <th class="money">支出</th>
-              <th class="money">余额</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, i) in previewResult.parsed_rows.slice(0, 20)" :key="i">
-              <td>{{ row.business_date }}</td>
-              <td>{{ row.summary_text }}</td>
-              <td>{{ row.counterparty_name }}</td>
-              <td class="money">{{ row.income_amount || '' }}</td>
-              <td class="money">{{ row.expense_amount || '' }}</td>
-              <td class="money">{{ row.balance || '' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-if="previewResult.parsed_rows.length > 20" style="color:var(--muted);font-size:12px;padding:4px 0">
-          仅显示前 20 条，共 {{ previewResult.parsed_rows.length }} 条有效记录
-        </div>
+    <div v-if="step === 3" style="margin-top:14px">
+      <div class="bank-preview-header">
+        <span>解析预览（有效 {{ previewResult.valid_count }} 条，异常 {{ previewResult.abnormal_count }} 条）</span>
+      </div>
+      <div class="bank-preview-table">
+        <AdvancedDataTable
+          v-if="previewResult.parsed_rows?.length"
+          :columns="previewColumns"
+          :data="previewResult.parsed_rows"
+          :rowKey="'_idx'"
+          :pagination="true"
+          :showToolbar="true"
+          :tableKey="'bank-import-preview'"
+          :fillParent="true"
+        />
       </div>
       <div class="btn-row" style="margin-top:14px">
         <NButton secondary @click="step = 2">返回</NButton>
@@ -120,9 +107,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { NButton } from 'naive-ui'
 import * as bank from '@/api/bank'
+import { fmtAmt } from '@/utils/format'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 
 const fileInput = ref(null)
 const uploadResult = ref({})
@@ -133,6 +122,30 @@ const previewResult = ref({})
 const committing = ref(false)
 const commitResult = ref({})
 const noRuleHint = ref(false)
+
+const previewColumns = [
+  { field: 'business_date', title: '日期', width: 110 },
+  { field: 'summary_text', title: '摘要', minWidth: 140 },
+  { field: 'counterparty_name', title: '对方', width: 120, formatter: (cell) => cell.getValue() || '-' },
+  {
+    field: 'income_amount', title: '收入', width: 110, hozAlign: 'right',
+    formatter: (cell) => {
+      const v = cell.getValue()
+      return v ? `<span style="color:var(--ok-text)">${fmtAmt(v)}</span>` : ''
+    },
+  },
+  {
+    field: 'expense_amount', title: '支出', width: 110, hozAlign: 'right',
+    formatter: (cell) => {
+      const v = cell.getValue()
+      return v ? `<span style="color:var(--warn-text)">${fmtAmt(v)}</span>` : ''
+    },
+  },
+  {
+    field: 'balance', title: '余额', width: 120, hozAlign: 'right',
+    formatter: (cell) => fmtAmt(cell.getValue()),
+  },
+]
 
 function triggerFileInput() { fileInput.value?.click() }
 
@@ -181,6 +194,13 @@ async function doPreview() {
       batch_code: uploadResult.value.batch_code,
       parser_artifact_id: parserMatch.value.parser_artifact_id,
     })
+    // Add _idx for rowKey
+    if (previewResult.value.parsed_rows) {
+      previewResult.value.parsed_rows = previewResult.value.parsed_rows.map((r, i) => ({
+        ...r,
+        _idx: i,
+      }))
+    }
     step.value = 3
   } catch (e) {
     hint.value = e.message || '预览失败'
@@ -256,6 +276,25 @@ function reset() {
 .hint-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #e6c7b8; background: #fff4ef; color: #8b4f38; border-radius: var(--radius-sm); display: flex; align-items: center; }
 .match-banner { margin-top: 10px; padding: 8px 12px; background: #f0f9f4; border: 1px solid #c8e6d0; border-radius: var(--radius-sm); display: flex; align-items: center; }
 .btn-row { display: flex; gap: 10px; justify-content: flex-end; }
+
+.bank-preview-header {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--thead-bg);
+}
+
+.bank-preview-table {
+  height: 400px;
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  overflow: hidden;
+}
+
 @media (max-width: 900px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
