@@ -61,6 +61,7 @@
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无数据，请调整查询条件后重试"
+        :row-key="'__row_key'"
         :row-class="rowClassFn"
         @density-change="onDensityChange"
         @column-width-change="onColumnWidthChange"
@@ -240,13 +241,16 @@ function rowClassFn(row) {
 }
 
 const displayRows = computed(() => {
-  const base = rows.value
+  const base = rows.value.map((r, idx) => ({
+    ...r,
+    __row_key: r.__row_key || `${props.reportType}-${idx}`,
+  }))
   if (!props.addFrontendTotal || base.length <= 1) return base
   const totals = {}
   for (const key of props.moneyKeys) {
     totals[key] = base.reduce((sum, r) => sum + (Number(r[key]) || 0), 0)
   }
-  return [...base, { entity_name: '合计', ...totals, is_total: true }]
+  return [...base, { entity_name: '合计', ...totals, is_total: true, __row_key: `${props.reportType}-__total__` }]
 })
 
 async function loadData() {
