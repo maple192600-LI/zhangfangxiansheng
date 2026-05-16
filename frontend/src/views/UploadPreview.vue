@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="section">
+    <div class="section table-workspace-page">
       <div class="section-title">
         <h3>流水预览</h3>
         <span>确认提交前检查数据质量</span>
@@ -38,57 +38,29 @@
       </div>
 
       <!-- 有效行表格 -->
-      <div class="table-wrap" v-if="activeTab==='valid'">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th><th>单位简称</th><th>账户名称</th><th>日期</th><th>摘要</th><th>对方</th>
-              <th>收入</th><th>支出</th><th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in validRows" :key="r._row_no">
-              <td>{{ r._row_no }}</td>
-              <td>{{ r._entity_name || '-' }}</td>
-              <td>{{ r._account_name || '-' }}</td>
-              <td>{{ r.business_date }}</td>
-              <td>{{ r.summary_text }}</td>
-              <td>{{ r.counterparty_name || '-' }}</td>
-              <td class="money inc">{{ fmtAmt(r.income_amount) }}</td>
-              <td class="money exp">{{ fmtAmt(r.expense_amount) }}</td>
-              <td><span class="tag tag-green">有效</span></td>
-            </tr>
-            <tr v-if="!validRows.length"><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">暂无有效行</td></tr>
-          </tbody>
-        </table>
+      <div v-if="activeTab==='valid'" class="table-workspace-main">
+        <AdvancedDataTable
+          :columns="validColumns"
+          :data="validRows"
+          :rowKey="'_row_no'"
+          :pagination="true"
+          :showToolbar="true"
+          :tableKey="'upload-preview-valid'"
+          :fillParent="true"
+        />
       </div>
 
       <!-- 异常行表格 -->
-      <div class="table-wrap" v-if="activeTab==='abnormal'">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th><th>单位编码</th><th>账户编号</th><th>日期</th><th>摘要</th>
-              <th>收入</th><th>支出</th><th>异常代码</th><th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in abnormalRows" :key="r._row_no" class="abnormal-row">
-              <td>{{ r._row_no }}</td>
-              <td>{{ r.entity_match_key || '-' }}</td>
-              <td>{{ r.account_match_key || '-' }}</td>
-              <td>{{ r.business_date || '-' }}</td>
-              <td>{{ r.summary_text || '-' }}</td>
-              <td class="money inc">{{ fmtAmt(r.income_amount) }}</td>
-              <td class="money exp">{{ fmtAmt(r.expense_amount) }}</td>
-              <td><span class="tag tag-warn">{{ r.abnormal_code }}</span></td>
-              <td>
-                <NButton secondary size="small" @click="goFix(r._row_no)">修复</NButton>
-              </td>
-            </tr>
-            <tr v-if="!abnormalRows.length"><td colspan="9" style="text-align:center;color:var(--muted);padding:30px">暂无异常行</td></tr>
-          </tbody>
-        </table>
+      <div v-if="activeTab==='abnormal'" class="table-workspace-main">
+        <AdvancedDataTable
+          :columns="abnormalColumns"
+          :data="abnormalRows"
+          :rowKey="'_row_no'"
+          :pagination="true"
+          :showToolbar="true"
+          :tableKey="'upload-preview-abnormal'"
+          :fillParent="true"
+        />
       </div>
 
       <!-- 提交结果 -->
@@ -108,6 +80,7 @@ import { NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import * as api from '@/api/manual'
 import { fmtAmt } from '@/utils/format'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,6 +95,67 @@ const commitResult = ref(null)
 const total = computed(() => validRows.value.length + abnormalRows.value.length)
 const validCount = computed(() => validRows.value.length)
 const abnormalCount = computed(() => abnormalRows.value.length)
+
+const validColumns = [
+  { field: '_row_no', title: '#', width: 50, headerSort: false, hozAlign: 'center' },
+  { field: '_entity_name', title: '单位简称', minWidth: 100, formatter: (cell) => cell.getValue() || '-' },
+  { field: '_account_name', title: '账户名称', minWidth: 120, formatter: (cell) => cell.getValue() || '-' },
+  { field: 'business_date', title: '日期', width: 110 },
+  { field: 'summary_text', title: '摘要', minWidth: 120 },
+  { field: 'counterparty_name', title: '对方', width: 100, formatter: (cell) => cell.getValue() || '-' },
+  {
+    field: 'income_amount', title: '收入', width: 110, hozAlign: 'right',
+    formatter: (cell) => {
+      const v = cell.getValue()
+      return v ? `<span style="color:var(--ok-text)">${fmtAmt(v)}</span>` : ''
+    },
+  },
+  {
+    field: 'expense_amount', title: '支出', width: 110, hozAlign: 'right',
+    formatter: (cell) => {
+      const v = cell.getValue()
+      return v ? `<span style="color:var(--warn-text)">${fmtAmt(v)}</span>` : ''
+    },
+  },
+  {
+    field: 'status', title: '状态', width: 70, hozAlign: 'center',
+    formatter: () => '<span class="tabulator-tag tabulator-tag-green">有效</span>',
+  },
+]
+
+const abnormalColumns = [
+  { field: '_row_no', title: '#', width: 50, headerSort: false, hozAlign: 'center' },
+  { field: 'entity_match_key', title: '单位编码', width: 100, formatter: (cell) => cell.getValue() || '-' },
+  { field: 'account_match_key', title: '账户编号', width: 100, formatter: (cell) => cell.getValue() || '-' },
+  { field: 'business_date', title: '日期', width: 110, formatter: (cell) => cell.getValue() || '-' },
+  { field: 'summary_text', title: '摘要', minWidth: 120, formatter: (cell) => cell.getValue() || '-' },
+  {
+    field: 'income_amount', title: '收入', width: 110, hozAlign: 'right',
+    formatter: (cell) => {
+      const v = cell.getValue()
+      return v ? `<span style="color:var(--ok-text)">${fmtAmt(v)}</span>` : ''
+    },
+  },
+  {
+    field: 'expense_amount', title: '支出', width: 110, hozAlign: 'right',
+    formatter: (cell) => {
+      const v = cell.getValue()
+      return v ? `<span style="color:var(--warn-text)">${fmtAmt(v)}</span>` : ''
+    },
+  },
+  {
+    field: 'abnormal_code', title: '异常代码', width: 90, hozAlign: 'center',
+    formatter: (cell) => `<span class="tabulator-tag tabulator-tag-orange">${cell.getValue() || ''}</span>`,
+  },
+  {
+    field: '__action', title: '操作', width: 70, hozAlign: 'center', headerSort: false,
+    formatter: () => '<button class="exc-action-btn" title="修复">修复</button>',
+    cellClick: (_e, cell) => {
+      const rowNo = cell.getRow()?.getData()?._row_no
+      if (rowNo != null) goFix(rowNo)
+    },
+  },
+]
 
 async function loadPreview() {
   if (!batchCode.value) return
@@ -151,12 +185,4 @@ onMounted(loadPreview)
 
 <style scoped>
 @import './common.css';
-
-/* 页面特有样式 */
-.table-wrap {
-  overflow: auto;
-  max-height: calc(100vh - 360px);
-}
-
-tr.abnormal-row { background: #fef9f0; }
 </style>
