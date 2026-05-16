@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="section">
+    <div class="section table-workspace-page">
       <div class="section-title">
         <div>
           <h3>异常中心</h3>
@@ -16,7 +16,7 @@
         <NButton class="filter" :class="{ active: filters.state === '' }" quaternary @click="setState('')">全部</NButton>
         <NButton class="filter" :class="{ active: filters.state === '待确认' }" quaternary @click="setState('待确认')">待确认</NButton>
         <NButton class="filter" :class="{ active: filters.state === '异常' }" quaternary @click="setState('异常')">异常</NButton>
-        <input v-model="filters.keyword" class="filter keyword-input" placeholder="搜索摘要/对方" @keyup.enter="reload" />
+        <input v-model="filters.keyword" class="filter keyword-input" placeholder="搜索摘要/对方" @keyup.enter="onKeywordEnter" />
         <div style="flex:1"></div>
         <NButton secondary @click="reload" :disabled="loading">{{ loading ? '刷新中...' : '刷新' }}</NButton>
       </div>
@@ -26,44 +26,35 @@
         <div class="loading-spinner"></div>
         <p>正在加载异常流水...</p>
       </div>
-      <table v-else>
-        <thead>
-          <tr>
-            <th>日期</th>
-            <th>单位</th>
-            <th>账户</th>
-            <th>摘要</th>
-            <th>对方</th>
-            <th class="money">收入</th>
-            <th class="money">支出</th>
-            <th>状态</th>
-            <th>来源</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in rows" :key="row.id" :class="{ selected: editing?.id === row.id }">
-            <td>{{ row.business_date }}</td>
-            <td>{{ row.entity_name }}</td>
-            <td>{{ row.account_name }}</td>
-            <td>{{ row.summary }}</td>
-            <td>{{ row.counterparty }}</td>
-            <td class="money">{{ fmtAmt(row.amount_in) }}</td>
-            <td class="money">{{ fmtAmt(row.amount_out) }}</td>
-            <td><span class="tag" :class="row.state === '异常' ? 'tag-warn' : 'tag-blue'">{{ row.state }}</span></td>
-            <td>{{ row.source }}</td>
-            <td>
-              <div class="btn-row compact">
-                <NButton secondary size="small" @click="startEdit(row)">修正</NButton>
-                <NButton type="warning" size="small" @click="voidRow(row)">作废</NButton>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="!rows.length">
-            <td colspan="10" class="empty-cell">暂无待处理异常流水</td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else class="table-workspace-main data-view">
+        <AdvancedDataTable
+          ref="tableRef"
+          :columns="appliedColumns"
+          :data="rows"
+          :pagination="false"
+          fill-parent
+          show-toolbar
+          :density="tableDensity"
+          :table-key="TABLE_KEY"
+          show-column-settings
+          show-reset-preferences
+          :row-class="rowClassFn"
+          :row-key="'id'"
+          empty-text="暂无待处理异常流水"
+          @density-change="onDensityChange"
+          @column-width-change="onColumnWidthChange"
+          @column-order-change="onColumnOrderChange"
+          @column-visibility-change="onColumnVisibilityChange"
+          @preferences-reset="onPreferencesReset"
+          @cell-click="onCellClick"
+        />
+        <div class="bottom-bar">
+          <span class="count-info">共 {{ total }} 条</span>
+          <button class="btn btn-secondary btn-sm" :disabled="page <= 1" @click="prevPage">上一页</button>
+          <span style="font-size:var(--font-size-xs);color:var(--muted)">第 {{ page }} 页</span>
+          <button class="btn btn-secondary btn-sm" :disabled="page * 50 >= total" @click="nextPage">下一页</button>
+        </div>
+      </div>
     </div>
 
     <div class="section" v-if="editing">
@@ -110,10 +101,27 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed, watch, nextTick } from 'vue'
 import { NDatePicker, NButton } from 'naive-ui'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { getPendingEvents, resolveEvent, voidEvent } from '@/api/events'
-import { fmtAmt } from '@/utils/format'
+import {
+  emptyDashFormatter,
+  moneyFormatter,
+  exceptionStateFormatter,
+  exceptionActionFormatter,
+} from '@/utils/tabulatorFormatters'
+import {
+  getPreferences,
+  applyPreferences,
+  saveColumnWidth,
+  saveColumnVisibility,
+  saveColumnOrder,
+  saveDensity,
+  resetPreferences,
+} from '@/composables/useAdvancedTablePreferences'
+
+const TABLE_KEY = 'exception-center'
 
 const rows = ref([])
 const summary = ref({ pending_count: 0, abnormal_count: 0 })
@@ -126,11 +134,102 @@ const editing = ref(null)
 const note = ref('')
 const filters = ref({ state: '', keyword: '' })
 const form = ref({})
+const tableRef = ref(null)
+
+const DEFAULT_COLUMNS = [
+  { field: 'business_date', title: '日期', width: 110, formatter: emptyDashFormatter },
+  { field: 'entity_name', title: '单位', width: 120, formatter: emptyDashFormatter },
+  { field: 'account_name', title: '账户', width: 140, formatter: emptyDashFormatter },
+  { field: 'summary', title: '摘要', width: 160, formatter: emptyDashFormatter },
+  { field: 'counterparty', title: '对方', width: 120, formatter: emptyDashFormatter },
+  { field: 'amount_in', title: '收入', width: 120, hozAlign: 'right', formatter: moneyFormatter },
+  { field: 'amount_out', title: '支出', width: 120, hozAlign: 'right', formatter: moneyFormatter },
+  { field: 'state', title: '状态', width: 90, hozAlign: 'center', formatter: exceptionStateFormatter },
+  { field: 'source', title: '来源', width: 100, formatter: emptyDashFormatter },
+  {
+    field: '_actions',
+    title: '操作',
+    width: 140,
+    hozAlign: 'center',
+    headerSort: false,
+    frozen: true,
+    formatter: exceptionActionFormatter,
+  },
+]
+
+const preferencesVersion = ref(0)
+const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')
+
+function touchPreferences() { preferencesVersion.value++ }
+
+const appliedColumns = computed(() => {
+  preferencesVersion.value
+  return applyPreferences(DEFAULT_COLUMNS, getPreferences(TABLE_KEY))
+})
+
+function onDensityChange(value) {
+  tableDensity.value = value
+  saveDensity(TABLE_KEY, value)
+}
+
+function onColumnWidthChange({ field, width }) {
+  saveColumnWidth(TABLE_KEY, field, width)
+}
+
+function onColumnOrderChange(order) {
+  saveColumnOrder(TABLE_KEY, order)
+}
+
+function onColumnVisibilityChange({ field, visible }) {
+  saveColumnVisibility(TABLE_KEY, field, visible)
+  touchPreferences()
+}
+
+function onPreferencesReset() {
+  resetPreferences(TABLE_KEY)
+  tableDensity.value = 'default'
+  touchPreferences()
+}
+
+function rowClassFn(row) {
+  if (editing.value && row.id === editing.value.id) return 'editing-row'
+  return ''
+}
+
+function onCellClick({ event, rowData }) {
+  const btn = event.target.closest('[data-action]')
+  if (!btn) return
+  const action = btn.dataset.action
+  if (action === 'edit') {
+    startEdit(rowData)
+  } else if (action === 'void') {
+    voidRow(rowData)
+  }
+}
 
 function setState(state) {
   filters.value.state = state
   page.value = 1
   reload()
+}
+
+function onKeywordEnter() {
+  page.value = 1
+  reload()
+}
+
+function prevPage() {
+  if (page.value > 1) {
+    page.value--
+    reload()
+  }
+}
+
+function nextPage() {
+  if (page.value * 50 < total.value) {
+    page.value++
+    reload()
+  }
 }
 
 async function reload() {
@@ -162,12 +261,14 @@ function startEdit(row) {
     amount_out: row.amount_out,
     rolling_balance: row.rolling_balance,
   }
+  triggerRedraw()
 }
 
 function cancelEdit() {
   editing.value = null
   form.value = {}
   note.value = ''
+  triggerRedraw()
 }
 
 async function resolveRow() {
@@ -201,6 +302,19 @@ async function voidRow(row) {
   }
 }
 
+function triggerRedraw() {
+  nextTick(() => {
+    try {
+      const t = tableRef.value?.table
+      if (t) {
+        t.redraw(true)
+      }
+    } catch (e) {
+      rows.value = [...rows.value]
+    }
+  })
+}
+
 onMounted(reload)
 </script>
 
@@ -215,14 +329,6 @@ onMounted(reload)
 
 .keyword-input {
   min-width: 180px;
-}
-
-.compact {
-  flex-wrap: nowrap;
-}
-
-tr.selected {
-  background: #f8f5ef;
 }
 
 .edit-grid {
