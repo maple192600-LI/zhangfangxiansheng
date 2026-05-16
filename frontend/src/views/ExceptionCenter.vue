@@ -65,7 +65,7 @@
       <div class="edit-grid">
         <label>
           <span>业务日期</span>
-          <NDatePicker v-model:value="form.business_date" type="date" value-format="yyyy-MM-dd" style="width:100%" />
+          <NDatePicker :value="businessDateTs" @update:value="v => businessDateTs = v" type="date" style="width:100%" />
         </label>
         <label>
           <span>摘要</span>
@@ -135,6 +135,18 @@ const note = ref('')
 const filters = ref({ state: '', keyword: '' })
 const form = ref({})
 const tableRef = ref(null)
+const businessDateTs = ref(null)
+
+function dateStringToTs(s) {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+function tsToDateString(ts) {
+  if (ts == null) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const DEFAULT_COLUMNS = [
   { field: 'business_date', title: '日期', width: 110, formatter: emptyDashFormatter },
@@ -261,6 +273,7 @@ function startEdit(row) {
     amount_out: row.amount_out,
     rolling_balance: row.rolling_balance,
   }
+  businessDateTs.value = dateStringToTs(row.business_date)
   triggerRedraw()
 }
 
@@ -268,6 +281,7 @@ function cancelEdit() {
   editing.value = null
   form.value = {}
   note.value = ''
+  businessDateTs.value = null
   triggerRedraw()
 }
 
@@ -276,7 +290,8 @@ async function resolveRow() {
   saving.value = true
   errorMsg.value = ''
   try {
-    await resolveEvent(editing.value.id, { fixes: form.value, note: note.value })
+    const payload = { ...form.value, business_date: tsToDateString(businessDateTs.value) }
+    await resolveEvent(editing.value.id, { fixes: payload, note: note.value })
     cancelEdit()
     await reload()
   } catch (e) {
