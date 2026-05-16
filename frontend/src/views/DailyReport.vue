@@ -144,7 +144,7 @@ const tabulatorColumns = computed(() =>
   })
 )
 
-const displayColumns = computed(() => templateColumns.value || [])
+const displayColumns = computed(() => templateColumns.value || DEFAULT_COLUMNS)
 
 const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
 
