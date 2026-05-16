@@ -43,7 +43,6 @@
         :table-key="effectiveTableKey"
         show-column-settings
         show-reset-preferences
-        :is-in-data-view="true"
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无数据，请调整查询条件后重试"

@@ -41,7 +41,6 @@
         :table-key="TABLE_KEY"
         show-column-settings
         show-reset-preferences
-        :is-in-data-view="true"
         :hidden-fields="hiddenFields"
         :all-columns-for-settings="tabulatorColumns"
         empty-text="暂无数据，请先录入或导入流水"
