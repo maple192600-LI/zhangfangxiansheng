@@ -17,14 +17,21 @@
         </NSpace>
       </div>
 
-      <div v-if="templateExcelHtml" class="table-workspace-main template-view">
+      <div v-if="isTemplateView" class="table-workspace-main template-view">
         <div class="template-hint adt-no-print">
-          当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
+          <span class="template-hint-main">
+            模板视图 · 当前使用 Excel 模板渲染，保留原始报表版式；高级表格交互未启用。
+          </span>
+          <button class="view-switch-btn" type="button" @click="setView('data')">切换到数据视图</button>
         </div>
         <div class="excel-host" v-html="templateExcelHtml"></div>
       </div>
 
-      <div v-else class="table-workspace-main">
+      <div v-else class="table-workspace-main data-view">
+        <div v-if="hasTemplate" class="view-mode-strip adt-no-print">
+          <span>数据视图 · 当前启用高级表格，可调整列宽、排序和切换密度。</span>
+          <button class="view-switch-btn" type="button" @click="setView('template')">切换到模板视图</button>
+        </div>
         <AdvancedDataTable
           :columns="tabulatorColumns"
           :data="rows"
@@ -36,7 +43,7 @@
         />
       </div>
 
-      <div class="bottom-bar" v-if="total > 0 && !templateExcelHtml">
+      <div class="bottom-bar" v-if="total > 0 && isDataView">
         <span class="count-info">共 {{ total }} 条，第 {{ page }} / {{ totalPages }} 页</span>
         <NButton size="small" :disabled="page <= 1" @click="page--; loadData()">上一页</NButton>
         <NButton size="small" :disabled="page >= totalPages" @click="page++; loadData()">下一页</NButton>
@@ -51,6 +58,8 @@ import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
 import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
 import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
+import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
+import { useDualView } from '@/composables/useDualView'
 import * as api from '@/api/report'
 import * as master from '@/api/master'
 import { exportReport } from '@/api/export'
@@ -90,7 +99,7 @@ const endDateTs = computed({
   set: (v) => { endDate.value = tsToDateString(v) }
 })
 
-const MONEY_FIELD_SET = new Set(['amount', 'rolling_balance'])
+const MONEY_FIELDS = new Set(['amount', 'rolling_balance'])
 
 const DEFAULT_COLUMNS = [
   { field: 'business_date', title: '日期', width: 120, hozAlign: 'center', formatter: emptyDashFormatter },
@@ -102,19 +111,13 @@ const DEFAULT_COLUMNS = [
   { field: 'rolling_balance', title: '余额', width: 130, hozAlign: 'right', formatter: moneyFormatter },
 ]
 
-const tabulatorColumns = computed(() => {
-  if (templateColumns.value?.length) {
-    return templateColumns.value.map(col => {
-      const def = { field: col.field_key, title: col.header_name }
-      if (col.width) def.width = col.width
-      if (col.align) def.hozAlign = col.align
-      if (MONEY_FIELD_SET.has(col.field_key)) def.formatter = moneyFormatter
-      else def.formatter = emptyDashFormatter
-      return def
-    })
-  }
-  return DEFAULT_COLUMNS
-})
+const tabulatorColumns = computed(() =>
+  adaptTemplateColumns(templateColumns.value, DEFAULT_COLUMNS, {
+    moneyFields: MONEY_FIELDS,
+  })
+)
+
+const { hasTemplate, isTemplateView, isDataView, setView } = useDualView(templateExcelHtml)
 
 async function loadData() {
   try {
