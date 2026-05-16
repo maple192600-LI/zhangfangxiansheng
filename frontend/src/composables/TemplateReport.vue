@@ -1,63 +1,68 @@
 <template>
-  <div class="report-print-root-wrapper">
-    <div class="section report-print-root">
-      <div class="section-title">
-        <h3>{{ title }}</h3>
-        <span>{{ subtitle }}</span>
+  <div class="section report-print-root table-workspace-page">
+    <div class="section-title">
+      <h3>{{ title }}</h3>
+      <span>{{ subtitle }}</span>
+    </div>
+
+    <div class="filters-bar">
+      <template v-if="dateMode === 'range'">
+        <NDatePicker :value="startDateTs" @update:value="v => startDateTs = v" type="date" clearable style="width:150px" />
+        <span style="color:var(--muted);font-size:13px">至</span>
+        <NDatePicker :value="endDateTs" @update:value="v => endDateTs = v" type="date" clearable style="width:150px" />
+      </template>
+      <template v-else-if="dateMode === 'year'">
+        <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
+      </template>
+      <template v-else>
+        <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
+        <NSelect v-model:value="selMonth" :options="monthSelectOptions" filterable style="width:80px" />
+      </template>
+      <MasterEntitySelect v-model="entityId" :entities="entities" />
+      <div style="flex:1"></div>
+      <div class="btn-row">
+        <NButton secondary @click="doExport">导出</NButton>
+        <NButton secondary @click="handlePrint">打印</NButton>
+        <NButton type="primary" @click="loadData">生成报表</NButton>
       </div>
-      <div class="filters-bar">
-        <template v-if="dateMode === 'range'">
-          <NDatePicker v-model:value="startDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
-          <span style="color:var(--muted);font-size:13px">至</span>
-          <NDatePicker v-model:value="endDate" type="date" value-format="yyyy-MM-dd" clearable style="width:150px" />
-        </template>
-        <template v-else-if="dateMode === 'year'">
-          <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
-        </template>
-        <template v-else>
-          <NSelect v-model:value="selYear" :options="yearSelectOptions" filterable style="width:100px" />
-          <NSelect v-model:value="selMonth" :options="monthSelectOptions" filterable style="width:80px" />
-        </template>
-        <MasterEntitySelect v-model="entityId" :entities="entities" />
-        <div style="flex:1"></div>
-        <div class="btn-row">
-          <NButton secondary @click="doExport">导出</NButton>
-          <NButton secondary @click="handlePrint">打印</NButton>
-          <NButton type="primary" @click="loadData">生成报表</NButton>
-        </div>
-      </div>
-      <div v-if="loading" class="loading-state"><div class="loading-spinner"></div><p>正在加载...</p></div>
-      <div v-else-if="templateLoaded && !templateColumns" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h4>未配置报表模板</h4>
-        <p>请先在「系统设置 → 报表模板管理」中上传{{ title }}模板</p>
-      </div>
-      <table v-else-if="templateColumns">
-        <thead>
-          <tr>
-            <th v-for="col in templateColumns" :key="col.field_key" :style="{ width: col.width+'px', textAlign: col.align }">{{ col.header_name }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="(r, idx) in rows" :key="idx">
-            <tr v-if="r.is_subtotal" class="subtotal-row">
-              <td v-for="(col, ci) in templateColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">
-                <strong>{{ ci === 0 ? r.entity_name : cellVal(r, col.field_key) }}</strong>
-              </td>
-            </tr>
-            <tr v-else>
-              <td v-for="col in templateColumns" :key="col.field_key" :class="moneyClass(col.field_key)" :style="{ textAlign: col.align }">{{ cellVal(r, col.field_key) }}</td>
-            </tr>
-          </template>
-          <tr v-if="!rows.length">
-            <td :colspan="templateColumns.length" class="empty-cell">暂无数据，请调整查询条件后重试</td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else class="empty-state">
-        <div class="empty-icon">📊</div>
-        <h4>正在加载模板...</h4>
-      </div>
+    </div>
+
+    <div v-if="loading" class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>正在加载...</p>
+    </div>
+
+    <div v-else-if="hasColumns" class="table-workspace-main data-view">
+      <AdvancedDataTable
+        :columns="appliedColumns"
+        :data="displayRows"
+        :pagination="false"
+        fill-parent
+        show-toolbar
+        :density="tableDensity"
+        :table-key="effectiveTableKey"
+        show-column-settings
+        show-reset-preferences
+        :hidden-fields="hiddenFields"
+        :all-columns-for-settings="tabulatorColumns"
+        empty-text="暂无数据，请调整查询条件后重试"
+        :row-key="'__row_key'"
+        :row-class="rowClassFn"
+        @density-change="onDensityChange"
+        @column-width-change="onColumnWidthChange"
+        @column-order-change="onColumnOrderChange"
+        @column-visibility-change="onColumnVisibilityChange"
+        @preferences-reset="onPreferencesReset"
+      />
+    </div>
+
+    <div v-else class="empty-state">
+      <div class="empty-icon">📊</div>
+      <h4 v-if="!templateLoaded">正在加载...</h4>
+      <template v-else>
+        <h4>暂无报表数据</h4>
+        <p>选择条件后点击"生成报表"</p>
+      </template>
     </div>
   </div>
 </template>
@@ -66,10 +71,21 @@
 import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import MasterEntitySelect from '@/components/MasterEntitySelect.vue'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { useReportPrint } from '@/composables/useReportPrint'
+import { emptyDashFormatter, moneyFormatter } from '@/utils/tabulatorFormatters'
+import { adaptTemplateColumns } from '@/composables/useColumnAdapter'
+import {
+  getPreferences,
+  applyPreferences,
+  saveColumnWidth,
+  saveColumnVisibility,
+  saveColumnOrder,
+  saveDensity,
+  resetPreferences,
+} from '@/composables/useAdvancedTablePreferences'
 import * as reportApi from '@/api/report'
 import * as master from '@/api/master'
-import { fmtAmt } from '@/utils/format'
 import { exportReport } from '@/api/export'
 import { useTemplateColumns } from '@/composables/useTemplateColumns'
 import { getReportFilename } from '@/utils/reportFilename'
@@ -82,13 +98,17 @@ const props = defineProps({
   dateMode: { type: String, default: 'range' },
   defaultHeaders: { type: Array, default: () => [] },
   defaultKeys: { type: Array, default: () => [] },
+  moneyKeys: { type: Array, default: () => [] },
+  tableKey: { type: String, default: '' },
+  addFrontendTotal: { type: Boolean, default: false },
 })
 
 const { handlePrint } = useReportPrint()
 
 const today = new Date()
-const startDate = ref(today.toISOString().slice(0, 10))
-const endDate = ref(today.toISOString().slice(0, 10))
+const todayStr = today.toISOString().slice(0, 10)
+const startDate = ref(todayStr)
+const endDate = ref(todayStr)
 const selYear = ref(today.getFullYear())
 const selMonth = ref(today.getMonth() + 1)
 const entityId = ref(null)
@@ -96,23 +116,125 @@ const entities = ref([])
 const rows = ref([])
 const loading = ref(false)
 
-const yearOptions = computed(() => {
-  const y = today.getFullYear()
-  return [y - 2, y - 1, y, y + 1]
+function dateStringToTs(s) {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+function tsToDateString(ts) {
+  if (ts == null) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const startDateTs = computed({
+  get: () => dateStringToTs(startDate.value),
+  set: (v) => { startDate.value = tsToDateString(v) }
 })
-const yearSelectOptions = computed(() => yearOptions.value.map(y => ({ label: `${y}年`, value: y })))
+const endDateTs = computed({
+  get: () => dateStringToTs(endDate.value),
+  set: (v) => { endDate.value = tsToDateString(v) }
+})
+
+const yearSelectOptions = computed(() => {
+  const y = today.getFullYear()
+  return [y - 2, y - 1, y, y + 1].map(v => ({ label: `${v}年`, value: v }))
+})
 const monthSelectOptions = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, value: i + 1 }))
 
 const { templateColumns, templateLoaded, loadTemplate } = useTemplateColumns(props.reportType)
 
-const MONEY_KEYS = new Set(['opening_balance', 'total_income', 'total_expense', 'net_change', 'ending_balance', 'period_income', 'period_expense', 'amount', 'rolling_balance'])
+const moneyFieldsSet = new Set(props.moneyKeys)
 
-function moneyClass(key) { return MONEY_KEYS.has(key) ? 'money' : '' }
-function cellVal(r, key) {
-  if (MONEY_KEYS.has(key)) return fmtAmt(r[key])
-  if (r[key] === undefined || r[key] === null) return ''
-  return r[key]
+const DEFAULT_COLUMNS = computed(() => {
+  if (!props.defaultHeaders.length || !props.defaultKeys.length) return []
+  if (props.defaultHeaders.length !== props.defaultKeys.length) {
+    console.warn(`[TemplateReport] defaultHeaders and defaultKeys length mismatch for "${props.reportType}"`)
+    return []
+  }
+  return props.defaultHeaders.map((header, i) => {
+    const field = props.defaultKeys[i]
+    const isMoney = moneyFieldsSet.has(field)
+    return {
+      field,
+      title: header,
+      width: isMoney ? 140 : 160,
+      hozAlign: isMoney ? 'right' : undefined,
+      formatter: isMoney ? moneyFormatter : emptyDashFormatter,
+      headerSort: false,
+    }
+  })
+})
+
+const tabulatorColumns = computed(() => {
+  const cols = adaptTemplateColumns(templateColumns.value, DEFAULT_COLUMNS.value, {
+    moneyFields: moneyFieldsSet,
+  })
+  return cols.map(col => ({ ...col, headerSort: false }))
+})
+
+const hasColumns = computed(() => tabulatorColumns.value.length > 0)
+
+const effectiveTableKey = props.tableKey || `template-report-${props.reportType}`
+
+const preferencesVersion = ref(0)
+const tableDensity = ref(getPreferences(effectiveTableKey).density || 'default')
+
+function touchPreferences() { preferencesVersion.value++ }
+
+const appliedColumns = computed(() => {
+  preferencesVersion.value
+  return applyPreferences(tabulatorColumns.value, getPreferences(effectiveTableKey))
+})
+
+const hiddenFields = computed(() => {
+  preferencesVersion.value
+  const prefs = getPreferences(effectiveTableKey)
+  const visibility = prefs.visibility || {}
+  return Object.entries(visibility).filter(([, v]) => !v).map(([f]) => f)
+})
+
+function onDensityChange(value) {
+  tableDensity.value = value
+  saveDensity(effectiveTableKey, value)
 }
+
+function onColumnWidthChange({ field, width }) {
+  saveColumnWidth(effectiveTableKey, field, width)
+}
+
+function onColumnOrderChange(order) {
+  saveColumnOrder(effectiveTableKey, order)
+}
+
+function onColumnVisibilityChange({ field, visible }) {
+  saveColumnVisibility(effectiveTableKey, field, visible)
+  touchPreferences()
+}
+
+function onPreferencesReset() {
+  resetPreferences(effectiveTableKey)
+  tableDensity.value = 'default'
+  touchPreferences()
+}
+
+function rowClassFn(row) {
+  if (row.is_total) return 'total-row'
+  if (row.is_subtotal) return 'subtotal-row'
+  return ''
+}
+
+const displayRows = computed(() => {
+  const base = rows.value.map((r, idx) => ({
+    ...r,
+    __row_key: r.__row_key || `${props.reportType}-${idx}`,
+  }))
+  if (!props.addFrontendTotal || base.length <= 1) return base
+  const totals = {}
+  for (const key of props.moneyKeys) {
+    totals[key] = base.reduce((sum, r) => sum + (Number(r[key]) || 0), 0)
+  }
+  return [...base, { entity_name: '合计', ...totals, is_total: true, __row_key: `${props.reportType}-__total__` }]
+})
 
 async function loadData() {
   loading.value = true
@@ -172,6 +294,4 @@ onMounted(async () => {
 
 <style scoped>
 @import '../views/common.css';
-.subtotal-row { background: #F7F4EE; font-weight: 600; }
-.empty-cell { text-align: center; color: #8C8680; padding: 40px 20px; font-size: 14px; }
 </style>
