@@ -186,6 +186,37 @@
   border-top: 2px solid var(--line);
 }
 
+/* ── 编辑行高亮 ── */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.editing-row {
+  background: #f8f5ef !important;
+}
+
+/* ── 操作列按钮 ── */
+.exc-action-btn {
+  padding: 2px 10px;
+  font-size: var(--font-size-xs, 12px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.6;
+  transition: all 0.15s;
+}
+
+.exc-action-btn:hover {
+  background: var(--green-3);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.exc-action-void:hover {
+  background: var(--tag-warn-bg);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 /* ── 工具条打印隐藏 ── */
 @media print {
   .adt-toolbar,

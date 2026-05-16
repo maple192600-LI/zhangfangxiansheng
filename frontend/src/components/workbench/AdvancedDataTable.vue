@@ -83,6 +83,7 @@ const emit = defineEmits([
   'columnOrderChange',
   'columnWidthChange',
   'preferencesReset',
+  'cellClick',
 ])
 
 const containerRef = ref(null)
@@ -196,6 +197,7 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
     onColumnResized: ({ field, width }) => emit('columnWidthChange', { field, width }),
     onColumnMoved: (order) => emit('columnOrderChange', order),
     onColumnVisibilityChanged: ({ field, visible }) => emit('columnVisibilityChange', { field, visible }),
+    cellClick: (e, cell) => emit('cellClick', { event: e, cell, rowData: cell.getRow()?.getData(), field: cell.getColumn()?.getField() }),
     tabulatorOverrides: {
       index: props.rowKey,
       selectableRows: props.enableSelection ? true : false,

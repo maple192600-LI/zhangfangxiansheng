@@ -88,6 +88,10 @@ export function useTabulatorTable(containerRef, options) {
         })
       }
 
+      if (options.cellClick) {
+        instance.on('cellClick', (e, cell) => options.cellClick(e, cell))
+      }
+
       table.value = instance
       initialized = true
     } catch (err) {
