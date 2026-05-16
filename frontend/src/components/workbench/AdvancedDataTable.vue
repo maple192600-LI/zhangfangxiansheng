@@ -98,8 +98,17 @@ const { table, isReady, updateData, updateColumns, destroyTable, getSelectedRows
       ...(tabulatorHeight.value ? { height: tabulatorHeight.value } : {}),
       ...(props.rowClass ? {
         rowFormatter: (row) => {
+          const el = row.getElement()
+          const prev = el.dataset.adtCustomClasses
+          if (prev) prev.split(/\s+/).filter(Boolean).forEach(c => el.classList.remove(c))
           const cls = props.rowClass(row.getData())
-          if (cls) row.getElement().classList.add(...cls.split(/\s+/).filter(Boolean))
+          if (cls) {
+            const classes = cls.split(/\s+/).filter(Boolean)
+            el.classList.add(...classes)
+            el.dataset.adtCustomClasses = classes.join(' ')
+          } else {
+            delete el.dataset.adtCustomClasses
+          }
         }
       } : {}),
     },
