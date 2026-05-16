@@ -14,14 +14,25 @@
 
     <div class="table-workspace-main">
       <AdvancedDataTable
-        :columns="columns"
+        :columns="appliedColumns"
         :data="logs"
         :pagination="false"
         :loading="loading"
         fill-parent
         show-toolbar
+        :density="tableDensity"
+        :table-key="TABLE_KEY"
+        show-column-settings
+        show-reset-preferences
+        :hidden-fields="hiddenFields"
+        :all-columns-for-settings="columns"
         :total-rows="total"
         empty-text="暂无日志"
+        @density-change="onDensityChange"
+        @column-width-change="onColumnWidthChange"
+        @column-order-change="onColumnOrderChange"
+        @column-visibility-change="onColumnVisibilityChange"
+        @preferences-reset="onPreferencesReset"
       />
     </div>
 
@@ -34,11 +45,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import { queryLogs } from '@/api/log'
 import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
 import { emptyDashFormatter, tagTextFormatter, detailFormatter } from '@/utils/tabulatorFormatters'
+import {
+  getPreferences,
+  applyPreferences,
+  saveColumnWidth,
+  saveColumnVisibility,
+  saveColumnOrder,
+  saveDensity,
+  resetPreferences,
+} from '@/composables/useAdvancedTablePreferences'
 
 const logs = ref([])
 const page = ref(1)
@@ -59,6 +79,49 @@ const modules = ['bank_import', 'manual_flow', 'base_data', 'daily_report', 'exp
 const actions = ['batch_upload', 'batch_commit', 'report_rebuild', 'report_generate', 'export_excel', 'backup_create', 'backup_restore', 'batch_rollback']
 const moduleOptions = modules.map(m => ({ label: m, value: m }))
 const actionOptions = actions.map(a => ({ label: a, value: a }))
+
+const TABLE_KEY = 'operation-log'
+
+const preferencesVersion = ref(0)
+const tableDensity = ref(getPreferences(TABLE_KEY).density || 'default')
+
+function touchPreferences() { preferencesVersion.value++ }
+
+const appliedColumns = computed(() => {
+  preferencesVersion.value
+  return applyPreferences(columns, getPreferences(TABLE_KEY))
+})
+
+const hiddenFields = computed(() => {
+  preferencesVersion.value
+  const prefs = getPreferences(TABLE_KEY)
+  const visibility = prefs.visibility || {}
+  return Object.entries(visibility).filter(([, v]) => !v).map(([f]) => f)
+})
+
+function onDensityChange(value) {
+  tableDensity.value = value
+  saveDensity(TABLE_KEY, value)
+}
+
+function onColumnWidthChange({ field, width }) {
+  saveColumnWidth(TABLE_KEY, field, width)
+}
+
+function onColumnOrderChange(order) {
+  saveColumnOrder(TABLE_KEY, order)
+}
+
+function onColumnVisibilityChange({ field, visible }) {
+  saveColumnVisibility(TABLE_KEY, field, visible)
+  touchPreferences()
+}
+
+function onPreferencesReset() {
+  resetPreferences(TABLE_KEY)
+  tableDensity.value = 'default'
+  touchPreferences()
+}
 
 onMounted(loadLogs)
 
