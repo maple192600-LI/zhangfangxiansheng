@@ -12,10 +12,6 @@ export function useDualView(templateExcelHtml) {
       if (!exists) {
         viewMode.value = 'data'
         userTouchedView.value = false
-        return
-      }
-      if (!userTouchedView.value) {
-        viewMode.value = 'template'
       }
     },
     { immediate: true }
