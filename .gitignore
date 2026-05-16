@@ -59,3 +59,6 @@ agents/
 # Playwright MCP cache (runtime)
 .playwright-mcp/
 .mcp.json
+
+# Browser verification screenshots (root level)
+/*.png
