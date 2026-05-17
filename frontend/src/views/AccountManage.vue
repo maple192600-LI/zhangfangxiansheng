@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="section">
+    <div class="section table-workspace-page">
       <div class="section-title">
         <h3>主数据管理</h3>
         <span>管理核算组织、单位、银行账户等基础数据</span>
@@ -15,7 +15,7 @@
       </div>
 
       <!-- ==================== 标签页1: 账户列表 ==================== -->
-      <div v-show="activeTab === 'accounts'">
+      <div v-show="activeTab === 'accounts'" class="tab-panel">
         <div class="filters-bar filters-bar-dense">
           <NSelect filterable v-model:value="filterDivision" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" @update:value="loadAccounts" />
           <NSelect filterable v-model:value="filterEntity" :options="entityFilterSelectOptions" :filter="entityNameFilter" placeholder="全部单位" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
@@ -37,55 +37,37 @@
             <NButton type="primary" @click="openAccountForm()">+ 新建账户</NButton>
           </div>
         </div>
-
-        <!-- 无数据时：不显示任何表格 -->
-        <div v-if="!filteredAccounts.length" style="text-align:center;color:var(--muted);padding:40px 0">
-          暂无账户数据，请下载导入模板并批量导入
+        <div class="table-workspace-main">
+          <AdvancedDataTable
+            ref="accountsTableRef"
+            :columns="accountsTabColumns"
+            :data="filteredAccounts"
+            :enableSelection="true"
+            :selectedRowKeys="selectedAccountIds"
+            :showToolbar="true"
+            :showColumnSettings="true"
+            :showResetPreferences="true"
+            :tableKey="'account-manage-accounts'"
+            :hiddenFields="accountsHiddenFields"
+            :allColumnsForSettings="accountsAllColumns"
+            :density="accountsDensity"
+            :rowClass="disabledRowClass"
+            :fillParent="true"
+            :emptyText="'暂无账户数据，请下载导入模板并批量导入'"
+            @selectionChange="onAccountsSelectionChange"
+            @rowDblClick="openAccountForm"
+            @cellClick="onAccountsCellClick"
+            @densityChange="v => onPrefDensity(accPrefs, TABLE_KEYS.accounts, v)"
+            @columnWidthChange="p => onPrefWidth(accPrefs, TABLE_KEYS.accounts, p)"
+            @columnOrderChange="o => onPrefOrder(accPrefs, TABLE_KEYS.accounts, o)"
+            @columnVisibilityChange="p => onPrefVisibility(accPrefs, TABLE_KEYS.accounts, p)"
+            @preferencesReset="() => onPrefReset(accPrefs, TABLE_KEYS.accounts)"
+          />
         </div>
-        <!-- 有数据时：动态列表格 -->
-        <template v-else>
-        <div class="table-wrap table-wrap-wide">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-ck"><input type="checkbox" :checked="isAllAccountsSelected" @change="toggleAllAccounts" /></th>
-                <th v-for="col in activeAccountColumns" :key="col.key">{{ col.label }}</th>
-                <th class="col-action">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="a in filteredAccounts" :key="a.id"
-                  :class="{ disabled: a.status === 'disabled', selected: selectedAccountIds.includes(a.id) }"
-                  @dblclick="openAccountForm(a)">
-                <td class="col-ck"><input type="checkbox" :value="a.id" v-model="selectedAccountIds" /></td>
-                <td v-for="col in activeAccountColumns" :key="col.key" :class="col.type === 'money' ? 'money' : (col.type === 'code' || col.type === 'text' && (col.key === 'account_number' || col.key === 'account_last_four') ? 'mono' : '')">
-                  <template v-if="col.type === 'bool'">
-                    <span :class="getBoolVal(a, col.key) ? 'bool-yes' : 'bool-no'">{{ getBoolVal(a, col.key) ? '是' : '否' }}</span>
-                  </template>
-                  <span v-else-if="col.type === 'tag'" class="tag" :class="col.key === 'account_type' ? 'tag-blue' : 'tag-gray'">{{ a[col.key] || '-' }}</span>
-                  <span v-else-if="col.type === 'status'" class="tag" :class="a.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ a.status === 'enabled' ? '启用' : '停用' }}</span>
-                  <template v-else-if="col.type === 'money'">{{ fmtMoney(a[col.key]) }}</template>
-                  <strong v-else-if="col.type === 'code'">{{ a[col.key] }}</strong>
-                  <template v-else-if="col.type === 'input_method'">{{ a.input_method === 'bank_import' ? '银行导入' : (a.input_method === 'manual' ? '手工填写' : (a.input_method || '手工填写')) }}</template>
-                  <template v-else>{{ a[col.key] || '-' }}</template>
-                </td>
-                <td class="action-cell">
-                  <NButton secondary size="small" @click="openAccountForm(a)">编辑</NButton>
-                  <NButton secondary size="small" v-if="a.status==='enabled'" @click="toggleAccountStatus(a, 'disabled')">停用</NButton>
-                  <NButton secondary size="small" v-else @click="toggleAccountStatus(a, 'enabled')">启用</NButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="bottom-bar">
-          <span class="count-info">共 {{ filteredAccounts.length }} 条记录</span>
-        </div>
-        </template>
       </div>
 
       <!-- ==================== 标签页2: 核算管理 ==================== -->
-      <div v-show="activeTab === 'divisions'">
+      <div v-show="activeTab === 'divisions'" class="tab-panel">
         <div class="filters-bar">
           <NSelect filterable v-model:value="divFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
           <div class="filter-spacer"></div>
@@ -101,49 +83,37 @@
             <NButton type="primary" @click="openDivForm()">+ 新建核算组织</NButton>
           </div>
         </div>
-        <div v-if="!filteredDivisions.length" class="empty-state">
-          <div class="empty-icon">&#x1F4CB;</div>
-          <h4>暂无核算组织</h4>
-          <p>点击右上角「+ 新建核算组织」添加</p>
-        </div>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-ck"><input type="checkbox" :checked="isAllDivisionsSelected" @change="toggleAllDivisions" /></th>
-                <th style="width:50px">ID</th>
-                <th style="width:90px">编码</th>
-                <th style="min-width:140px">核算组织名称</th>
-                <th style="width:70px">排序</th>
-                <th style="width:70px">状态</th>
-                <th style="width:150px">创建时间</th>
-                <th style="width:180px">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="d in filteredDivisions" :key="d.id"
-                  :class="{ disabled: d.status === 'disabled', selected: selectedDivIds.includes(d.id) }" @dblclick="openDivForm(d)">
-                <td class="col-ck"><input type="checkbox" :value="d.id" v-model="selectedDivIds" /></td>
-                <td>{{ d.id }}</td>
-                <td><strong>{{ d.division_code || '-' }}</strong></td>
-                <td>{{ d.name }}</td>
-                <td>{{ d.sort_order ?? '-' }}</td>
-                <td><span class="tag" :class="d.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ d.status === 'enabled' ? '启用' : '停用' }}</span></td>
-                <td>{{ d.created_at ? d.created_at.slice(0, 19).replace('T', ' ') : '-' }}</td>
-                <td class="action-cell">
-                  <NButton secondary size="small" @click="openDivForm(d)">编辑</NButton>
-                  <NButton secondary size="small" v-if="d.status==='enabled'" @click="toggleDivStatus(d,'disabled')">停用</NButton>
-                  <NButton secondary size="small" v-else @click="toggleDivStatus(d,'enabled')">启用</NButton>
-                  <NButton type="warning" size="small" @click="deleteDiv(d)">删除</NButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="table-workspace-main">
+          <AdvancedDataTable
+            ref="divisionsTableRef"
+            :columns="divisionsTabColumns"
+            :data="filteredDivisions"
+            :enableSelection="true"
+            :selectedRowKeys="selectedDivIds"
+            :showToolbar="true"
+            :showColumnSettings="true"
+            :showResetPreferences="true"
+            :tableKey="'account-manage-divisions'"
+            :hiddenFields="divisionsHiddenFields"
+            :allColumnsForSettings="divisionsAllColumns"
+            :density="divisionsDensity"
+            :rowClass="disabledRowClass"
+            :fillParent="true"
+            :emptyText="'暂无核算组织，点击「+ 新建核算组织」添加'"
+            @selectionChange="onDivisionsSelectionChange"
+            @rowDblClick="openDivForm"
+            @cellClick="onDivisionsCellClick"
+            @densityChange="v => onPrefDensity(divPrefs, TABLE_KEYS.divisions, v)"
+            @columnWidthChange="p => onPrefWidth(divPrefs, TABLE_KEYS.divisions, p)"
+            @columnOrderChange="o => onPrefOrder(divPrefs, TABLE_KEYS.divisions, o)"
+            @columnVisibilityChange="p => onPrefVisibility(divPrefs, TABLE_KEYS.divisions, p)"
+            @preferencesReset="() => onPrefReset(divPrefs, TABLE_KEYS.divisions)"
+          />
         </div>
       </div>
 
       <!-- ==================== 标签页3: 单位管理 ==================== -->
-      <div v-show="activeTab === 'entities'">
+      <div v-show="activeTab === 'entities'" class="tab-panel">
         <div class="filters-bar">
           <NSelect filterable v-model:value="entFilterDiv" :options="divisionFilterOptions" placeholder="全部核算组织" clearable class="filter-select-lg" :consistent-menu-width="false" :menu-props="{ class: 'filter-select-menu' }" />
           <input v-model="entKeyword" class="filter" placeholder="搜索单位编码/名称" style="width:200px" />
@@ -161,51 +131,37 @@
             <NButton type="primary" @click="openEntForm()">+ 新建单位</NButton>
           </div>
         </div>
-        <div v-if="!filteredEntities_list.length" class="empty-state">
-          <div class="empty-icon">&#x1F3E2;</div>
-          <h4>暂无单位</h4>
-          <p>点击右上角「+ 新建单位」添加，或通过账户列表批量导入</p>
-        </div>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-ck"><input type="checkbox" :checked="isAllEntitiesSelected" @change="toggleAllEntities" /></th>
-                <th style="width:50px">ID</th>
-                <th style="min-width:120px">所属核算组织</th>
-                <th style="width:90px">单位编码</th>
-                <th style="min-width:160px">单位全称</th>
-                <th style="width:100px">单位简称</th>
-                <th style="width:70px">状态</th>
-                <th style="width:150px">创建时间</th>
-                <th style="width:180px">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="e in filteredEntities_list" :key="e.id"
-                  :class="{ disabled: e.status === 'disabled', selected: selectedEntIds.includes(e.id) }" @dblclick="openEntForm(e)">
-                <td class="col-ck"><input type="checkbox" :value="e.id" v-model="selectedEntIds" /></td>
-                <td>{{ e.id }}</td>
-                <td>{{ e.division_name || '-' }}</td>
-                <td><strong>{{ e.entity_code }}</strong></td>
-                <td>{{ e.name || '-' }}</td>
-                <td>{{ e.short_name || '-' }}</td>
-                <td><span class="tag" :class="e.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ e.status === 'enabled' ? '启用' : '停用' }}</span></td>
-                <td>{{ e.created_at ? e.created_at.slice(0, 19).replace('T', ' ') : '-' }}</td>
-                <td class="action-cell">
-                  <NButton secondary size="small" @click="openEntForm(e)">编辑</NButton>
-                  <NButton secondary size="small" v-if="e.status==='enabled'" @click="toggleEntStatus(e,'disabled')">停用</NButton>
-                  <NButton secondary size="small" v-else @click="toggleEntStatus(e,'enabled')">启用</NButton>
-                  <NButton type="warning" size="small" @click="deleteEnt(e)">删除</NButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="table-workspace-main">
+          <AdvancedDataTable
+            ref="entitiesTableRef"
+            :columns="entitiesTabColumns"
+            :data="filteredEntities_list"
+            :enableSelection="true"
+            :selectedRowKeys="selectedEntIds"
+            :showToolbar="true"
+            :showColumnSettings="true"
+            :showResetPreferences="true"
+            :tableKey="'account-manage-entities'"
+            :hiddenFields="entitiesHiddenFields"
+            :allColumnsForSettings="entitiesAllColumns"
+            :density="entitiesDensity"
+            :rowClass="disabledRowClass"
+            :fillParent="true"
+            :emptyText="'暂无单位，点击「+ 新建单位」添加，或通过账户列表批量导入'"
+            @selectionChange="onEntitiesSelectionChange"
+            @rowDblClick="openEntForm"
+            @cellClick="onEntitiesCellClick"
+            @densityChange="v => onPrefDensity(entPrefs, TABLE_KEYS.entities, v)"
+            @columnWidthChange="p => onPrefWidth(entPrefs, TABLE_KEYS.entities, p)"
+            @columnOrderChange="o => onPrefOrder(entPrefs, TABLE_KEYS.entities, o)"
+            @columnVisibilityChange="p => onPrefVisibility(entPrefs, TABLE_KEYS.entities, p)"
+            @preferencesReset="() => onPrefReset(entPrefs, TABLE_KEYS.entities)"
+          />
         </div>
       </div>
 
       <!-- ==================== 标签页4: 银行账户管理 ==================== -->
-      <div v-show="activeTab === 'banks'">
+      <div v-show="activeTab === 'banks'" class="tab-panel">
         <div class="filters-bar">
           <input v-model="bankKeyword" class="filter" placeholder="搜索账户编号/开户银行/银行账号" style="width:220px" />
           <NSelect filterable v-model:value="bankFilterStatus" :options="STATUS_FILTER_OPTIONS_2" class="filter-select-sm" :consistent-menu-width="false" />
@@ -222,50 +178,33 @@
             <NButton type="primary" @click="openBankForm()">+ 新建银行账户</NButton>
           </div>
         </div>
-        <!-- 无数据时 -->
-        <div v-if="!filteredBankAccounts.length" style="text-align:center;color:var(--muted);padding:40px 0">
-          暂无银行账户数据
+        <div class="table-workspace-main">
+          <AdvancedDataTable
+            ref="banksTableRef"
+            :columns="banksTabColumns"
+            :data="filteredBankAccounts"
+            :enableSelection="true"
+            :selectedRowKeys="selectedBankIds"
+            :showToolbar="true"
+            :showColumnSettings="true"
+            :showResetPreferences="true"
+            :tableKey="'account-manage-banks'"
+            :hiddenFields="banksHiddenFields"
+            :allColumnsForSettings="banksAllColumns"
+            :density="banksDensity"
+            :rowClass="disabledRowClass"
+            :fillParent="true"
+            :emptyText="'暂无银行账户数据'"
+            @selectionChange="onBanksSelectionChange"
+            @rowDblClick="openBankForm"
+            @cellClick="onBanksCellClick"
+            @densityChange="v => onPrefDensity(bankPrefs, TABLE_KEYS.banks, v)"
+            @columnWidthChange="p => onPrefWidth(bankPrefs, TABLE_KEYS.banks, p)"
+            @columnOrderChange="o => onPrefOrder(bankPrefs, TABLE_KEYS.banks, o)"
+            @columnVisibilityChange="p => onPrefVisibility(bankPrefs, TABLE_KEYS.banks, p)"
+            @preferencesReset="() => onPrefReset(bankPrefs, TABLE_KEYS.banks)"
+          />
         </div>
-        <!-- 有数据时：动态列表格 -->
-        <template v-else>
-        <div class="table-wrap table-wrap-wide">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-ck"><input type="checkbox" :checked="isAllBanksSelected" @change="toggleAllBanks" /></th>
-                <th v-for="col in activeBankColumns" :key="col.key">{{ col.label }}</th>
-                <th class="col-action">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="a in filteredBankAccounts" :key="a.id"
-                  :class="{ disabled: a.status === 'disabled', selected: selectedBankIds.includes(a.id) }" @dblclick="openBankForm(a)">
-                <td class="col-ck"><input type="checkbox" :value="a.id" v-model="selectedBankIds" /></td>
-                <td v-for="col in activeBankColumns" :key="col.key" :class="col.type === 'money' ? 'money' : (col.type === 'code' || col.type === 'text' && (col.key === 'account_number' || col.key === 'account_last_four') ? 'mono' : '')">
-                  <template v-if="col.type === 'bool'">
-                    <span :class="getBoolVal(a, col.key) ? 'bool-yes' : 'bool-no'">{{ getBoolVal(a, col.key) ? '是' : '否' }}</span>
-                  </template>
-                  <span v-else-if="col.type === 'tag'" class="tag" :class="col.key === 'account_type' ? 'tag-blue' : 'tag-gray'">{{ a[col.key] || '-' }}</span>
-                  <span v-else-if="col.type === 'status'" class="tag" :class="a.status === 'enabled' ? 'tag-green' : 'tag-warn'">{{ a.status === 'enabled' ? '启用' : '停用' }}</span>
-                  <template v-else-if="col.type === 'money'">{{ fmtMoney(a[col.key]) }}</template>
-                  <strong v-else-if="col.type === 'code'">{{ a[col.key] }}</strong>
-                  <template v-else-if="col.type === 'input_method'">{{ a.input_method === 'bank_import' ? '银行导入' : (a.input_method === 'manual' ? '手工填写' : (a.input_method || '手工填写')) }}</template>
-                  <template v-else>{{ a[col.key] || '-' }}</template>
-                </td>
-                <td class="action-cell">
-                  <NButton secondary size="small" @click="openBankForm(a)">编辑</NButton>
-                  <NButton secondary size="small" v-if="a.status==='enabled'" @click="toggleBankAccountStatus(a,'disabled')">停用</NButton>
-                  <NButton secondary size="small" v-else @click="toggleBankAccountStatus(a,'enabled')">启用</NButton>
-                  <NButton type="warning" size="small" @click="deleteBank(a)">删除</NButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="bottom-bar">
-          <span class="count-info">共 {{ filteredBankAccounts.length }} 条银行账户记录</span>
-        </div>
-        </template>
       </div>
     </div>
 
@@ -493,10 +432,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { NDatePicker, NSelect, NButton } from 'naive-ui'
 import * as api from '@/api/master'
-import { fmtAmt } from '@/utils/format'
+import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
+import { moneyFormatter } from '@/utils/tabulatorFormatters'
+import {
+  getPreferences, applyPreferences,
+  saveDensity, saveColumnWidth, saveColumnOrder, saveColumnVisibility, resetPreferences,
+} from '@/composables/useAdvancedTablePreferences'
 
 // ── NSelect 选项常量 ──
 const STATUS_FILTER_OPTIONS = [
@@ -777,63 +721,6 @@ const activeBankColumns = computed(() => {
     })
   })
 })
-
-function getBoolVal(account, key) {
-  return account[key] !== false
-}
-
-// ── 全选计算属性 ──
-const isAllAccountsSelected = computed(() => {
-  const list = filteredAccounts.value
-  return list.length > 0 && list.every(a => selectedAccountIds.value.includes(a.id))
-})
-
-const isAllDivisionsSelected = computed(() => {
-  const list = filteredDivisions.value
-  return list.length > 0 && list.every(d => selectedDivIds.value.includes(d.id))
-})
-
-const isAllEntitiesSelected = computed(() => {
-  const list = filteredEntities_list.value
-  return list.length > 0 && list.every(e => selectedEntIds.value.includes(e.id))
-})
-
-const isAllBanksSelected = computed(() => {
-  const list = filteredBankAccounts.value
-  return list.length > 0 && list.every(a => selectedBankIds.value.includes(a.id))
-})
-
-function toggleAllAccounts() {
-  if (isAllAccountsSelected.value) {
-    selectedAccountIds.value = []
-  } else {
-    selectedAccountIds.value = filteredAccounts.value.map(a => a.id)
-  }
-}
-
-function toggleAllDivisions() {
-  if (isAllDivisionsSelected.value) {
-    selectedDivIds.value = []
-  } else {
-    selectedDivIds.value = filteredDivisions.value.map(d => d.id)
-  }
-}
-
-function toggleAllEntities() {
-  if (isAllEntitiesSelected.value) {
-    selectedEntIds.value = []
-  } else {
-    selectedEntIds.value = filteredEntities_list.value.map(e => e.id)
-  }
-}
-
-function toggleAllBanks() {
-  if (isAllBanksSelected.value) {
-    selectedBankIds.value = []
-  } else {
-    selectedBankIds.value = filteredBankAccounts.value.map(a => a.id)
-  }
-}
 
 // ── 批量操作 ──
 async function batchAccounts(action) {
@@ -1202,8 +1089,6 @@ async function deleteBank(item) {
 }
 
 // ── 工具 ──
-function fmtMoney(v) { return fmtAmt(v) }
-
 function downloadTemplate() { window.open('/api/accounts/template', '_blank') }
 
 function triggerImport() { importInput.value.click() }
@@ -1221,6 +1106,348 @@ async function doImport(e) {
   e.target.value = ''
 }
 
+// ================================================================
+// AdvancedDataTable 迁移：Tabulator 列定义 & 事件处理
+// ================================================================
+
+function escapeHtml(str) {
+  const s = String(str ?? '')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+// ── Tabulator formatters ──
+function statusFormatter(cell) {
+  const v = cell.getValue()
+  if (v === 'enabled') return '<span class="tabulator-tag tabulator-tag-green">启用</span>'
+  if (v === 'disabled') return '<span class="tabulator-tag tabulator-tag-orange">停用</span>'
+  return escapeHtml(String(v ?? '-'))
+}
+
+function boolFormatter(cell) {
+  const v = cell.getValue()
+  return v !== false
+    ? '<span class="tabulator-tag tabulator-tag-green">是</span>'
+    : '<span class="tabulator-tag tabulator-tag-gray">否</span>'
+}
+
+function codeFormatter(cell) {
+  const v = cell.getValue()
+  if (v == null || v === '') return '-'
+  return `<strong>${escapeHtml(String(v))}</strong>`
+}
+
+function inputMethodFormatter(cell) {
+  const v = cell.getValue()
+  if (v === 'bank_import') return '银行导入'
+  if (v === 'manual') return '手工填写'
+  if (v === '网银导入') return '网银导入'
+  return escapeHtml(String(v || '手工填写'))
+}
+
+function tagByFieldFormatter(field) {
+  return (cell) => {
+    const v = cell.getValue()
+    if (v == null || v === '') return '-'
+    const cls = field === 'account_type' ? 'tabulator-tag-blue' : 'tabulator-tag-gray'
+    return `<span class="tabulator-tag ${cls}">${escapeHtml(String(v))}</span>`
+  }
+}
+
+function dateTimeFormatter(cell) {
+  const v = cell.getValue()
+  if (!v) return '-'
+  return escapeHtml(String(v).slice(0, 19).replace('T', ' '))
+}
+
+function colTypeFormatter(col) {
+  switch (col.type) {
+    case 'bool': return boolFormatter
+    case 'tag': return tagByFieldFormatter(col.key)
+    case 'status': return statusFormatter
+    case 'money': return moneyFormatter
+    case 'code': return codeFormatter
+    case 'input_method': return inputMethodFormatter
+    default: return undefined
+  }
+}
+
+function colTypeAlign(col) {
+  if (col.type === 'money') return 'right'
+  return 'left'
+}
+
+function disabledRowClass(row) {
+  return row.status === 'disabled' ? 'adt-row-disabled' : ''
+}
+
+// ── Tab Key 常量 ──
+const TABLE_KEYS = {
+  accounts: 'account-manage-accounts',
+  divisions: 'account-manage-divisions',
+  entities: 'account-manage-entities',
+  banks: 'account-manage-banks',
+}
+
+// ── 每个表独立偏好 ──
+const accPrefs = ref(getPreferences(TABLE_KEYS.accounts))
+const divPrefs = ref(getPreferences(TABLE_KEYS.divisions))
+const entPrefs = ref(getPreferences(TABLE_KEYS.entities))
+const bankPrefs = ref(getPreferences(TABLE_KEYS.banks))
+
+function reloadPrefs(prefsRef, key) {
+  prefsRef.value = getPreferences(key)
+}
+
+// ── Template refs ──
+const accountsTableRef = ref(null)
+const divisionsTableRef = ref(null)
+const entitiesTableRef = ref(null)
+const banksTableRef = ref(null)
+
+// ── 账户列表 Tabulator 列 ──
+const accountsBaseColumns = computed(() => {
+  return activeAccountColumns.value.map(col => ({
+    field: col.key,
+    title: col.label,
+    formatter: colTypeFormatter(col),
+    hozAlign: colTypeAlign(col),
+    minWidth: 80,
+    ...(col.type === 'money' ? { width: 130 } : {}),
+    ...(col.type === 'code' ? { width: 110 } : {}),
+    ...(col.key === 'account_number' || col.key === 'account_last_four' ? { cssClass: 'adt-mono' } : {}),
+  }))
+})
+
+const accountsActionsColumn = {
+  field: '__actions',
+  title: '操作',
+  width: 140,
+  headerSort: false,
+  hozAlign: 'center',
+  formatter: (cell) => {
+    const row = cell.getRow().getData()
+    const isDisabled = row.status === 'disabled'
+    return '<div style="display:flex;gap:4px;justify-content:center">'
+      + `<button class="exc-action-btn" data-action="edit" data-id="${escapeHtml(String(row.id))}">编辑</button>`
+      + `<button class="exc-action-btn" data-action="toggle" data-id="${escapeHtml(String(row.id))}">${isDisabled ? '启用' : '停用'}</button>`
+      + '</div>'
+  },
+}
+
+const accountsAllColumns = computed(() => [...accountsBaseColumns.value, accountsActionsColumn])
+const accountsTabColumns = computed(() => applyPreferences(accountsAllColumns.value, accPrefs.value))
+const accountsHiddenFields = computed(() => {
+  const vis = accPrefs.value.visibility || {}
+  return Object.entries(vis).filter(([, v]) => !v).map(([f]) => f)
+})
+const accountsDensity = computed(() => accPrefs.value.density || 'default')
+
+// ── 核算管理 Tabulator 列 ──
+const divisionsBaseColumns = [
+  { field: 'id', title: 'ID', width: 60, hozAlign: 'center' },
+  { field: 'division_code', title: '编码', width: 100, formatter: codeFormatter },
+  { field: 'name', title: '核算组织名称', minWidth: 140 },
+  { field: 'sort_order', title: '排序', width: 70, hozAlign: 'center' },
+  { field: 'status', title: '状态', width: 80, formatter: statusFormatter, hozAlign: 'center' },
+  { field: 'created_at', title: '创建时间', width: 160, formatter: dateTimeFormatter },
+]
+
+const divisionsActionsColumn = {
+  field: '__actions',
+  title: '操作',
+  width: 200,
+  headerSort: false,
+  hozAlign: 'center',
+  formatter: (cell) => {
+    const row = cell.getRow().getData()
+    const isDisabled = row.status === 'disabled'
+    return '<div style="display:flex;gap:4px;justify-content:center">'
+      + `<button class="exc-action-btn" data-action="edit" data-id="${escapeHtml(String(row.id))}">编辑</button>`
+      + `<button class="exc-action-btn" data-action="toggle" data-id="${escapeHtml(String(row.id))}">${isDisabled ? '启用' : '停用'}</button>`
+      + `<button class="exc-action-btn exc-action-void" data-action="delete" data-id="${escapeHtml(String(row.id))}">删除</button>`
+      + '</div>'
+  },
+}
+
+const divisionsAllColumns = [...divisionsBaseColumns, divisionsActionsColumn]
+const divisionsTabColumns = computed(() => applyPreferences(divisionsAllColumns, divPrefs.value))
+const divisionsHiddenFields = computed(() => {
+  const vis = divPrefs.value.visibility || {}
+  return Object.entries(vis).filter(([, v]) => !v).map(([f]) => f)
+})
+const divisionsDensity = computed(() => divPrefs.value.density || 'default')
+
+// ── 单位管理 Tabulator 列 ──
+const entitiesBaseColumns = [
+  { field: 'id', title: 'ID', width: 60, hozAlign: 'center' },
+  { field: 'division_name', title: '所属核算组织', minWidth: 120 },
+  { field: 'entity_code', title: '单位编码', width: 100, formatter: codeFormatter },
+  { field: 'name', title: '单位全称', minWidth: 160 },
+  { field: 'short_name', title: '单位简称', width: 110 },
+  { field: 'status', title: '状态', width: 80, formatter: statusFormatter, hozAlign: 'center' },
+  { field: 'created_at', title: '创建时间', width: 160, formatter: dateTimeFormatter },
+]
+
+const entitiesActionsColumn = {
+  field: '__actions',
+  title: '操作',
+  width: 200,
+  headerSort: false,
+  hozAlign: 'center',
+  formatter: (cell) => {
+    const row = cell.getRow().getData()
+    const isDisabled = row.status === 'disabled'
+    return '<div style="display:flex;gap:4px;justify-content:center">'
+      + `<button class="exc-action-btn" data-action="edit" data-id="${escapeHtml(String(row.id))}">编辑</button>`
+      + `<button class="exc-action-btn" data-action="toggle" data-id="${escapeHtml(String(row.id))}">${isDisabled ? '启用' : '停用'}</button>`
+      + `<button class="exc-action-btn exc-action-void" data-action="delete" data-id="${escapeHtml(String(row.id))}">删除</button>`
+      + '</div>'
+  },
+}
+
+const entitiesAllColumns = [...entitiesBaseColumns, entitiesActionsColumn]
+const entitiesTabColumns = computed(() => applyPreferences(entitiesAllColumns, entPrefs.value))
+const entitiesHiddenFields = computed(() => {
+  const vis = entPrefs.value.visibility || {}
+  return Object.entries(vis).filter(([, v]) => !v).map(([f]) => f)
+})
+const entitiesDensity = computed(() => entPrefs.value.density || 'default')
+
+// ── 银行账户 Tabulator 列 ──
+const banksBaseColumns = computed(() => {
+  return activeBankColumns.value.map(col => ({
+    field: col.key,
+    title: col.label,
+    formatter: colTypeFormatter(col),
+    hozAlign: colTypeAlign(col),
+    minWidth: 80,
+    ...(col.type === 'money' ? { width: 130 } : {}),
+    ...(col.type === 'code' ? { width: 110 } : {}),
+    ...(col.key === 'account_number' || col.key === 'account_last_four' ? { cssClass: 'adt-mono' } : {}),
+  }))
+})
+
+const banksActionsColumn = {
+  field: '__actions',
+  title: '操作',
+  width: 200,
+  headerSort: false,
+  hozAlign: 'center',
+  formatter: (cell) => {
+    const row = cell.getRow().getData()
+    const isDisabled = row.status === 'disabled'
+    return '<div style="display:flex;gap:4px;justify-content:center">'
+      + `<button class="exc-action-btn" data-action="edit" data-id="${escapeHtml(String(row.id))}">编辑</button>`
+      + `<button class="exc-action-btn" data-action="toggle" data-id="${escapeHtml(String(row.id))}">${isDisabled ? '启用' : '停用'}</button>`
+      + `<button class="exc-action-btn exc-action-void" data-action="delete" data-id="${escapeHtml(String(row.id))}">删除</button>`
+      + '</div>'
+  },
+}
+
+const banksAllColumns = computed(() => [...banksBaseColumns.value, banksActionsColumn])
+const banksTabColumns = computed(() => applyPreferences(banksAllColumns.value, bankPrefs.value))
+const banksHiddenFields = computed(() => {
+  const vis = bankPrefs.value.visibility || {}
+  return Object.entries(vis).filter(([, v]) => !v).map(([f]) => f)
+})
+const banksDensity = computed(() => bankPrefs.value.density || 'default')
+
+// ── Selection handlers ──
+function onAccountsSelectionChange(rows) {
+  selectedAccountIds.value = rows.map(r => r.id)
+}
+function onDivisionsSelectionChange(rows) {
+  selectedDivIds.value = rows.map(r => r.id)
+}
+function onEntitiesSelectionChange(rows) {
+  selectedEntIds.value = rows.map(r => r.id)
+}
+function onBanksSelectionChange(rows) {
+  selectedBankIds.value = rows.map(r => r.id)
+}
+
+// ── Cell click handlers (action buttons) ──
+function handleAction(event, rowData, handlers) {
+  const btn = event.target.closest('[data-action]')
+  if (!btn) return
+  const action = btn.dataset.action
+  const fn = handlers[action]
+  if (fn) fn(rowData)
+}
+
+function onAccountsCellClick({ event, rowData, field }) {
+  if (field !== '__actions') return
+  handleAction(event, rowData, {
+    edit: (r) => openAccountForm(r),
+    toggle: (r) => toggleAccountStatus(r, r.status === 'enabled' ? 'disabled' : 'enabled'),
+  })
+}
+
+function onDivisionsCellClick({ event, rowData, field }) {
+  if (field !== '__actions') return
+  handleAction(event, rowData, {
+    edit: (r) => openDivForm(r),
+    toggle: (r) => toggleDivStatus(r, r.status === 'enabled' ? 'disabled' : 'enabled'),
+    delete: (r) => deleteDiv(r),
+  })
+}
+
+function onEntitiesCellClick({ event, rowData, field }) {
+  if (field !== '__actions') return
+  handleAction(event, rowData, {
+    edit: (r) => openEntForm(r),
+    toggle: (r) => toggleEntStatus(r, r.status === 'enabled' ? 'disabled' : 'enabled'),
+    delete: (r) => deleteEnt(r),
+  })
+}
+
+function onBanksCellClick({ event, rowData, field }) {
+  if (field !== '__actions') return
+  handleAction(event, rowData, {
+    edit: (r) => openBankForm(r),
+    toggle: (r) => toggleBankAccountStatus(r, r.status === 'enabled' ? 'disabled' : 'enabled'),
+    delete: (r) => deleteBank(r),
+  })
+}
+
+// ── Preference handlers ──
+function onPrefDensity(prefsRef, key, d) {
+  saveDensity(key, d)
+  reloadPrefs(prefsRef, key)
+}
+function onPrefWidth(prefsRef, key, { field, width }) {
+  saveColumnWidth(key, field, width)
+  reloadPrefs(prefsRef, key)
+}
+function onPrefOrder(prefsRef, key, order) {
+  saveColumnOrder(key, order)
+  reloadPrefs(prefsRef, key)
+}
+function onPrefVisibility(prefsRef, key, { field, visible }) {
+  saveColumnVisibility(key, field, visible)
+  reloadPrefs(prefsRef, key)
+}
+function onPrefReset(prefsRef, key) {
+  resetPreferences(key)
+  reloadPrefs(prefsRef, key)
+}
+
+// ── Tab switch: redraw active table ──
+watch(activeTab, () => {
+  nextTick(() => {
+    const refMap = {
+      accounts: accountsTableRef,
+      divisions: divisionsTableRef,
+      entities: entitiesTableRef,
+      banks: banksTableRef,
+    }
+    const t = refMap[activeTab.value]?.value
+    if (t?.table?.redraw) {
+      t.table.redraw(true)
+    }
+  })
+})
+
 onMounted(loadAll)
 </script>
 
@@ -1233,6 +1460,7 @@ onMounted(loadAll)
   gap: 0;
   border-bottom: 2px solid var(--line);
   margin-bottom: var(--space-lg);
+  flex-shrink: 0;
 }
 .tab-btn {
   padding: var(--space-sm) var(--space-xl);
@@ -1254,84 +1482,16 @@ onMounted(loadAll)
   font-weight: 600;
 }
 
-/* 表格滚动区 */
-.table-wrap {
+/* Tab panel: flex column to fill workspace */
+.tab-panel {
   flex: 1;
-  overflow: auto;
-  max-height: calc(100vh - 300px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
-.table-wrap-wide {
-  overflow-x: auto;
+.tab-panel > .filters-bar {
+  flex-shrink: 0;
 }
-
-/* 禁用行 */
-tr.disabled { opacity: 0.55; }
-tr.selected { background: #f0f5ef; }
-
-/* 空数据状态 */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--muted);
-}
-.empty-state .empty-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-}
-.empty-state h4 {
-  margin: 0 0 8px 0;
-  color: var(--text);
-  font-size: 16px;
-}
-.empty-state p {
-  margin: 0;
-  font-size: 13px;
-}
-
-/* 勾选列 */
-.col-ck { width: 36px; text-align: center; }
-.col-ck input[type="checkbox"] { cursor: pointer; }
-
-/* 账户列表列宽 — 紧凑 */
-.col-xs { width: 60px; }
-.col-sm { width: 80px; }
-.col-md { width: 120px; }
-.col-num { width: 130px; }
-.col-money { width: 90px; text-align: right; }
-.col-date { width: 90px; }
-.col-notes { min-width: 100px; }
-.col-action { width: 120px; }
-
-/* 布尔值 是/否 样式 */
-.bool-yes {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 500;
-  background: #e8f5e9;
-  color: #2e7d32;
-  border: 1px solid #c8e6c9;
-}
-.bool-no {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 500;
-  background: #f5f5f5;
-  color: #9e9e9e;
-  border: 1px solid #e0e0e0;
-}
-
-/* 等宽字体 */
-.mono { font-family: monospace; font-size: 12px; }
-
-/* 长文本省略 */
-.ellipsis { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-
-/* 操作列不换行 */
-.action-cell { white-space: nowrap; }
 
 /* 下拉菜单 */
 .dropdown { position: relative; display: inline-block; }

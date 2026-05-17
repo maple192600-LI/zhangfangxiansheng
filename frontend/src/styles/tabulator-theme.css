@@ -271,3 +271,14 @@
   background: #fef2f2;
   color: #dc2626;
 }
+
+/* ── disabled 行半透明 ── */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row.adt-row-disabled {
+  opacity: 0.55;
+}
+
+/* ── 等宽字体单元格（账号等） ── */
+.tabulator .tabulator-tableHolder .tabulator-table .tabulator-row .tabulator-cell.adt-mono {
+  font-family: monospace;
+  font-size: 12px;
+}
