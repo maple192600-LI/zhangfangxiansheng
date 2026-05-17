@@ -1,4 +1,4 @@
-# 20 · 数据库契约（当前 Schema，PR #2 后）
+# 20 · 数据库契约（当前 Schema）
 
 > 本文件定义当前 `backend/db/tables.py` 中 28 张业务 ORM 表的完整 DDL。
 > 契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
@@ -446,36 +446,9 @@ CREATE TABLE template_inference_job (
 );
 ```
 
-`loop_spec`、`original_filename`、`file_path` 为 v3 attempt 兼容列，用于保留既有测试与早期 artifact 草稿的读写能力；新流程优先使用 `loop_config`、`template_file` 与三阶段输出字段。
+`loop_spec`、`original_filename`、`file_path` 为兼容列，用于保留既有测试与早期 artifact 草稿的读写能力；新流程优先使用 `loop_config`、`template_file` 与三阶段输出字段。
 
 ---
-
-## §T5 · 历史迁移记录（已完成）
-
-以下迁移任务已在 PR #2 及之前的开发中执行完毕，仅作历史记录保留。
-
-| 任务 | 状态 |
-|---|---|
-| P1-1 备份当前 `backend/data/zhangfang.db` | ✅ 已完成 |
-| P1-2 将 `backend/db/tables.py::FundEvent` 改回 CANONICAL_12 | ✅ 已完成 |
-| P1-3 重新加入 `ParserArtifact` / `RuleArtifact` / `TemplateInferenceJob` ORM | ✅ 已完成 |
-| P1-4 删除当前 ORM 中不属于 §C1 的兼容字段 | ✅ 已完成 |
-| P1-5 整理 Alembic 版本，建立 baseline | ✅ 已完成 |
-| P1-6 编写一次性 reset 脚本重建 SQLite | ✅ 已完成 |
-| P1-7 启动时改用 Alembic upgrade head | ✅ 已完成 |
-| P1-8 下游服务先保证 import 通过，业务写入改由后续 Runtime 承接 | ✅ 已完成 |
-
----
-
-## §T6 · 守护脚本时序
-
-| 守护脚本 | 必须转绿 Phase | Phase 0 状态 |
-|---|---|---|
-| `check_contract_hash.py` | Phase 0 P0-7 | 必须转绿 |
-| `check_canonical_schema.py` | Phase 1 P1-2 | 红色可接受，交班到 Phase 1 |
-| `check_primitives_whitelist.py` | Phase 3 | 跳过 |
-| `check_placeholder_binding.py` | Phase 3 P3-3 | 跳过 |
-| `check_api_inventory.py` | Phase 6 | 记录差异，不阻塞 Phase 0 |
 
 ---
 
@@ -674,11 +647,5 @@ CREATE INDEX idx_workflow_run_steps_node ON workflow_run_steps(run_id, node_id);
 
 ---
 
-**版本**
-- v5.2 · 2026-05-13 · 工作流编排改为 workflows / workflow_versions / workflow_runs / workflow_run_steps 四表版本化模型
-- v5.1 · 2026-05-13 · 新增工作流编排 3 张表：workflow_definitions / workflow_runs / workflow_run_steps
-- v5.0 · 2026-05-10 · 标题改为当前 Schema；§T0 更新为 24 张业务 ORM 表；§T5 标记已完成；移除 parser_templates 和旧 Agent 配置表占位行
-- v4.1 · 2026-05-10 · 移除 parser_templates 表（§T2.1），银行流水解析规则统一使用 parser_artifacts
-- v4.0 · 2026-05-02 · 新增 §T7 Agent 系统扩展表（6 张表 DDL）
-- v3.1 · 2026-04-25 · Phase 0 文档复位为 v3 真实 Schema，20 表清单与三张 artifact 表恢复。
-- v3.0 · 2026-04-23 · AI-First artifact schema。
+**校准来源：** `backend/db/tables.py`、`tools/guards/check_canonical_schema.py`
+**最后校准：** 2026-05-17

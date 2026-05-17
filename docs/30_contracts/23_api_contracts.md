@@ -17,7 +17,7 @@
 | `message` | string | 中文提示（成功为 "ok"） |
 | `data` | object / array / null | 实际返回数据 |
 
-违反 = `tools/guards/check_api_response_shape.py`（推荐）拒绝。
+违反由契约和代码审查约束。后续可补 guard 自动检测。
 
 ---
 
@@ -117,7 +117,7 @@
 
 | 旧路由模式 | 删除原因 |
 |-----------|----------|
-| `/api/fund/agent/skills/*/invoke` | Fund Agent 体系已在 Phase 5（2026-05-11）删除，统一走通用 Agent |
+| `/api/fund/agent/skills/*/invoke` | Fund Agent 体系已删除，统一走通用 Agent |
 | `/api/fund/parsers/*` | 已迁移到 `/api/artifacts/parsers` |
 | `/api/fund/rules/*` | 已迁移到 `/api/artifacts/rules` |
 | `/api/bank-import/ai-parse` | 已删除，银行导入统一走 ParserArtifact 路线 |
@@ -194,9 +194,5 @@ validate 校验规则：INVALID_STRUCTURE / EMPTY_NODES / INVALID_NODE / MISSING
 - 运行 `python tools/guards/check_api_inventory.py` 验证无重复
 
 ---
-
-**版本**
-- v5.0 · 2026-05-17 · 改为 inventory 事实源 + 模块分组 + 禁止恢复旧 API；移除过时 schema；保留错误码表和统一响应格式
-- v4.8 · 2026-05-14 · 新增 W14 validate 端点
-- v4.7 · 2026-05-13 · 新增 W12 版本历史、W13 暂停恢复
-- v4.5 · 2026-05-13 · 新增工作流编排端点
+**校准来源：** `backend/main.py`、`backend/api/`、`tools/guards/check_api_inventory.py --list`
+**最后校准：** 2026-05-17
