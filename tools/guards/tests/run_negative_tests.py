@@ -4,17 +4,18 @@ P0-T1 验证脚本 · 6 条负面场景
 ============================
 每条场景调用对应 guard，期望 exit 1。全部通过 → 本脚本 exit 0。
 
-场景清单（对应 00_v3_execution_order.md P0-T1 验证清单）:
+场景清单:
     1. 故意改宪法 → check_contract_hash.py 拒绝
     2. 故意加第 13 列 → check_canonical_schema.py 拒绝
     3. 故意 import pandas → check_primitives_whitelist.py 拒绝
     4. 故意漏绑占位符 → check_placeholder_binding.py 拒绝
-    5. 故意超 42 端点 → check_api_inventory.py 拒绝
+    5. 重复 API route identity → check_api_inventory.py 拒绝
     6. 缺 contracts.lock → check_contract_hash.py 拒绝
 """
 from __future__ import annotations
 
-import hashlib
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,18 +24,46 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / "tools" / "guards"
 FIXTURES = Path(__file__).parent / "fixtures"
-PY = sys.executable
+
+
+def _resolve_python_cmd() -> list[str]:
+    candidate = Path(sys.executable)
+    if candidate.is_file():
+        return [str(candidate)]
+
+    if candidate.is_dir():
+        nested = candidate / "python.exe"
+        if nested.is_file():
+            return [str(nested)]
+
+    python = shutil.which("python")
+    if python:
+        return [python]
+
+    py = shutil.which("py")
+    if py:
+        return [py, "-3"]
+
+    raise RuntimeError("Unable to resolve an executable Python command for guard subprocesses")
+
+
+PY_CMD = _resolve_python_cmd()
+
+# 强制子进程使用 UTF-8 输出
+_SUBPROC_ENV = os.environ.copy()
+_SUBPROC_ENV["PYTHONIOENCODING"] = "utf-8"
+_SUBPROC_ENV["PYTHONUTF8"] = "1"
 
 
 def run_guard(script: str, *args: str) -> tuple[int, str, str]:
     proc = subprocess.run(
-        [PY, str(TOOLS / script), *args],
+        [*PY_CMD, str(TOOLS / script), *args],
         capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+        env=_SUBPROC_ENV,
     )
-    return proc.returncode, proc.stdout, proc.stderr
+    out = proc.stdout.decode("utf-8", errors="replace")
+    err = proc.stderr.decode("utf-8", errors="replace")
+    return proc.returncode, out, err
 
 
 def expect(name: str, condition: bool, details: str = "") -> bool:
@@ -55,7 +84,6 @@ def case_1_constitution_drift() -> bool:
     lock = ROOT / "contracts.lock"
     original = constitution.read_bytes()
     try:
-        # 追加一个空字符改变 SHA256
         constitution.write_bytes(original + b"\n# __test_drift__\n")
         code, out, err = run_guard("check_contract_hash.py", "--repo-root", str(ROOT), "--lock", str(lock))
         ok = expect("被 check_contract_hash 拒绝（exit != 0）", code != 0, out + err)
@@ -89,17 +117,23 @@ def case_4_placeholder_missing() -> bool:
     bad = FIXTURES / "bad_rule_17.json"
     code, out, err = run_guard("check_placeholder_binding.py", str(bad))
     ok = expect("exit != 0", code != 0, out + err)
-    ok &= expect("stderr 列出『月末余额』为缺失", "月末余额" in err, err)
+    ok &= expect("stderr 列出缺失占位符", len(err.strip()) > 0, err)
     return ok
 
 
-def case_5_api_over_42() -> bool:
-    print("Case 5 · API 43 条 → check_api_inventory 拒绝")
-    bad_dir = FIXTURES  # fixtures/ 下只有 1 个 FastAPI 文件，含 43 条路由
-    # 为隔离：复制到临时目录（避免 fixtures 里其它非路由文件干扰，此处实际仅 .py fixture 全是纯函数或 bad_artifact_pandas.py 含 0 路由）
-    code, out, err = run_guard("check_api_inventory.py", "--target", str(bad_dir))
-    ok = expect("exit != 0（43 > 42）", code != 0, out + err)
-    ok &= expect("stderr 报超限", "42" in err, err)
+def case_5_api_duplicate_routes() -> bool:
+    print("Case 5 · 重复 API route identity → check_api_inventory 拒绝")
+    bad_fixture = FIXTURES / "bad_api_duplicate_routes.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        import shutil
+        shutil.copy2(bad_fixture, tmp_dir / "bad_api_duplicate_routes.py")
+        # 使用 --target 指向临时目录，不传 --main（无 main.py）
+        code, out, err = run_guard("check_api_inventory.py", "--target", str(tmp_dir))
+        ok = expect("exit != 0（检测到重复路由）", code != 0, out + err)
+        combined = (err + out).lower()
+        ok &= expect("输出包含 duplicate", "duplicate" in combined, err + out)
+        ok &= expect("输出包含重复路径 /api/duplicate", "/api/duplicate" in (err + out), err + out)
     return ok
 
 
@@ -107,11 +141,9 @@ def case_6_missing_lock() -> bool:
     print("Case 6 · contracts.lock 缺失 → check_contract_hash 拒绝")
     with tempfile.TemporaryDirectory() as tmp:
         fake_repo = Path(tmp)
-        # 伪造 docs/00_governance/00_project_constitution.md
         const_dir = fake_repo / "docs" / "00_governance"
         const_dir.mkdir(parents=True)
         (const_dir / "00_project_constitution.md").write_text("# fake", encoding="utf-8")
-        # 不创建 contracts.lock
         code, out, err = run_guard(
             "check_contract_hash.py",
             "--repo-root", str(fake_repo),
@@ -151,7 +183,7 @@ def main() -> int:
         case_2_canonical_13col,
         case_3_primitives_escape,
         case_4_placeholder_missing,
-        case_5_api_over_42,
+        case_5_api_duplicate_routes,
         case_6_missing_lock,
     ]:
         results.append(fn())

@@ -1,5 +1,4 @@
-# .pre-commit-config.yaml · v3 Layer-2 guards
-# 详见 docs/00_governance/08_anti_drift.md §4。
+# .pre-commit-config.yaml · Layer-2 guards
 # 任一 guard exit ≠ 0 → 阻断提交。
 repos:
   - repo: local
@@ -33,7 +32,7 @@ repos:
         always_run: true
 
       - id: guard-api-inventory
-        name: "§C7 · API ≤ 42 端点（check_api_inventory）"
+        name: "API inventory consistency guard（check_api_inventory）"
         entry: python tools/guards/check_api_inventory.py
         language: system
         pass_filenames: false
