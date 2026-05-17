@@ -190,11 +190,11 @@ class ImportBatch(Base):
 class FundEvent(Base):
     __tablename__ = "fund_events"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    business_date = Column(Date, nullable=False)
-    entity_code = Column(String(50), ForeignKey("entities.entity_code"), nullable=False)
-    entity_name = Column(String(200), nullable=False)
-    account_code = Column(String(50), ForeignKey("accounts.account_code"), nullable=False)
-    account_name = Column(String(100), nullable=False)
+    business_date = Column(Date, nullable=True)
+    entity_code = Column(String(50), ForeignKey("entities.entity_code"), nullable=True)
+    entity_name = Column(String(200), nullable=False, default="")
+    account_code = Column(String(50), ForeignKey("accounts.account_code"), nullable=True)
+    account_name = Column(String(100), nullable=False, default="")
     summary = Column(String(500), nullable=True)
     counterparty = Column(String(200), nullable=True)
     amount_in = Column(Numeric(18, 2), nullable=False, default=0, server_default="0")
@@ -216,6 +216,10 @@ class FundEvent(Base):
         CheckConstraint("NOT (amount_in > 0 AND amount_out > 0)", name="ck_fund_events_amount_mutex"),
         CheckConstraint("amount_in >= 0 AND amount_out >= 0", name="ck_fund_events_amount_nonneg"),
         CheckConstraint("state IN ('正常','待确认','异常','已作废')", name="ck_fund_events_state_enum"),
+        CheckConstraint(
+            "state != '正常' OR (business_date IS NOT NULL AND entity_code IS NOT NULL AND entity_code != '' AND account_code IS NOT NULL AND account_code != '')",
+            name="ck_fund_events_normal_core_required",
+        ),
         CheckConstraint(
             "source IN ('网银导入','手工录入','现金录入','票据录入','财务公司单据')",
             name="ck_fund_events_source_enum",

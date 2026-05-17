@@ -8,7 +8,7 @@
 | Implemented route import entries | 36 |
 | `.vue` 文件 | 42 |
 
-## 已实现页面（36 个 route import entries）
+## 已实现页面（33 个 route import entries）
 
 | 分组 | 路由名 | 组件 |
 |------|--------|------|
@@ -17,10 +17,9 @@
 | | `home-tasks` | HomeTasks.vue |
 | | `home-quick` | HomeQuick.vue |
 | | `home-system` | HomeSystem.vue |
-| 工作台 | `bank-import` | BankImport.vue |
-| | `manual-flow` | ManualFlow.vue |
-| | `manual-maintenance` | ManualMaintenance.vue |
-| | `upload-preview` | UploadPreview.vue |
+| 工作台 | `bank-import` | BankImport.vue（上传、Parser 识别、解析预览、进入上传结果预览） |
+| | `manual-flow` | ManualFlow.vue（快速录入/Excel 上传 → 进入上传结果预览） |
+| | `upload-preview` | UploadPreview.vue（唯一异常处理和最终提交页面） |
 | 工作流 | `workflow-list` | WorkflowList.vue |
 | | `workflow-editor` | WorkflowEditor.vue |
 | 日报/报表 | `daily-report` | DailyReport.vue |
@@ -34,14 +33,12 @@
 | | `week-report` | WeekReport.vue |
 | | `month-report` | MonthReport.vue |
 | | `year-report` | YearReport.vue |
-| Agent | `agent-review` | AgentReview.vue |
+| Agent | `agent-review` | AgentReview.vue（只审核 Artifact，不提交导入批次） |
 | | `agent-detail` | AgentDetail.vue |
 | 工作台实验 | `workbench-table-lab` | WorkbenchTableLab.vue |
 | 数据中心 | `account-manage` | AccountManage.vue |
 | | `data-report-tpl` | ReportTemplate.vue |
 | 规则中心 | `rule-bank` | BankRule.vue |
-| 异常中心 | `exception-receipt` | ExceptionCenter.vue |
-| | `exception-other` | ExceptionCenter.vue |
 | 系统设置 | `ai-config` | AIConfig.vue |
 | | `system-maintenance` | SystemMaintenance.vue |
 | | `backup-restore` | SystemMaintenance.vue |

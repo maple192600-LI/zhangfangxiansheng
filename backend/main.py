@@ -40,10 +40,10 @@ from api.auth import router as auth_router
 from api.reset import router as reset_router
 from api.bank_master import router as bank_master_router
 from api.report_template import router as report_template_router
-from api.events import router as events_router
 from api.agent import router as agent_router
 from api.artifacts import router as artifacts_router
 from api.workflow import router as workflow_router
+from api.import_preview import router as import_preview_router
 
 
 def _init_db():
@@ -247,10 +247,10 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(reset_router, prefix="/api")
 app.include_router(bank_master_router, prefix="/api")
 app.include_router(report_template_router, prefix="/api")
-app.include_router(events_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(artifacts_router, prefix="/api")
 app.include_router(workflow_router, prefix="/api")
+app.include_router(import_preview_router, prefix="/api")
 
 
 # ── SPA 路由兜底：非 /api 且非静态资源的路径，一律返回 index.html ──

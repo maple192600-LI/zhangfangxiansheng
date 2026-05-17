@@ -51,8 +51,10 @@
 
       <div v-if="resultMessage" class="panel result-panel">
         <strong>{{ resultMessage }}</strong>
-        <span v-if="commitResult?.inserted_rows != null">入库 {{ commitResult.inserted_rows }} 行</span>
         <span v-if="downloadUrl">报表已生成，可在下载地址查看。</span>
+        <div v-if="nextAction" style="margin-top:8px">
+          <NButton type="primary" size="small" @click="goNext">{{ nextAction }}</NButton>
+        </div>
       </div>
 
       <div class="action-bar">
@@ -70,8 +72,6 @@ import { computed, onMounted, ref } from 'vue'
 import { NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import * as artifacts from '@/api/artifacts'
-import * as bank from '@/api/bank'
-import * as manual from '@/api/manual'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,7 +80,8 @@ const artifact = ref(null)
 const loading = ref(false)
 const approving = ref(false)
 const resultMessage = ref('')
-const commitResult = ref(null)
+const nextAction = ref('')
+const nextRoute = ref(null)
 const downloadUrl = ref('')
 
 const artifactType = computed(() => route.params.type)
@@ -139,22 +140,19 @@ async function loadArtifact() {
 async function approve() {
   approving.value = true
   resultMessage.value = ''
-  commitResult.value = null
+  nextAction.value = ''
+  nextRoute.value = null
   try {
     if (artifactType.value === 'parser') {
       await artifacts.approveParserArtifact(artifactId.value)
       if (flow.value === 'bank' && route.query.batch_code) {
-        commitResult.value = await bank.commitBankImport({
-          batch_code: route.query.batch_code,
-          parser_artifact_id: artifactId.value,
-        })
-        resultMessage.value = '已接受 Parser，银行流水已入库。'
+        resultMessage.value = '已接受 Parser，请回到网银导入完成解析预览；最终提交在上传结果预览页完成。'
+        nextAction.value = '返回网银导入'
+        nextRoute.value = '/bank-import'
       } else if (flow.value === 'manual' && route.query.batch_code) {
-        commitResult.value = await manual.commitManual({
-          batch_code: route.query.batch_code,
-          parser_artifact_id: artifactId.value,
-        })
-        resultMessage.value = '已接受 Parser，手工 Excel 流水已入库。'
+        resultMessage.value = '已接受 Parser，请在上传结果预览页完成校验和提交。'
+        nextAction.value = '进入上传结果预览'
+        nextRoute.value = { path: '/upload-preview', query: { batch_code: route.query.batch_code } }
       } else {
         resultMessage.value = '已接受 Parser。'
       }
@@ -167,6 +165,15 @@ async function approve() {
     alert(e.message || '接受失败')
   } finally {
     approving.value = false
+  }
+}
+
+function goNext() {
+  if (!nextRoute.value) return
+  if (typeof nextRoute.value === 'string') {
+    router.push(nextRoute.value)
+  } else {
+    router.push(nextRoute.value)
   }
 }
 

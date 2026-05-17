@@ -18,10 +18,10 @@
 
 | # | 列名 | 类型 | NULL | 语义 |
 |---|---|---|---|---|
-| 1 | business_date | DATE | NO | 业务日期 |
-| 2 | entity_code | VARCHAR(50) | NO | 法人/单位编码 |
+| 1 | business_date | DATE | 条件 | 业务日期；预览阶段可为空，`正常` 状态必须非空 |
+| 2 | entity_code | VARCHAR(50) | 条件 | 法人/单位编码；预览阶段可为空，`正常` 状态必须非空 |
 | 3 | entity_name | VARCHAR(200) | NO | 法人/单位名称 |
-| 4 | account_code | VARCHAR(50) | NO | 账户编码 |
+| 4 | account_code | VARCHAR(50) | 条件 | 账户编码；预览阶段可为空，`正常` 状态必须非空 |
 | 5 | account_name | VARCHAR(100) | NO | 账户名称 |
 | 6 | summary | VARCHAR(500) | YES | 摘要 |
 | 7 | counterparty | VARCHAR(200) | YES | 对方 |
@@ -36,9 +36,12 @@ CHECK 约束：
 - amount_in >= 0 AND amount_out >= 0 -- 非负
 - state IN ('正常','待确认','异常','已作废')
 - source IN ('网银导入','手工录入','现金录入','票据录入','财务公司单据')
+- state != '正常' OR (business_date IS NOT NULL AND entity_code IS NOT NULL AND entity_code != '' AND account_code IS NOT NULL AND account_code != '') -- 正式基础数据核心字段完整
 
 不变量：
 - 12 列列序 / 列名 / 枚举值冻结，新增字段一律走辅助列（batch_id / parser_artifact_id / created_at / updated_at）
+- `FundEvent` 同时承载上传结果预览行和正式基础数据行：`待确认` / `异常` 行允许业务日期、单位编码、账户编码暂缺，用于在上传结果预览页修正；`正常` 行必须满足核心字段完整约束
+- 基础数据、报表、导出只能读取 `state == '正常'` 的行；不得把 `待确认` / `异常` 行当作正式基础数据
 - §C8 脚本编排模式下，运行时填入 fund_events 的代码必须来自 Parser/Rule artifact，不得有其它路径。执行由 artifact runtime 确定性完成，不由 Agent 运行期决策
 
 ---

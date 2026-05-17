@@ -1,6 +1,7 @@
 """银行流水导入服务层
 
-上传 → ParserArtifact 匹配 → 预览 → 确认提交 全流程。
+上传 → ParserArtifact 匹配 → 解析预览。
+最终提交由 import_preview_service 统一完成。
 """
 import os
 import uuid
@@ -126,14 +127,17 @@ def preview(
     if not file_path:
         raise ValueError("原始文件未找到")
 
-    rows = list(
-        artifact_runtime.run_parser(
-            db,
-            parser_artifact_id,
-            file_path,
-            {"batch_code": batch_code},
+    try:
+        rows = list(
+            artifact_runtime.run_parser(
+                db,
+                parser_artifact_id,
+                file_path,
+                {"batch_code": batch_code},
+            )
         )
-    )
+    except NotImplementedError:
+        raise ValueError("解析器运行时未实现，无法预览解析结果")
     result = _preview_from_canonical_rows(batch_code, rows)
     batch.status = "previewed"
     db.commit()

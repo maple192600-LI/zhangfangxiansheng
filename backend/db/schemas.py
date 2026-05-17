@@ -410,13 +410,6 @@ class ManualPreviewBody(BaseModel):
     scheme_code: Optional[str] = None
 
 
-class ManualCommitBody(BaseModel):
-    batch_code: str
-    parser_artifact_id: int
-    confirm_rows: Optional[List[int]] = None
-    fixes: Optional[List[dict]] = None
-
-
 class ManualExportTemplateBody(BaseModel):
     scheme_code: str = "manual_multi_subject_basic"
     include_example_rows: bool = False
