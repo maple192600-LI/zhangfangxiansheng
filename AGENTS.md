@@ -1,33 +1,45 @@
 # AGENTS.md
 
+AI Coding 工具进入本项目的入口文件。
+
 ## MUST READ
 
-This repository currently stores the planning documents in `new/`.
+先读 `docs/README.md`，它是唯一的文档入口。
 
-`new/` is a documentation location, not the required future development directory.
+技术栈真相源：
+- `frontend/package.json` — 前端依赖和版本
+- `backend/requirements.txt` — 后端依赖和版本
 
-Read first:
-
-- `new/AGENTS.md`
-- `new/00_项目文件地图与交付边界.md`
-- `new/PRD_账房先生_本地财务Agent工作台.md`
-- `new/13_AI_Coding_开发协作规范.md`
-- `new/12_测试与验收规范.md`
+不要信任任何文档中的技术栈表述，以上述文件为准。
 
 ## AUTHORITY
 
-Only the files listed above are implementation authority for this project.
+本项目的代码和配置文件是唯一实现权威。文档描述的是意图，代码描述的是事实。
 
-Any other files in the workspace are not development input unless the user explicitly names them.
+如果文档与代码冲突，以代码为准，然后修正文档。
 
-The final development workspace may be any folder or GitHub repository selected by the user later.
+## CURRENT BLOCKERS
+
+两个 artifact runtime 函数为 `NotImplementedError`：
+
+- `backend/core/artifact_runtime.py::run_parser` — ParserArtifact 驱动的解析执行路径阻断
+- `backend/core/artifact_runtime.py::run_rule` — RuleArtifact 驱动的规则执行路径阻断
+
+ParserArtifact 和 RuleArtifact 可以创建和审核，但无法被 artifact runtime 执行。
+
+手工流水快速录入路径已可直接写入 FundEvent，不应被重建。
 
 ## HARD RULES
 
-- Do not develop directly on `main`.
-- Do not keep parallel implementations for the same capability.
-- Do not create parallel replacement files to bypass defects.
-- Do not commit `runtime/`, `.venv/`, `node_modules/`, downloads, logs, or temporary outputs.
-- Do not put docs, fixtures, runtime data, or test artifacts inside `product/`.
-- User-visible work must pass browser validation.
-- Completion requires project guard check result.
+- 不在 `main` 分支直接开发，使用功能分支。
+- 不创建同一能力的平行实现。
+- 不创建平行替换文件来绕过缺陷。
+- 不新增领域专用 Agent 类（如 FundAgent、ReportAgent、ParserAgent、RuleAgent）来绕过通用 Agent 架构。
+- 不调用旧 `fund_skill_run`。
+- 不新增 `/api/fund/agent/skills/*/invoke` 路由。
+- 不在路由层写业务逻辑，业务逻辑放 `services/`。
+- API 统一响应格式：`{ "code": 0, "message": "ok", "data": {} }`。
+- 不把 `runtime/`、`.venv/`、`node_modules/`、下载文件、日志、临时输出提交进仓库。
+- 不创建 docs archive 目录，不保留 legacy docs。旧文档污染源已物理删除。
+- 用户可见的工作必须通过浏览器验证。
+- 增强层（模板、主题、配置）缺失时降级到默认行为，不能阻断核心功能。

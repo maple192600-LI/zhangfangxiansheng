@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-05-13T08:24:50+00:00",
+  "generated_at": "2026-05-17T11:12:55+00:00",
   "algorithm": "sha256",
   "files": {
-    "docs/00_governance/00_project_constitution.md": "127993ede0b7ccd2449fe3ab803e2d837cfe3dab6c8c1a124fd7bed542078669"
+    "docs/00_governance/00_project_constitution.md": "7d31b8c31c30d37b6b240f50d9cbe16bdb34c46d4703a3b6d8ba90d92f2e6b2b"
   }
 }

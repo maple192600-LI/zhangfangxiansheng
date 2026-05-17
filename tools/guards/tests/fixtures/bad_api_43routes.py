@@ -1,6 +1,5 @@
-# Fixture for check_api_inventory.py negative test.
-# §C7 违规样例：43 条路由（上限 42）。
-# 扫描期望 exit 1。
+# Legacy fixture for check_api_inventory.py.
+# No longer used by run_negative_tests.py (replaced by bad_api_duplicate_routes.py).
 #
 # 注意：这是 fixture，不会被真正挂载到 FastAPI 应用。
 from fastapi import APIRouter

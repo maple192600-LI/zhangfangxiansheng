@@ -29,6 +29,5 @@ jobs:
           python tools/guards/check_canonical_schema.py
           python tools/guards/check_primitives_whitelist.py
           python tools/guards/check_placeholder_binding.py
-      - name: Record API inventory status
-        continue-on-error: true
+      - name: Run API inventory guard
         run: python tools/guards/check_api_inventory.py
