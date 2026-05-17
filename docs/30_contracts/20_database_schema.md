@@ -26,7 +26,7 @@
 9.  import_batches           导入批次
 10. fund_events              CANONICAL_12 资金流水事实表（§C1）
 
-── Fund Agent 产物（3 张）──
+── Agent 产物（3 张）──
 11. parser_artifacts         ParserArtifact 银行/手工解析器
 12. rule_artifacts           RuleArtifact 报表填充规则
 13. template_inference_job   template.inference 三阶段流水线状态
@@ -337,23 +337,9 @@ CREATE TABLE ai_call_logs (
 CREATE INDEX idx_ai_call_logs_created ON ai_call_logs(created_at);
 ```
 
-### §T3.5 · `agent_configs`
+### §T3.5 · 已移除的旧 Agent 配置表
 
-```sql
-CREATE TABLE agent_configs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  agent_code VARCHAR(50) NOT NULL UNIQUE,
-  agent_name VARCHAR(100) NOT NULL,
-  agent_type VARCHAR(30) NOT NULL,
-  workspace_dir VARCHAR(200) NOT NULL,
-  ai_config_id INTEGER REFERENCES ai_configs(id) ON DELETE SET NULL,
-  description TEXT,
-  status VARCHAR(20) NOT NULL DEFAULT 'active',
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
-);
-CREATE INDEX idx_agent_configs_type ON agent_configs(agent_type, status);
-```
+旧 Agent 配置表无对应 ORM 类，配置能力已合并入 `agents_v2`（§T7.1）。**禁止恢复此表。**
 
 ### §T3.6 · `operation_logs`
 
@@ -385,7 +371,7 @@ CREATE TABLE users (
 
 ---
 
-## §T4 · Fund Agent 产物表
+## §T4 · Agent 产物表
 
 ### §T4.1 · `parser_artifacts`
 
@@ -691,7 +677,7 @@ CREATE INDEX idx_workflow_run_steps_node ON workflow_run_steps(run_id, node_id);
 **版本**
 - v5.2 · 2026-05-13 · 工作流编排改为 workflows / workflow_versions / workflow_runs / workflow_run_steps 四表版本化模型
 - v5.1 · 2026-05-13 · 新增工作流编排 3 张表：workflow_definitions / workflow_runs / workflow_run_steps
-- v5.0 · 2026-05-10 · 标题改为当前 Schema；§T0 更新为 24 张业务 ORM 表；§T5 标记已完成；移除 parser_templates 和 agent_configs 占位行
+- v5.0 · 2026-05-10 · 标题改为当前 Schema；§T0 更新为 24 张业务 ORM 表；§T5 标记已完成；移除 parser_templates 和旧 Agent 配置表占位行
 - v4.1 · 2026-05-10 · 移除 parser_templates 表（§T2.1），银行流水解析规则统一使用 parser_artifacts
 - v4.0 · 2026-05-02 · 新增 §T7 Agent 系统扩展表（6 张表 DDL）
 - v3.1 · 2026-04-25 · Phase 0 文档复位为 v3 真实 Schema，20 表清单与三张 artifact 表恢复。
