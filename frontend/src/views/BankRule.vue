@@ -69,11 +69,14 @@
 
           <!-- 4. AI 协作 -->
           <n-card title="AI 协作生成规则" size="small">
-            <template v-if="agents.length === 0">
+            <template v-if="agentsLoading">
+              <div style="font-size:13px;color:#999;">正在加载协作智能体...</div>
+            </template>
+            <template v-else-if="agents.length === 0">
               <div style="font-size:13px;color:#999;margin-bottom:8px;">
                 当前没有可用的协作智能体。请先在左侧「AI智能体」模块确认已有智能体已启用并配置 AI 模型，然后回到本页刷新列表。
               </div>
-              <n-button @click="loadAgents">刷新智能体列表</n-button>
+              <n-button @click="loadAgents" :loading="agentsLoading">刷新智能体列表</n-button>
             </template>
             <template v-else>
               <n-space vertical>
@@ -217,6 +220,7 @@ const agentSession = ref({})
 const parserName = ref('')
 const parsers = ref([])
 const agents = ref([])
+const agentsLoading = ref(true)
 const selectedAgentId = ref(null)
 
 const agentOptions = ref([])
@@ -316,6 +320,7 @@ async function saveRule() {
 }
 
 async function loadAgents() {
+  agentsLoading.value = true
   try {
     const data = await listActiveAgents()
     if (Array.isArray(data)) {
@@ -327,6 +332,8 @@ async function loadAgents() {
     }
   } catch (e) {
     console.error('加载智能体列表失败', e)
+  } finally {
+    agentsLoading.value = false
   }
 }
 

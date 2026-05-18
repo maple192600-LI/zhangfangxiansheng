@@ -530,3 +530,49 @@ def test_starter_prompt_no_rule_agent(db_session, tmp_path, monkeypatch):
 
     assert "规则智能体" not in prompt
     assert "用户最终审核的是解析结果表格，不是代码" in prompt
+
+
+# ── 12D: agent permission + toolset ──
+
+
+def test_default_permission_includes_parser_training_tool():
+    """Default permission allows parser_training_update_candidate."""
+    from agents.permission import DEFAULT_PERMISSION
+    assert "parser_training_update_candidate" in DEFAULT_PERMISSION["allowed_tools"]
+
+
+def test_get_permission_default_includes_parser_training_tool():
+    """get_permission('{}') includes parser_training_update_candidate."""
+    from agents.permission import get_permission
+    perm = get_permission("{}")
+    assert "parser_training_update_candidate" in perm["allowed_tools"]
+
+
+def test_get_tools_for_llm_includes_parser_training_tool():
+    """LLM tool list includes parser_training_update_candidate under default permission."""
+    from agents.permission import DEFAULT_PERMISSION
+    from agents.tool_registry import get_tools_for_llm
+    tools = get_tools_for_llm(DEFAULT_PERMISSION)
+    tool_names = [t["function"]["name"] for t in tools]
+    assert "parser_training_update_candidate" in tool_names
+
+
+def test_parser_training_tool_in_correct_toolset():
+    """parser_training_update_candidate is in 'parser_training' toolset, not 'database'."""
+    from agents.tool_registry import TOOLSETS, _TOOLS
+    assert "parser_training_update_candidate" in TOOLSETS.get("parser_training", [])
+    assert "parser_training_update_candidate" not in TOOLSETS.get("database", [])
+    td = _TOOLS.get("parser_training_update_candidate")
+    assert td is not None
+    assert td.toolset == "parser_training"
+
+
+def test_disabled_parser_training_toolset_removes_tool():
+    """disabled_toolsets=['parser_training'] removes parser_training_update_candidate."""
+    from agents.permission import DEFAULT_PERMISSION
+    from agents.tool_registry import get_tools_for_llm
+    perm = DEFAULT_PERMISSION.copy()
+    perm["disabled_toolsets"] = ["parser_training"]
+    tools = get_tools_for_llm(perm)
+    tool_names = [t["function"]["name"] for t in tools]
+    assert "parser_training_update_candidate" not in tool_names

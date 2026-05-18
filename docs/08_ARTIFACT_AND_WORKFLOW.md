@@ -46,7 +46,7 @@ AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`date
 - **API：** `backend/api/parser_training.py`（8 个端点，全部 job_code 驱动）
 - **Service：** `backend/services/parser_training_service.py`（训练任务 CRUD、候选试运行、保存并启用 ParserArtifact）
 - **上下文：** `backend/services/parser_context_service.py`（银行/法人/账户主数据摘要供规则生成参考）
-- **Agent 工具：** `parser_training_update_candidate`（写入候选代码到训练任务，拒绝硬编码账户/单位）
+- **Agent 工具：** `parser_training_update_candidate`（toolset: `parser_training`，写入候选代码到训练任务，拒绝硬编码账户/单位。已加入默认 Agent allowed_tools，任意现有智能体均可调用）
 - **设计要点：**
   - 没有"规则智能体"概念，用户选择任意现有 Agent 协作
   - 规则中心不负责创建智能体，无 Agent 时只显示中性提示和刷新按钮
@@ -86,4 +86,4 @@ AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`date
 
 ---
 **校准来源：** `backend/core/artifact_runtime.py`、`backend/core/artifact_ast_guard.py`、`backend/core/artifact_sandbox.py`、`backend/services/artifact_service.py`、`backend/services/workflow_executor.py`、`backend/services/workflow_nodes.py`、`backend/services/workflow_service.py`
-**最后校准：** 2026-05-19（12C 纠偏：规则中心只选已有 Agent + 不创建智能体 + CI 修复）
+**最后校准：** 2026-05-19（12D Agent 权限修复 + 加载态修复）

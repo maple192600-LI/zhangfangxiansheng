@@ -2,7 +2,7 @@
 from agents.tool_registry import register_tool, ToolContext
 
 
-@register_tool(toolset="database")
+@register_tool(toolset="parser_training")
 def parser_training_update_candidate(
     job_code: str,
     code: str,
