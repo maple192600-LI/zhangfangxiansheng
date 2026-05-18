@@ -111,6 +111,15 @@
 | 09G | 前端展示银行识别和账户归属匹配结果 |
 | 09H | 多银行/多账户/多线索场景端到端验收 |
 
+## 已实现服务（尚未接入导入流程）
+
+| 服务 | 文件 | 职责 |
+|------|------|------|
+| 身份线索提取 | `backend/services/bank_statement_identity_service.py` | 从 xlsx 文件和文件名提取银行名、账号、户名、开户行等线索 |
+| 账户归属匹配 | `backend/services/bank_account_match_service.py` | 根据身份线索匹配主数据，输出 matched / ambiguous / unmatched |
+
+这两个服务已通过测试验证，但尚未接入 `bank_import_service` 的导入流程，也未接入前端和 ParserArtifact bank/format 匹配。接入工作将在 09D 和 09G 中完成。
+
 ---
 **校准来源：** `ai_coordination/parser-runtime/09_bank_parser_generalization_revised_plan_v2.md`、`backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
 **最后校准：** 2026-05-18
