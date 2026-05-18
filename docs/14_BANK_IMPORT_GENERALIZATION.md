@@ -120,7 +120,8 @@
 
 ### 设计要点
 
-- **银行归一化**：身份线索提取服务只返回原始文本（含"银行"的子串），不硬编码银行名。归一化由匹配服务通过 `_resolve_bank()` 查询 `banks` 主数据完成（精确匹配 bank_name / short_name / bank_code，包含匹配仅取唯一候选）
+- **银行文本候选收集**：身份线索提取服务输出 `bank_text_candidates` 列表（最多 80 条去重原始文本），来源包括 filename、单元格文本、headers、bank_name、branch_name。不做任何主数据判断
+- **DB 驱动银行识别**：匹配服务通过 `_resolve_bank()` 从候选列表中识别银行。支持精确匹配（bank_name / short_name / bank_code）和双向包含匹配（候选包含银行字段或银行字段包含候选），仅唯一 Bank 才返回
 - **AccountAlias**：匹配服务在实体名匹配路径中优先尝试 `account_aliases.alias_text` 精确匹配，可命中别名
 - **完整账号不匹配**：当 `identity_hints.account_number` 存在但不匹配任何账户时，直接返回 `ACCOUNT_HINT_NOT_FOUND`，不 fallback 到实体名匹配
 - **银行强过滤**：当银行 hint 可解析为唯一 Bank 但过滤后候选为空，返回 `BANK_ACCOUNT_CONFLICT`，不恢复原候选

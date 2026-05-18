@@ -231,3 +231,33 @@ def test_full_bank_name_extracted_as_raw():
     ])
     result = extract_identity_hints_from_workbook(wb)
     assert result["identity_hints"]["bank_name"] == "招商银行"
+
+
+# ── bank_text_candidates ──
+
+def test_candidates_include_filename():
+    wb = Workbook()
+    result = extract_identity_hints_from_workbook(wb, filename="工行流水.xlsx")
+    cands = result["bank_text_candidates"]
+    assert "工行流水.xlsx" in cands or "工行流水" in cands
+
+
+def test_candidates_include_cell_text():
+    wb = _make_workbook([
+        ["账号：6217001234567890"],
+        ["日期", "摘要", "收入", "支出", "余额"],
+    ])
+    result = extract_identity_hints_from_workbook(wb)
+    cands = result["bank_text_candidates"]
+    assert any("6217001234567890" in c for c in cands)
+
+
+def test_candidates_deduplicated():
+    wb = _make_workbook([
+        ["中国银行"],
+        ["中国银行"],
+        ["日期", "摘要"],
+    ])
+    result = extract_identity_hints_from_workbook(wb)
+    cands = result["bank_text_candidates"]
+    assert cands.count("中国银行") == 1

@@ -20,6 +20,17 @@ _BRANCH_KW = ["开户行", "开户银行", "开户支行"]
 
 _MAX_SCAN_ROWS = 30
 _MAX_SCAN_COLS = 20
+_MAX_CANDIDATES = 80
+
+
+def _add_candidate(candidates: list, text: str):
+    text = str(text).strip()
+    if not text:
+        return
+    if len(text) > 120:
+        text = text[:120]
+    if text not in candidates:
+        candidates.append(text)
 
 
 def extract_identity_hints(file_path: str, filename: Optional[str] = None) -> dict:
@@ -41,8 +52,13 @@ def extract_identity_hints_from_workbook(wb, filename: Optional[str] = None) -> 
         "filename_hint": "",
     }
     evidence = {"cells": [], "headers": [], "filename": filename or ""}
+    candidates = []
 
     if filename:
+        _add_candidate(candidates, filename)
+        fn_base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        if fn_base != filename:
+            _add_candidate(candidates, fn_base)
         fn_bank = _extract_bank_text(filename)
         if fn_bank:
             hints["bank_name"] = fn_bank
@@ -51,8 +67,11 @@ def extract_identity_hints_from_workbook(wb, filename: Optional[str] = None) -> 
             hints["filename_hint"] = fn_last4
 
     for sheet in wb.worksheets:
-        _scan_sheet(sheet, hints, evidence)
+        _scan_sheet(sheet, hints, evidence, candidates)
         break
+
+    _add_candidate(candidates, hints["bank_name"])
+    _add_candidate(candidates, hints["branch_name"])
 
     if hints["account_number"] and not hints["account_last_four"]:
         digits = re.sub(r"\D", "", hints["account_number"])
@@ -65,10 +84,11 @@ def extract_identity_hints_from_workbook(wb, filename: Optional[str] = None) -> 
         "identity_hints": hints,
         "evidence": evidence,
         "confidence": _confidence(hints),
+        "bank_text_candidates": candidates[:_MAX_CANDIDATES],
     }
 
 
-def _scan_sheet(sheet, hints: dict, evidence: dict):
+def _scan_sheet(sheet, hints: dict, evidence: dict, candidates: list):
     max_row = min(_MAX_SCAN_ROWS, sheet.max_row or _MAX_SCAN_ROWS)
     max_col = min(_MAX_SCAN_COLS, sheet.max_column or _MAX_SCAN_COLS)
 
@@ -86,6 +106,7 @@ def _scan_sheet(sheet, hints: dict, evidence: dict):
                 prev_text = ""
                 continue
             row_vals.append(text)
+            _add_candidate(candidates, text)
             _extract_from_cell(text, hints)
             if prev_text:
                 _extract_adjacent(prev_text, text, hints)
@@ -103,6 +124,8 @@ def _scan_sheet(sheet, hints: dict, evidence: dict):
                 headers.append(str(v).strip())
         if len(headers) >= 3:
             evidence["headers"] = headers
+            for h in headers:
+                _add_candidate(candidates, h)
             break
 
 

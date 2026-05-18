@@ -119,6 +119,12 @@ def _hints(account_number="", account_last_four="", account_name="",
     }
 
 
+def _hints_with_candidates(entity_name="", bank_text_candidates=None, **kw):
+    base = _hints(entity_name=entity_name, **kw)
+    base["bank_text_candidates"] = bank_text_candidates or []
+    return base
+
+
 # ── 1. 账号+单位一致 → matched ──
 
 def test_account_number_entity_consistent(db_session, test_data):
@@ -401,3 +407,87 @@ def test_bank_contains_unique_match(db_session, test_data):
     )
     assert r["status"] == "matched"
     assert r["account_code"] == "A005"
+
+
+# ── 短名通过候选识别（DB short_name）──
+
+def test_short_name_resolved_from_candidates(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            entity_name="TestCo1",
+            bank_text_candidates=["工行流水"],
+        ),
+    )
+    # "工行流水" contains ICBC short_name "工行" → resolves ICBC
+    # TestCo1 online accounts: A001 (BOC) → bank filter removes it → BANK_ACCOUNT_CONFLICT
+    assert r["status"] == "unmatched"
+    assert r["error_code"] == "BANK_ACCOUNT_CONFLICT"
+
+
+# ── bank_code 通过候选识别 ──
+
+def test_bank_code_resolved_from_candidates(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            entity_name="TestCo2",
+            bank_text_candidates=["ICBC_statement.xlsx"],
+        ),
+    )
+    # "ICBC_statement.xlsx" contains ICBC bank_code "ICBC" → resolves ICBC
+    # TestCo2 online: A003 (BOC), A005 (ICBC) → filter keeps A005
+    assert r["status"] == "matched"
+    assert r["account_code"] == "A005"
+
+
+# ── 自定义银行短名通过候选识别 ──
+
+def test_custom_bank_short_name_from_candidates(db_session, test_data):
+    now = datetime.now()
+    e = test_data["entities"][0]
+    custom = Bank(bank_code="MYB", bank_name="我的测试银行",
+                  short_name="我行", status="enabled",
+                  created_at=now, updated_at=now)
+    db_session.add(custom)
+    db_session.flush()
+
+    new_acc = Account(
+        entity_id=e.id, bank_id=custom.id,
+        account_code="A020", account_alias="我行账户",
+        bank_name="我的测试银行", branch_name="我行支行",
+        account_number="1111222233334444", account_last_four="4444",
+        account_type="基本户", instrument_type="银行存款",
+        input_method="online", has_online_banking=True,
+        status="enabled", currency="CNY",
+        initial_balance=0, balance_date=date(2026, 1, 1),
+        created_at=now, updated_at=now,
+    )
+    db_session.add(new_acc)
+    db_session.commit()
+
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            entity_name="TestCo1",
+            bank_text_candidates=["我行流水"],
+        ),
+    )
+    assert r["status"] == "matched"
+    assert r["account_code"] == "A020"
+
+
+# ── 候选命中多个银行时不猜测 ──
+
+def test_candidates_hit_multiple_banks_no_guess(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            entity_name="TestCo2",
+            bank_text_candidates=["中行工行联合流水"],
+        ),
+    )
+    # "中行工行联合流水" contains both "中行" (BOC) and "工行" (ICBC) → ambiguous bank
+    # Bank not resolved → no bank filter → all online accounts kept → ambiguous
+    assert r["status"] == "ambiguous"
+    assert r["error_code"] == "MULTIPLE_ACCOUNT_MATCHES"
