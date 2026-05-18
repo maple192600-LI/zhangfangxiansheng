@@ -1,4 +1,4 @@
-"""Parser Training API — rule center MVP endpoints."""
+"""Parser Training API — rule center MVP endpoints (job_code driven)."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, UploadFile
@@ -12,29 +12,17 @@ from services import parser_training_service, artifact_service
 router = APIRouter(prefix="/parser-training", tags=["parser-training"])
 
 
-class RunCandidateBody(BaseModel):
-    file_path: str
-    code: str
+class AgentSessionBody(BaseModel):
+    agent_id: int
 
 
 class SaveParserBody(BaseModel):
     name: str = Field(..., max_length=100)
-    code: str
-    bank_id: Optional[int] = None
-    format_key: Optional[str] = Field(None, max_length=100)
-    match_rules: dict = {}
-    sample_check_log: dict = {}
-    confidence: Optional[float] = None
-    primitives_imports: list[str] = []
-
-
-class AgentSessionBody(BaseModel):
-    job_id: str
 
 
 @router.post("/jobs")
 async def create_job(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Upload sample file and create a training job."""
+    """Upload sample file and create a persistent training job."""
     file_data = await file.read()
     filename = file.filename or "sample.xlsx"
     try:
@@ -44,73 +32,81 @@ async def create_job(file: UploadFile = File(...), db: Session = Depends(get_db)
         return error(1001, str(exc))
 
 
-@router.post("/run-candidate")
-def run_candidate(body: RunCandidateBody, db: Session = Depends(get_db)):
-    """Trial-run candidate parser code."""
-    if not body.code.strip():
-        return error(1001, "候选代码不能为空")
+@router.get("/jobs/{job_code}")
+def get_job(job_code: str, db: Session = Depends(get_db)):
+    """Get training job details by job_code."""
+    result = parser_training_service.get_job(db, job_code)
+    if not result:
+        return error(1001, f"训练任务 {job_code} 不存在")
+    return success(result)
+
+
+@router.post("/jobs/{job_code}/run-candidate")
+def run_candidate(job_code: str, db: Session = Depends(get_db)):
+    """Trial-run the candidate code saved in the training job."""
     try:
-        result = parser_training_service.run_candidate(body.file_path, body.code)
+        result = parser_training_service.run_candidate(db, job_code)
         return success(result)
     except Exception as exc:
         return error(5000, f"试运行失败: {exc}")
 
 
-@router.post("/save-parser")
-def save_parser(body: SaveParserBody, db: Session = Depends(get_db)):
-    """Save candidate code as active ParserArtifact."""
+@router.post("/jobs/{job_code}/save-parser")
+def save_parser(job_code: str, body: SaveParserBody, db: Session = Depends(get_db)):
+    """Save the training job's candidate code as active ParserArtifact."""
     try:
-        result = parser_training_service.save_parser(
-            db,
-            name=body.name,
-            code=body.code,
-            bank_id=body.bank_id,
-            format_key=body.format_key,
-            match_rules=body.match_rules,
-            sample_check_log=body.sample_check_log,
-            confidence=body.confidence,
-            primitives_imports=body.primitives_imports,
-        )
+        result = parser_training_service.save_parser(db, job_code, body.name)
         return success(result)
     except ValueError as exc:
         return error(2001, str(exc))
 
 
-@router.post("/agent-session")
-def create_agent_session(body: AgentSessionBody, db: Session = Depends(get_db)):
-    """Create or reuse a rule center agent session."""
+@router.get("/agents")
+def list_active_agents(db: Session = Depends(get_db)):
+    """List active agents for user to select."""
+    from db.tables import Agent
+    agents = db.query(Agent).filter(Agent.status == "active").all()
+    return success([
+        {
+            "id": a.id,
+            "agent_code": a.agent_code,
+            "display_name": a.display_name,
+        }
+        for a in agents
+    ])
+
+
+@router.post("/jobs/{job_code}/agent-session")
+def create_agent_session(job_code: str, body: AgentSessionBody, db: Session = Depends(get_db)):
+    """Create a new agent session for the training job. Requires explicit agent_id."""
     from db.tables import Agent
     from agents import session_store
 
-    rule_agent = db.query(Agent).filter(
-        Agent.display_name.like("%规则%"),
-        Agent.status == "active",
-    ).first()
+    agent = db.query(Agent).filter(Agent.id == body.agent_id, Agent.status == "active").first()
+    if not agent:
+        return error(2001, f"智能体 {body.agent_id} 不存在或未启用")
 
-    if not rule_agent:
-        default_agent = db.query(Agent).filter(Agent.status == "active").order_by(Agent.id).first()
-        if not default_agent:
-            return error(2001, "系统中没有可用的智能体，请先创建智能体并配置 AI")
-        rule_agent = default_agent
+    job = parser_training_service.get_job(db, job_code)
+    if not job:
+        return error(1001, f"训练任务 {job_code} 不存在")
 
-    sessions = session_store.list_sessions(db, rule_agent.id)
-    active_session = None
-    for s in sessions:
-        if s.get("status") == "active":
-            active_session = s
-            break
+    session_data = session_store.create_session(
+        db, agent.id,
+        title=f"规则训练 {job['filename']} ({job_code})",
+    )
 
-    if not active_session:
-        active_session = session_store.create_session(
-            db, rule_agent.id,
-            title=f"银行流水规则训练 {body.job_id}",
-        )
+    starter_prompt = _build_starter_prompt(job)
+    session_store.save_message(
+        db, session_data["id"], role="user",
+        content=starter_prompt,
+    )
 
     return success({
-        "agent_id": rule_agent.id,
-        "agent_code": rule_agent.agent_code,
-        "agent_name": rule_agent.display_name,
-        "session_id": active_session["id"],
+        "agent_id": agent.id,
+        "agent_code": agent.agent_code,
+        "agent_name": agent.display_name,
+        "session_id": session_data["id"],
+        "starter_prompt": starter_prompt,
     })
 
 
@@ -126,3 +122,64 @@ def list_parsers(kind: str = "bank", db: Session = Depends(get_db)):
     """List parser artifacts for the rule center."""
     data = artifact_service.list_parser_artifacts(db, kind=kind)
     return success(data)
+
+
+def _build_starter_prompt(job: dict) -> str:
+    headers = job.get("headers", [])
+    sample_rows = job.get("sample_rows", [])
+    filename = job.get("filename", "")
+    row_count = job.get("row_count", 0)
+    context = job.get("context", {})
+    job_code = job.get("job_code", "")
+
+    prompt = f"""请为以下银行流水样本生成解析规则。
+
+## 样本信息
+- 文件名: {filename}
+- 总行数: {row_count}
+- 表头: {', '.join(headers)}
+
+## 前5行样本
+"""
+    for i, row in enumerate(sample_rows[:5], 1):
+        prompt += f"第{i}行: {' | '.join(row)}\n"
+
+    entities = context.get("entities", [])
+    banks = context.get("banks", [])
+    accounts = context.get("accounts", [])
+
+    if entities:
+        prompt += "\n## 系统中的法人单位\n"
+        for e in entities[:10]:
+            prompt += f"- {e['entity_code']}: {e['name']}\n"
+
+    if banks:
+        prompt += "\n## 系统中的银行\n"
+        for b in banks[:10]:
+            prompt += f"- {b.get('bank_name', '')}"
+            if b.get("short_name"):
+                prompt += f" ({b['short_name']})"
+            prompt += "\n"
+
+    if accounts:
+        prompt += "\n## 系统中的银行账户\n"
+        for a in accounts[:10]:
+            prompt += f"- {a['account_code']}: {a['account_alias']}"
+            if a.get("account_last_four"):
+                prompt += f" (后四位: {a['account_last_four']})"
+            prompt += "\n"
+
+    prompt += """
+## 输出要求
+定义 parse(wb, ctx) 函数，返回 CANONICAL_12 字段列表:
+business_date, entity_code, entity_name, account_code, account_name, summary, counterparty, amount_in, amount_out, rolling_balance, state, source
+
+## 禁止事项
+- 不允许硬编码 DEFAULT_ACCOUNT_CODE / DEFAULT_ENTITY_CODE
+- 不允许固定 account_code / entity_code 作为默认值
+- Parser 只负责读取文件结构，不负责账户归属
+
+完成后请调用 parser_training_update_candidate 工具提交候选代码。
+"""
+
+    return prompt

@@ -129,6 +129,7 @@
 ### 尚未完成
 
 - 批量上传 UI 未完成
+- 规则中心已完成（12B 返工：ParserTrainingJob 持久化、job_code 驱动、用户选 Agent）
 - 结果预览证据抽屉未完成（evidence 数据已存但前端未展示）
 - 用户确认后沉淀 account_resolution_rules 未完成
 

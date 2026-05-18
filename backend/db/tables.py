@@ -768,3 +768,45 @@ class AccountResolutionEvidence(Base):
             name="ck_account_resolution_evidence_type",
         ),
     )
+
+
+# ──────────────────────────────────────────
+# 20. parser_training_jobs — 规则中心训练任务
+# ──────────────────────────────────────────
+class ParserTrainingJob(Base):
+    __tablename__ = "parser_training_jobs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_code = Column(String(30), nullable=False, unique=True)
+    original_filename = Column(String(300), nullable=False)
+    sample_file_path = Column(String(500), nullable=False)
+    file_hash = Column(String(64), nullable=False)
+    format = Column(String(10), nullable=False)
+    format_fingerprint = Column(String(100), nullable=True)
+    identity_hints_json = Column(Text, nullable=True)
+    context_snapshot_json = Column(Text, nullable=True)
+    headers_json = Column(Text, nullable=True)
+    sample_rows_json = Column(Text, nullable=True)
+    row_count = Column(Integer, nullable=False, default=0)
+    candidate_code = Column(Text, nullable=True)
+    candidate_notes = Column(Text, nullable=True)
+    trial_result_json = Column(Text, nullable=True)
+    trial_status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    status = Column(String(30), nullable=False, default="sample_uploaded", server_default="sample_uploaded")
+    parser_artifact_id = Column(Integer, ForeignKey("parser_artifacts.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, server_default="CURRENT_TIMESTAMP")
+    updated_at = Column(DateTime, nullable=True, onupdate=datetime.now)
+
+    parser_artifact = relationship("ParserArtifact")
+
+    __table_args__ = (
+        Index("idx_parser_training_jobs_code", "job_code"),
+        Index("idx_parser_training_jobs_status", "status"),
+        CheckConstraint(
+            "trial_status IN ('pending','success','failed')",
+            name="ck_parser_training_jobs_trial_status",
+        ),
+        CheckConstraint(
+            "status IN ('sample_uploaded','candidate_ready','trial_success','trial_failed','active_parser_saved')",
+            name="ck_parser_training_jobs_status",
+        ),
+    )

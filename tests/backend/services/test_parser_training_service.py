@@ -1,4 +1,5 @@
-"""Tests for parser training service and hardcoding guard."""
+"""Tests for parser training service — job_code driven, no file_path exposure."""
+import json
 import os
 from datetime import date, datetime
 from pathlib import Path
@@ -7,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from conftest import make_xlsx, seed_chart_of_accounts
-from db.tables import ImportBatch, ParserArtifact
+from db.tables import ImportBatch, ParserArtifact, ParserTrainingJob
 from services import parser_training_service
 from core.artifact_runtime import run_parser_trial
 
@@ -35,6 +36,10 @@ def _make_sample_xlsx():
     ])
 
 
+def _seed_db(db):
+    seed_chart_of_accounts(db)
+
+
 # ── parser_context_service ──
 
 
@@ -53,20 +58,28 @@ def test_build_bank_parser_context(db_session):
 # ── create_training_job ──
 
 
-def test_create_training_job_success(db_session, tmp_path, monkeypatch):
+def test_create_training_job_persists(db_session, tmp_path, monkeypatch):
     import config as _cfg
     monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
-    seed_chart_of_accounts(db_session)
+    _seed_db(db_session)
 
     file_data = _make_sample_xlsx()
     result = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
 
-    assert result["job_id"].startswith("pt_")
+    assert result["job_code"].startswith("pt_")
     assert result["filename"] == "test.xlsx"
     assert result["format"] == "xlsx"
     assert result["row_count"] == 2
     assert len(result["headers"]) == 5
     assert "context" in result
+    assert "file_path" not in result
+
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == result["job_code"]
+    ).first()
+    assert job is not None
+    assert job.status == "sample_uploaded"
+    assert job.trial_status == "pending"
 
 
 def test_create_training_job_rejects_unknown_format(db_session, tmp_path, monkeypatch):
@@ -76,13 +89,88 @@ def test_create_training_job_rejects_unknown_format(db_session, tmp_path, monkey
         parser_training_service.create_training_job(db_session, b"data", "test.pdf")
 
 
-# ── run_candidate trial ──
+# ── get_job ──
 
 
-def test_run_candidate_success(db_session, tmp_path):
+def test_get_job_returns_persisted_data(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
     file_data = _make_sample_xlsx()
-    file_path = tmp_path / "sample.xlsx"
-    file_path.write_bytes(file_data)
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    result = parser_training_service.get_job(db_session, job_code)
+    assert result is not None
+    assert result["job_code"] == job_code
+    assert result["filename"] == "test.xlsx"
+    assert "file_path" not in result
+
+
+def test_get_job_returns_none_for_unknown(db_session):
+    result = parser_training_service.get_job(db_session, "pt_nonexist")
+    assert result is None
+
+
+# ── update_candidate_code ──
+
+
+def test_update_candidate_code_writes_to_job(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    code = "def parse(wb, ctx): return []"
+    result = parser_training_service.update_candidate_code(db_session, created["job_code"], code)
+    assert result["ok"] is True
+    assert result["status"] == "candidate_ready"
+
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == created["job_code"]
+    ).first()
+    assert job.candidate_code == code
+    assert job.status == "candidate_ready"
+
+
+def test_update_candidate_code_rejects_hardcoded_account(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    result = parser_training_service.update_candidate_code(
+        db_session, created["job_code"],
+        'DEFAULT_ACCOUNT_CODE = "A001"',
+    )
+    assert result["ok"] is False
+    assert "硬编码" in result["error"]
+
+
+def test_update_candidate_code_rejects_unknown_job(db_session):
+    result = parser_training_service.update_candidate_code(
+        db_session, "pt_nonexist", "def parse(wb, ctx): return []",
+    )
+    assert result["ok"] is False
+    assert "不存在" in result["error"]
+
+
+# ── run_candidate ──
+
+
+def test_run_candidate_success(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
 
     code = '''
 def parse(wb, ctx):
@@ -106,30 +194,70 @@ def parse(wb, ctx):
             })
     return rows
 '''
-    result = parser_training_service.run_candidate(str(file_path), code)
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    result = parser_training_service.run_candidate(db_session, job_code)
+
     assert result["status"] == "trial_success"
     assert result["row_count"] == 2
     assert result["rows"][0]["summary"] == "测试收入"
 
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    assert job.trial_status == "success"
+    assert job.status == "trial_success"
 
-def test_run_candidate_syntax_error(db_session, tmp_path):
+
+def test_run_candidate_no_code(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
     file_data = _make_sample_xlsx()
-    file_path = tmp_path / "sample.xlsx"
-    file_path.write_bytes(file_data)
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
 
-    from core.artifact_ast_guard import PrimitivesViolationError
-    with pytest.raises(PrimitivesViolationError):
-        parser_training_service.run_candidate(str(file_path), "def broken(")
+    result = parser_training_service.run_candidate(db_session, created["job_code"])
+    assert result["status"] == "error"
+    assert "候选规则为空" in result["error"]
 
 
-def test_run_candidate_does_not_modify_artifacts(db_session, tmp_path):
+def test_run_candidate_syntax_error(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
     file_data = _make_sample_xlsx()
-    file_path = tmp_path / "sample.xlsx"
-    file_path.write_bytes(file_data)
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    # Bypass guard to write bad code directly for trial test
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    job.candidate_code = "def broken("
+    job.status = "candidate_ready"
+    db_session.commit()
+
+    result = parser_training_service.run_candidate(db_session, job_code)
+    assert result["status"] == "trial_failed"
+
+    db_session.refresh(job)
+    assert job.trial_status == "failed"
+
+
+def test_run_candidate_does_not_modify_artifacts(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
 
     code = "def parse(wb, ctx): return []"
+    parser_training_service.update_candidate_code(db_session, created["job_code"], code)
+
     count_before = db_session.query(ParserArtifact).count()
-    parser_training_service.run_candidate(str(file_path), code)
+    parser_training_service.run_candidate(db_session, created["job_code"])
     count_after = db_session.query(ParserArtifact).count()
     assert count_before == count_after
 
@@ -137,64 +265,128 @@ def test_run_candidate_does_not_modify_artifacts(db_session, tmp_path):
 # ── save_parser ──
 
 
-def test_save_parser_creates_active(db_session):
+def test_save_parser_creates_active(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
     code = "def parse(wb, ctx): return []"
-    result = parser_training_service.save_parser(
-        db_session,
-        name="test_save_parser",
-        code=code,
-        bank_id=None,
-        format_key="fp_abc",
-        match_rules={},
-        sample_check_log={"tested": True},
-        confidence=0.85,
-        primitives_imports=[],
-    )
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    parser_training_service.run_candidate(db_session, job_code)
+
+    result = parser_training_service.save_parser(db_session, job_code, "test_save_parser")
     assert result["status"] == "active"
     assert result["name"] == "test_save_parser"
-    assert result["format_key"] == "fp_abc"
 
 
-def test_save_parser_retires_old_active(db_session):
-    old = _add_parser_artifact(db_session, name="test_retire_v1", format_key="fp_xyz")
-    assert old.status == "active"
+def test_save_parser_rejects_no_candidate(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
 
-    result = parser_training_service.save_parser(
-        db_session, name="test_retire_v2",
-        code="def parse(wb, ctx): return []",
-        bank_id=None, format_key="fp_xyz",
-        match_rules={}, sample_check_log={}, confidence=None, primitives_imports=[],
-    )
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    with pytest.raises(ValueError, match="候选规则为空"):
+        parser_training_service.save_parser(db_session, created["job_code"], "bad")
+
+
+def test_save_parser_rejects_no_trial(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    code = "def parse(wb, ctx): return []"
+    parser_training_service.update_candidate_code(db_session, created["job_code"], code)
+
+    with pytest.raises(ValueError, match="未通过试运行"):
+        parser_training_service.save_parser(db_session, created["job_code"], "bad")
+
+
+def test_save_parser_retires_old_active(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    code = "def parse(wb, ctx): return []"
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    parser_training_service.run_candidate(db_session, job_code)
+
+    result = parser_training_service.save_parser(db_session, job_code, "test_retire_v2")
     assert result["status"] == "active"
 
-    db_session.refresh(old)
-    assert old.status == "retired"
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    assert job.status == "active_parser_saved"
 
 
-# ── hardcoding guard tool ──
+# ── Agent tool: parser_training_update_candidate ──
 
 
-def test_agent_tool_rejects_hardcoded_account():
-    from agents.tools.artifact_ops import artifact_create_parser_draft
+def test_agent_tool_writes_to_job(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from agents.tools.artifact_ops import parser_training_update_candidate
     from agents.tool_registry import ToolContext
 
-    ctx = ToolContext(agent_id=1, agent_code="test", session_id=1, db=None)
-    result = artifact_create_parser_draft(
-        name="bad", code='DEFAULT_ACCOUNT_CODE = "A001"',
+    ctx = ToolContext(agent_id=1, agent_code="test", session_id=1, db=db_session)
+    result = parser_training_update_candidate(
+        job_code=created["job_code"],
+        code="def parse(wb, ctx): return []",
+        ctx=ctx,
+    )
+    assert result["ok"] is True
+
+
+def test_agent_tool_rejects_hardcoded_account(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from agents.tools.artifact_ops import parser_training_update_candidate
+    from agents.tool_registry import ToolContext
+
+    ctx = ToolContext(agent_id=1, agent_code="test", session_id=1, db=db_session)
+    result = parser_training_update_candidate(
+        job_code=created["job_code"],
+        code='DEFAULT_ACCOUNT_CODE = "A001"',
         ctx=ctx,
     )
     assert result["ok"] is False
     assert "硬编码" in result["error"]
 
 
-def test_agent_tool_accepts_clean_code():
-    from agents.tools.artifact_ops import artifact_create_parser_draft
+def test_agent_tool_no_db_returns_error():
+    from agents.tools.artifact_ops import parser_training_update_candidate
     from agents.tool_registry import ToolContext
 
     ctx = ToolContext(agent_id=1, agent_code="test", session_id=1, db=None)
-    code = "from datetime import datetime\ndef parse(wb, ctx): return []"
-    result = artifact_create_parser_draft(name="clean", code=code, ctx=ctx)
-    assert result["ok"] is True
+    result = parser_training_update_candidate(
+        job_code="pt_test",
+        code="def parse(wb, ctx): return []",
+        ctx=ctx,
+    )
+    assert result["ok"] is False
 
 
 # ── hardcoding guard CLI ──

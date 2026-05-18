@@ -38,7 +38,7 @@
 | 工作台实验 | `workbench-table-lab` | WorkbenchTableLab.vue |
 | 数据中心 | `account-manage` | AccountManage.vue |
 | | `data-report-tpl` | ReportTemplate.vue |
-| 规则中心 | `rule-bank` | BankRule.vue（样本上传、主数据上下文、Agent 会话、候选试运行、保存规则、历史列表） |
+| 规则中心 | `rule-bank` | BankRule.vue（样本上传、主数据摘要、AI 协作选择 Agent、候选试运行、结果审核、保存规则、历史列表） |
 | 系统设置 | `ai-config` | AIConfig.vue |
 | | `system-maintenance` | SystemMaintenance.vue |
 | | `backup-restore` | SystemMaintenance.vue |
@@ -106,4 +106,4 @@
 
 ---
 **校准来源：** `frontend/src/router/index.js`、`frontend/src/views/`、`frontend/src/components/`
-**最后校准：** 2026-05-19（BankRule.vue 从占位页改为规则中心）
+**最后校准：** 2026-05-19（12B 返工：用户选 Agent + 结果审核，无代码 textarea）

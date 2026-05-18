@@ -154,11 +154,29 @@ def case_6_missing_lock() -> bool:
     return ok
 
 
+def case_7_parser_hardcoding() -> bool:
+    """hardcoded DEFAULT_ACCOUNT_CODE → check_parser_hardcoding rejects."""
+    print("Case 7 · parser 硬编码 → check_parser_hardcoding 拒绝")
+    bad = FIXTURES / "bad_parser_hardcoded_account.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        parser_dir = tmp_dir / "backend" / "fund" / "artifacts" / "parsers"
+        parser_dir.mkdir(parents=True)
+        import shutil
+        shutil.copy2(bad, parser_dir / "bad_parser.py")
+        code, out, err = run_guard("check_parser_hardcoding.py", "--repo-root", str(tmp_dir))
+        ok = expect("exit != 0", code != 0, out + err)
+        combined = out + err
+        ok &= expect("输出包含 DEFAULT_ACCOUNT_CODE", "DEFAULT_ACCOUNT_CODE" in combined, combined)
+    return ok
+
+
 POSITIVE = [
     ("Positive · ok_canonical 12 列通过", "check_canonical_schema.py", ["--target", str(FIXTURES / "ok_canonical.py")]),
     ("Positive · ok_artifact 白名单通过", "check_primitives_whitelist.py", [str(FIXTURES / "ok_artifact.py")]),
     ("Positive · ok_rule_18 绑定通过", "check_placeholder_binding.py", [str(FIXTURES / "ok_rule_18.json")]),
     ("Positive · contracts.lock 现状通过", "check_contract_hash.py", ["--repo-root", str(ROOT), "--lock", str(ROOT / "contracts.lock")]),
+    ("Positive · check_parser_hardcoding 通过", "check_parser_hardcoding.py", []),
 ]
 
 
@@ -174,7 +192,7 @@ def run_positives() -> bool:
 
 def main() -> int:
     print("=" * 60)
-    print("P0-T1 · 6 条负面场景 + 4 条正面场景")
+    print("P0-T1 · 7 条负面场景 + 5 条正面场景")
     print("=" * 60)
 
     results: list[bool] = []
@@ -185,6 +203,7 @@ def main() -> int:
         case_4_placeholder_missing,
         case_5_api_duplicate_routes,
         case_6_missing_lock,
+        case_7_parser_hardcoding,
     ]:
         results.append(fn())
         print()

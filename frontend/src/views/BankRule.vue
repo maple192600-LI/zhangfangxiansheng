@@ -17,8 +17,9 @@
             >
               <n-button>选择文件</n-button>
             </n-upload>
-            <div v-if="job.filename" style="margin-top:8px;font-size:13px;color:#666;">
-              {{ job.filename }} · {{ job.format }} · {{ job.row_count }} 行
+            <div v-if="job.job_code" style="margin-top:8px;font-size:13px;color:#666;">
+              任务 {{ job.job_code }} · {{ job.filename }} · {{ job.format }} · {{ job.row_count }} 行
+              <n-tag :type="statusTagType(job.status)" size="small" style="margin-left:6px;">{{ statusLabel(job.status) }}</n-tag>
             </div>
           </n-card>
 
@@ -47,48 +48,81 @@
                 </div>
               </n-collapse-item>
               <n-collapse-item title="单位列表" name="entities">
-                <div v-for="e in job.context.entities" :key="e.entity_code" style="font-size:13px;">
+                <div v-for="e in job.context.entities?.slice(0, 10)" :key="e.entity_code" style="font-size:13px;">
                   {{ e.entity_code }} · {{ e.name }}
+                </div>
+                <div v-if="job.context.entities?.length > 10" style="font-size:12px;color:#999;">
+                  ... 共 {{ job.context.entities.length }} 个单位
                 </div>
               </n-collapse-item>
               <n-collapse-item title="账户列表" name="accounts">
-                <div v-for="a in job.context.accounts" :key="a.account_code" style="font-size:13px;">
+                <div v-for="a in job.context.accounts?.slice(0, 10)" :key="a.account_code" style="font-size:13px;">
                   {{ a.account_code }} · {{ a.account_alias }}
-                  <span style="color:#999;">后四位: {{ a.account_last_four || '无' }}</span>
+                  <span v-if="a.account_last_four" style="color:#999;">后四位: {{ a.account_last_four }}</span>
+                </div>
+                <div v-if="job.context.accounts?.length > 10" style="font-size:12px;color:#999;">
+                  ... 共 {{ job.context.accounts.length }} 个账户
                 </div>
               </n-collapse-item>
             </n-collapse>
           </n-card>
 
-          <!-- 4. Agent 入口 -->
-          <n-card title="规则生成" size="small">
-            <n-space>
-              <n-button type="primary" @click="openAgentSession" :loading="agentLoading">
-                启动规则智能体
-              </n-button>
-              <n-button v-if="agentSession.session_id" @click="goToAgent">
-                继续修正规则
-              </n-button>
-            </n-space>
+          <!-- 4. AI 协作 -->
+          <n-card title="AI 协作生成规则" size="small">
+            <template v-if="agents.length === 0">
+              <div style="font-size:13px;color:#999;margin-bottom:8px;">
+                系统中没有可用的智能体。请先在「AI智能体」页面创建一个智能体并配置 AI。
+              </div>
+              <n-button @click="goToAgentList">前往创建智能体</n-button>
+            </template>
+            <template v-else>
+              <n-space vertical>
+                <n-select
+                  v-model:value="selectedAgentId"
+                  :options="agentOptions"
+                  placeholder="选择协作智能体"
+                  style="max-width: 300px;"
+                />
+                <n-space>
+                  <n-button
+                    type="primary"
+                    @click="openAgentSession"
+                    :loading="agentLoading"
+                    :disabled="!selectedAgentId || !job.job_code"
+                  >
+                    创建协作会话
+                  </n-button>
+                  <n-button v-if="agentSession.session_id" @click="goToAgent">
+                    打开会话
+                  </n-button>
+                </n-space>
+              </n-space>
+            </template>
             <div v-if="agentSession.session_id" style="margin-top:8px;font-size:13px;color:#666;">
-              已关联智能体会话 #{{ agentSession.session_id }}
+              已关联会话 #{{ agentSession.session_id }}（{{ agentSession.agent_name }}）
             </div>
           </n-card>
 
-          <!-- 5. 候选代码试运行 -->
-          <n-card title="候选解析规则" size="small">
-            <n-input
-              v-model:value="candidateCode"
-              type="textarea"
-              placeholder="粘贴候选 parser 代码（定义 parse(wb, ctx) 函数）"
-              :rows="10"
-              style="font-family:monospace;font-size:13px;"
-            />
-            <n-space style="margin-top:8px;">
-              <n-button @click="runTrial" :loading="trialLoading" :disabled="!candidateCode || !job.file_path">
-                试运行
-              </n-button>
-            </n-space>
+          <!-- 5. 试运行 -->
+          <n-card title="候选规则试运行" size="small">
+            <template v-if="!job.candidate_code">
+              <div style="font-size:13px;color:#999;">
+                候选规则为空。请先通过 AI 协作生成候选规则，或
+                <n-button text type="primary" @click="refreshJob">刷新任务状态</n-button>
+              </div>
+            </template>
+            <template v-else>
+              <n-space>
+                <n-button
+                  type="primary"
+                  @click="runTrial"
+                  :loading="trialLoading"
+                >
+                  试运行候选规则
+                </n-button>
+                <n-button @click="refreshJob">刷新状态</n-button>
+              </n-space>
+            </template>
           </n-card>
 
           <!-- 6. 试运行结果 -->
@@ -130,7 +164,7 @@
               <n-input v-model:value="parserName" placeholder="规则名称（如：工商银行标准对账单_v1）" />
               <n-space>
                 <n-button type="primary" @click="saveRule" :loading="saveLoading" :disabled="!parserName">
-                  保存并启用规则
+                  确认结果并保存规则
                 </n-button>
               </n-space>
               <div v-if="saveSuccess" style="color:#18a058;font-size:13px;">
@@ -138,6 +172,13 @@
               </div>
             </n-space>
           </n-card>
+
+          <!-- 8. 技术调试：查看候选代码 -->
+          <n-collapse v-if="job.candidate_code">
+            <n-collapse-item title="技术调试：查看候选代码" name="code">
+              <pre class="code-preview">{{ job.candidate_code }}</pre>
+            </n-collapse-item>
+          </n-collapse>
         </n-space>
       </n-tab-pane>
 
@@ -159,15 +200,14 @@ import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NTag } from 'naive-ui'
 import {
-  createTrainingJob, runCandidate, saveParser,
-  getAgentSession, getParserContext, listParsers
+  createTrainingJob, getJob, runCandidate, saveParser,
+  listActiveAgents, createAgentSession, getParserContext, listParsers
 } from '@/api/parserTraining'
 
 const router = useRouter()
 const activeTab = ref('create')
 
 const job = ref({})
-const candidateCode = ref('')
 const trialResult = ref(null)
 const trialLoading = ref(false)
 const saveLoading = ref(false)
@@ -176,6 +216,10 @@ const agentLoading = ref(false)
 const agentSession = ref({})
 const parserName = ref('')
 const parsers = ref([])
+const agents = ref([])
+const selectedAgentId = ref(null)
+
+const agentOptions = ref([])
 
 const parserColumns = [
   { title: '名称', key: 'name' },
@@ -195,6 +239,16 @@ const parserColumns = [
   },
 ]
 
+function statusTagType(status) {
+  const map = { sample_uploaded: 'info', candidate_ready: 'warning', trial_success: 'success', trial_failed: 'error', active_parser_saved: 'success' }
+  return map[status] || 'default'
+}
+
+function statusLabel(status) {
+  const map = { sample_uploaded: '已上传', candidate_ready: '候选就绪', trial_success: '试运行成功', trial_failed: '试运行失败', active_parser_saved: '已保存' }
+  return map[status] || status
+}
+
 async function handleFileChange({ file }) {
   if (!file?.file) return
   const fd = new FormData()
@@ -212,16 +266,30 @@ async function handleFileChange({ file }) {
   }
 }
 
+async function refreshJob() {
+  if (!job.value.job_code) return
+  try {
+    const res = await getJob(job.value.job_code)
+    if (res.data?.code === 0) {
+      job.value = res.data.data
+      if (job.value.trial_result && !trialResult.value) {
+        trialResult.value = job.value.trial_result
+      }
+    }
+  } catch (e) {
+    console.error('刷新失败', e)
+  }
+}
+
 async function runTrial() {
+  if (!job.value.job_code) return
   trialLoading.value = true
   trialResult.value = null
   try {
-    const res = await runCandidate({
-      file_path: job.value.file_path,
-      code: candidateCode.value,
-    })
+    const res = await runCandidate(job.value.job_code)
     if (res.data?.code === 0) {
       trialResult.value = res.data.data
+      await refreshJob()
     }
   } catch (e) {
     trialResult.value = { error: e.message, rows: [] }
@@ -231,21 +299,14 @@ async function runTrial() {
 }
 
 async function saveRule() {
-  if (!parserName.value) return
+  if (!parserName.value || !job.value.job_code) return
   saveLoading.value = true
   try {
-    const res = await saveParser({
-      name: parserName.value,
-      code: candidateCode.value,
-      bank_id: job.value.identity_hints?.bank_id || null,
-      format_key: job.value.format_fingerprint || null,
-      sample_check_log: { sample_rows: job.value.sample_rows?.length || 0 },
-      confidence: trialResult.value?.rows?.length ? 0.8 : null,
-      primitives_imports: [],
-    })
+    const res = await saveParser(job.value.job_code, { name: parserName.value })
     if (res.data?.code === 0) {
       saveSuccess.value = true
       loadParsers()
+      await refreshJob()
     }
   } catch (e) {
     console.error('保存失败', e)
@@ -254,11 +315,26 @@ async function saveRule() {
   }
 }
 
+async function loadAgents() {
+  try {
+    const res = await listActiveAgents()
+    if (res.data?.code === 0) {
+      agents.value = res.data.data || []
+      agentOptions.value = agents.value.map(a => ({
+        label: a.display_name,
+        value: a.id,
+      }))
+    }
+  } catch (e) {
+    console.error('加载智能体列表失败', e)
+  }
+}
+
 async function openAgentSession() {
-  if (!job.value.job_id) return
+  if (!job.value.job_code || !selectedAgentId.value) return
   agentLoading.value = true
   try {
-    const res = await getAgentSession({ job_id: job.value.job_id })
+    const res = await createAgentSession(job.value.job_code, { agent_id: selectedAgentId.value })
     if (res.data?.code === 0) {
       agentSession.value = res.data.data
     }
@@ -275,6 +351,10 @@ function goToAgent() {
   }
 }
 
+function goToAgentList() {
+  router.push({ name: 'agent-review' })
+}
+
 async function loadParsers() {
   try {
     const res = await listParsers({ kind: 'bank' })
@@ -288,6 +368,7 @@ async function loadParsers() {
 
 onMounted(() => {
   loadParsers()
+  loadAgents()
 })
 </script>
 
@@ -313,5 +394,16 @@ onMounted(() => {
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.code-preview {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
 }
 </style>

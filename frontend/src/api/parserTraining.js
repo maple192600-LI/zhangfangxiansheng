@@ -5,14 +5,20 @@ export const createTrainingJob = (formData) =>
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 
-export const runCandidate = (data) =>
-  http.post('/parser-training/run-candidate', data)
+export const getJob = (jobCode) =>
+  http.get(`/parser-training/jobs/${jobCode}`)
 
-export const saveParser = (data) =>
-  http.post('/parser-training/save-parser', data)
+export const runCandidate = (jobCode) =>
+  http.post(`/parser-training/jobs/${jobCode}/run-candidate`)
 
-export const getAgentSession = (data) =>
-  http.post('/parser-training/agent-session', data)
+export const saveParser = (jobCode, data) =>
+  http.post(`/parser-training/jobs/${jobCode}/save-parser`, data)
+
+export const listActiveAgents = () =>
+  http.get('/parser-training/agents')
+
+export const createAgentSession = (jobCode, data) =>
+  http.post(`/parser-training/jobs/${jobCode}/agent-session`, data)
 
 export const getParserContext = () =>
   http.get('/parser-training/context')

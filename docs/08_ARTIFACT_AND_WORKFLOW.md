@@ -41,16 +41,19 @@ AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`date
 
 ### Parser 规则中心
 
-- **用途：** 用户上传银行样本 → Agent 生成候选解析规则 → 试运行展示结果 → 用户确认保存
-- **API：** `backend/api/parser_training.py`（6 个端点）
-- **Service：** `backend/services/parser_training_service.py`（训练任务、候选试运行、保存并启用 ParserArtifact）
+- **用途：** 用户上传银行样本 → 选择现有 Agent 协作 → Agent 生成候选规则 → 试运行展示结果 → 用户审核结果并保存
+- **表：** `parser_training_jobs`（持久化训练任务，记录样本、候选代码、试运行结果、状态）
+- **API：** `backend/api/parser_training.py`（8 个端点，全部 job_code 驱动）
+- **Service：** `backend/services/parser_training_service.py`（训练任务 CRUD、候选试运行、保存并启用 ParserArtifact）
 - **上下文：** `backend/services/parser_context_service.py`（银行/法人/账户主数据摘要供规则生成参考）
-- **Agent 工具：** `artifact_create_parser_draft`（创建 parser draft，拒绝硬编码账户/单位）
+- **Agent 工具：** `parser_training_update_candidate`（写入候选代码到训练任务，拒绝硬编码账户/单位）
 - **设计要点：**
-  - Agent 只参与规则中心的前置配置和规则生成，不参与日常导入
+  - 没有"规则智能体"概念，用户选择任意现有 Agent 协作
+  - Agent 只生成候选规则并写入训练任务，不参与日常导入，不能 approve artifact
+  - 前端不暴露 file_path，所有操作通过 job_code
   - 用户审核的是解析结果表格，不是代码
   - 保存时自动退役同 bank + format 的旧 active parser
-  - ParserArtifact 只负责读取文件结构，不负责账户归属
+  - 保存前必须试运行成功 + hardcoding guard 通过 + AST guard 通过
 
 ## Workflow 系统
 
@@ -82,4 +85,4 @@ AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`date
 
 ---
 **校准来源：** `backend/core/artifact_runtime.py`、`backend/core/artifact_ast_guard.py`、`backend/core/artifact_sandbox.py`、`backend/services/artifact_service.py`、`backend/services/workflow_executor.py`、`backend/services/workflow_nodes.py`、`backend/services/workflow_service.py`
-**最后校准：** 2026-05-19（新增 run_parser_trial + 规则中心 + 硬编码 guard）
+**最后校准：** 2026-05-19（12B 返工：job_code 驱动 + ParserTrainingJob + 用户选 Agent）
