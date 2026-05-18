@@ -4,7 +4,7 @@
 
 ## 文档体系状态
 
-文档体系已完成重建和清理。14 个 active docs 从当前代码事实校准，是唯一的权威入口。旧文档污染源已清理，当前入口为 active docs + 必要契约文件。
+文档体系已完成重建和清理。15 个 active docs 从当前代码事实校准，是唯一的权威入口。旧文档污染源已清理，当前入口为 active docs + 必要契约文件。
 
 ## 治理须知
 
@@ -72,6 +72,12 @@
 | 文件 | 内容 |
 |------|------|
 | [`10_TESTING_AND_ACCEPTANCE.md`](10_TESTING_AND_ACCEPTANCE.md) | 测试分层、guard 清单、验收标准 |
+
+### 银行导入通用化
+
+| 文件 | 内容 |
+|------|------|
+| [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md) | 银行导入通用识别与主数据归属匹配：术语、业务链路、四类文件场景、后续阶段 |
 
 ### AI Coding 协作
 

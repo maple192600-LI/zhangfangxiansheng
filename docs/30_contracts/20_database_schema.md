@@ -415,7 +415,7 @@ CREATE INDEX idx_parser_artifacts_account ON parser_artifacts(account_code, stat
 CREATE INDEX idx_parser_artifacts_kind ON parser_artifacts(kind, status);
 ```
 
-### §T4.2 · `rule_artifacts`
+`account_code` 字段说明：对银行导入场景，此字段不应作为主匹配键。银行导入应按 bank/format 级匹配 parser（09D 交付），不按 account_code 匹配。此字段保留作为旧兼容或非银行场景字段。详见 [`../14_BANK_IMPORT_GENERALIZATION.md`](../14_BANK_IMPORT_GENERALIZATION.md)。
 
 ```sql
 CREATE TABLE rule_artifacts (

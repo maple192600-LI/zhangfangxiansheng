@@ -31,15 +31,15 @@
 
 ### 银行通用识别
 
-Parser Runtime（Phase E1）只解决"代码能不能执行"。银行通用识别是独立能力，尚未实现。
+Parser Runtime（Phase E1）只解决"代码能不能执行"。银行通用识别是独立能力，尚未实现。完整契约见 [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md)。
 
-- [ ] Step 09B：建立银行通用识别能力契约和文档
-- [ ] Step 09C：银行文件识别 + format fingerprint 服务
+- [x] Step 09B：建立银行通用识别 + 主数据归属匹配能力契约和文档
+- [ ] Step 09C：银行文件识别 + 身份线索提取服务
 - [ ] Step 09D：ParserArtifact bank/format 级匹配（替代 account_code 匹配）
-- [ ] Step 09E：账户归属匹配服务
+- [ ] Step 09E：主数据账户/单位归属匹配服务
 - [ ] Step 09F：parser 硬编码 guard
-- [ ] Step 09G：前端展示银行识别和账户匹配结果
-- [ ] Step 09H：多银行/多账户端到端验收
+- [ ] Step 09G：前端展示银行识别和账户归属匹配结果
+- [ ] Step 09H：多银行/多账户/多线索场景端到端验收
 
 ### 导入闭环
 

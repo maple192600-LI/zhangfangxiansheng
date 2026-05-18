@@ -9,7 +9,7 @@
 - **状态流转：** `draft` → `active` → `retired`
 - **当前能力：** 创建、编辑、审核（approve/reject）、激活 — **全部可用**
 - **已实现：** `backend/core/artifact_runtime.py::run_parser` 已实现 ParserArtifact deterministic runtime（底层执行器）
-- **未实现：** 银行格式识别、账户归属匹配 — 当前 parser 样本含 `DEFAULT_ACCOUNT_CODE` 硬编码，银行通用识别是独立能力，尚未交付
+- **未实现：** 银行格式识别（Bank Format Identification）、身份线索提取（Identity Hints Extraction）、主数据匹配（Master Data Matching）、账户归属（Account Attribution）— 这些是独立于 Parser Runtime 的能力，详见 [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md)
 
 ### RuleArtifact
 
