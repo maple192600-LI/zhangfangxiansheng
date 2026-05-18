@@ -154,14 +154,12 @@ def e2e_client(e2e_env):
     from api.bank_import import router as bank_router
     from api.manual_flow import router as manual_router
     from api.reports import router as reports_router
-    from api.events import router as events_router
     from database import get_db
 
     app = FastAPI()
     app.include_router(bank_router, prefix="/api")
     app.include_router(manual_router, prefix="/api")
     app.include_router(reports_router, prefix="/api")
-    app.include_router(events_router, prefix="/api")
 
     def override_db():
         with e2e_env["SessionLocal"]() as db:
