@@ -25,6 +25,14 @@ def upgrade() -> None:
             "fk_parser_artifacts_bank_id", "banks",
             ["bank_id"], ["id"], ondelete="SET NULL",
         )
+        batch_op.create_check_constraint(
+            "ck_parser_artifacts_kind",
+            "kind IN ('bank','manual')",
+        )
+        batch_op.create_check_constraint(
+            "ck_parser_artifacts_status",
+            "status IN ('draft','active','retired')",
+        )
         batch_op.create_index(
             "idx_parser_artifacts_bank_format",
             ["kind", "bank_id", "format_key", "status"],
