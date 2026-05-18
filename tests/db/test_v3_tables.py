@@ -98,6 +98,10 @@ def migrated_engine(tmp_db_path):
         "workflow_runs",
         "workflow_versions",
         "workflows",
+        # 009 migration 创建的表
+        "account_resolution_evidence",
+        "account_resolution_attempts",
+        "source_files",
     ]
     with engine.begin() as conn:
         for t in v3_tables:
@@ -373,4 +377,147 @@ def test_alembic_upgrade_head_on_clean_db(tmp_path):
     table_names = {r[0] for r in rows}
     for required in ("fund_events", "parser_artifacts", "rule_artifacts", "template_inference_job"):
         assert required in table_names, f"迁移未创建 {required}；已存在 {table_names}"
+    engine.dispose()
+
+
+# ──────────────────────────────────────────
+# 009 · source_files / account_resolution CHECK
+# ──────────────────────────────────────────
+
+
+def test_source_files_status_enum(migrated_engine):
+    """source_files.status CHECK rejects invalid values."""
+    with migrated_engine.begin() as conn:
+        # 先插入 import_batch 作为 FK 目标
+        conn.execute(
+            text(
+                "INSERT INTO import_batches (batch_code, source_type, status, created_at, updated_at) "
+                "VALUES ('SF001', 'bank', 'uploaded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+        bid = conn.execute(text("SELECT id FROM import_batches WHERE batch_code='SF001'")).scalar()
+
+    with migrated_engine.begin() as conn:
+        with pytest.raises(IntegrityError):
+            conn.execute(
+                text(
+                    "INSERT INTO source_files "
+                    "(batch_id, original_filename, storage_path, file_hash, file_size, status) "
+                    "VALUES (:bid, 'a.xlsx', '/tmp/a.xlsx', 'abc', 0, 'invalid_status')"
+                ),
+                dict(bid=bid),
+            )
+
+
+def test_account_resolution_attempts_status_enum(migrated_engine):
+    with migrated_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO import_batches (batch_code, source_type, status, created_at, updated_at) "
+                "VALUES ('SF002', 'bank', 'uploaded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+        bid = conn.execute(text("SELECT id FROM import_batches WHERE batch_code='SF002'")).scalar()
+        conn.execute(
+            text(
+                "INSERT INTO source_files "
+                "(batch_id, original_filename, storage_path, file_hash, file_size, status) "
+                "VALUES (:bid, 'a.xlsx', '/tmp/a.xlsx', 'abc', 0, 'uploaded')"
+            ),
+            dict(bid=bid),
+        )
+        sfid = conn.execute(text("SELECT id FROM source_files WHERE original_filename='a.xlsx'")).scalar()
+
+    with migrated_engine.begin() as conn:
+        with pytest.raises(IntegrityError):
+            conn.execute(
+                text(
+                    "INSERT INTO account_resolution_attempts "
+                    "(source_file_id, status) VALUES (:sfid, 'bad_status')"
+                ),
+                dict(sfid=sfid),
+            )
+
+
+def test_account_resolution_evidence_type_enum(migrated_engine):
+    with migrated_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO import_batches (batch_code, source_type, status, created_at, updated_at) "
+                "VALUES ('SF003', 'bank', 'uploaded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+        bid = conn.execute(text("SELECT id FROM import_batches WHERE batch_code='SF003'")).scalar()
+        conn.execute(
+            text(
+                "INSERT INTO source_files "
+                "(batch_id, original_filename, storage_path, file_hash, file_size, status) "
+                "VALUES (:bid, 'b.xlsx', '/tmp/b.xlsx', 'def', 0, 'uploaded')"
+            ),
+            dict(bid=bid),
+        )
+        sfid = conn.execute(text("SELECT id FROM source_files WHERE original_filename='b.xlsx'")).scalar()
+        conn.execute(
+            text(
+                "INSERT INTO account_resolution_attempts "
+                "(source_file_id, status) VALUES (:sfid, 'matched')"
+            ),
+            dict(sfid=sfid),
+        )
+        aid = conn.execute(
+            text("SELECT id FROM account_resolution_attempts WHERE source_file_id = :sfid"),
+            dict(sfid=sfid),
+        ).scalar()
+
+    with migrated_engine.begin() as conn:
+        with pytest.raises(IntegrityError):
+            conn.execute(
+                text(
+                    "INSERT INTO account_resolution_evidence "
+                    "(attempt_id, evidence_type) VALUES (:aid, 'invalid_type')"
+                ),
+                dict(aid=aid),
+            )
+
+
+def test_alembic_009_creates_source_file_tables(tmp_path):
+    """Alembic 009 migration creates source_files + account_resolution tables on clean DB."""
+    db_file = tmp_path / "alembic_009_test.db"
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    script = (
+        "import sys; "
+        f"sys.path.insert(0, r'{BACKEND_DIR}'); "
+        "import config; "
+        f"config.DB_PATH = r'{db_file}'; "
+        "from alembic.config import Config; "
+        "from alembic import command; "
+        f"cfg = Config(r'{REPO_ROOT / 'alembic.ini'}'); "
+        f"cfg.set_main_option('script_location', r'{REPO_ROOT / 'alembic'}'); "
+        "command.upgrade(cfg, 'head'); "
+        "print('ALEMBIC_009_OK')"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert "ALEMBIC_009_OK" in (result.stdout or ""), (
+        f"alembic upgrade head 失败\nstdout={result.stdout}\nstderr={result.stderr}"
+    )
+
+    engine = create_engine(f"sqlite:///{db_file}")
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        ).fetchall()
+    table_names = {r[0] for r in rows}
+    for required in ("source_files", "account_resolution_attempts", "account_resolution_evidence"):
+        assert required in table_names, f"迁移 009 未创建 {required}；已存在 {table_names}"
     engine.dispose()

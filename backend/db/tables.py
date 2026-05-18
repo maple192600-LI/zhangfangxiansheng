@@ -676,3 +676,95 @@ class WorkflowRunStep(Base):
         Index("idx_workflow_run_steps_run", "run_id"),
         Index("idx_workflow_run_steps_node", "run_id", "node_id"),
     )
+
+
+# ──────────────────────────────────────────
+# 17. source_files — 上传文件处理记录
+# ──────────────────────────────────────────
+class SourceFile(Base):
+    __tablename__ = "source_files"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id = Column(Integer, ForeignKey("import_batches.id", ondelete="CASCADE"), nullable=False)
+    original_filename = Column(String(300), nullable=False)
+    storage_path = Column(String(500), nullable=False)
+    file_hash = Column(String(64), nullable=False)
+    file_size = Column(Integer, nullable=False, default=0)
+    sheet_name = Column(String(100), nullable=True)
+    format_fingerprint = Column(String(100), nullable=True)
+    parser_artifact_id = Column(Integer, ForeignKey("parser_artifacts.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(30), nullable=False, default="uploaded", server_default="uploaded")
+    error_code = Column(String(50), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, server_default="CURRENT_TIMESTAMP")
+    updated_at = Column(DateTime, nullable=True, onupdate=datetime.now)
+
+    batch = relationship("ImportBatch")
+    parser_artifact = relationship("ParserArtifact")
+    resolution_attempts = relationship("AccountResolutionAttempt", back_populates="source_file", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_source_files_batch", "batch_id"),
+        Index("idx_source_files_hash", "file_hash"),
+        Index("idx_source_files_parser", "parser_artifact_id"),
+        Index("idx_source_files_status", "status"),
+        CheckConstraint(
+            "status IN ('uploaded','parsed','needs_rule','needs_account','failed','ready')",
+            name="ck_source_files_status",
+        ),
+    )
+
+
+# ──────────────────────────────────────────
+# 18. account_resolution_attempts — 账户归属判断记录
+# ──────────────────────────────────────────
+class AccountResolutionAttempt(Base):
+    __tablename__ = "account_resolution_attempts"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_file_id = Column(Integer, ForeignKey("source_files.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(30), nullable=False)
+    recommended_entity_code = Column(String(50), nullable=True)
+    recommended_account_code = Column(String(50), nullable=True)
+    confidence = Column(Numeric(5, 4), nullable=True)
+    match_reason = Column(Text, nullable=True)
+    error_code = Column(String(50), nullable=True)
+    raw_hints = Column(JSON, nullable=True)
+    candidates = Column(JSON, nullable=True)
+    bank_resolution = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, server_default="CURRENT_TIMESTAMP")
+
+    source_file = relationship("SourceFile", back_populates="resolution_attempts")
+    evidence = relationship("AccountResolutionEvidence", back_populates="attempt", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_account_resolution_source_file", "source_file_id"),
+        CheckConstraint(
+            "status IN ('matched','ambiguous','unmatched','conflict')",
+            name="ck_account_resolution_attempts_status",
+        ),
+    )
+
+
+# ──────────────────────────────────────────
+# 19. account_resolution_evidence — 账户归属证据明细
+# ──────────────────────────────────────────
+class AccountResolutionEvidence(Base):
+    __tablename__ = "account_resolution_evidence"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    attempt_id = Column(Integer, ForeignKey("account_resolution_attempts.id", ondelete="CASCADE"), nullable=False)
+    evidence_type = Column(String(50), nullable=False)
+    evidence_value = Column(Text, nullable=True)
+    matched_entity_code = Column(String(50), nullable=True)
+    matched_account_code = Column(String(50), nullable=True)
+    weight = Column(Numeric(5, 4), nullable=True)
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, server_default="CURRENT_TIMESTAMP")
+
+    attempt = relationship("AccountResolutionAttempt", back_populates="evidence")
+
+    __table_args__ = (
+        Index("idx_account_resolution_evidence_attempt", "attempt_id"),
+        CheckConstraint(
+            "evidence_type IN ('account_number','account_last_four','account_name','bank','filename','alias','history','balance_chain','parser_hint','entity_name')",
+            name="ck_account_resolution_evidence_type",
+        ),
+    )

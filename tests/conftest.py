@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database import Base
-from db.tables import Account, Bank, Division, Entity, FundEvent, ImportBatch
+from db.tables import Account, Bank, Division, Entity, FundEvent, ImportBatch, SourceFile
 
 
 @pytest.fixture()

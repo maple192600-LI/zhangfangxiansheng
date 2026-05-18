@@ -6,10 +6,11 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from core import artifact_runtime
-from db.tables import Account, Entity, FundEvent, ImportBatch, ParserArtifact
+from db.tables import Account, Entity, FundEvent, ImportBatch, ParserArtifact, SourceFile
 from services import bank_import_service as bank_svc
 from services import manual_flow_service as manual_svc
 from services import log_service
+from services.source_file_service import get_source_files_for_batch
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def get_preview(db: Session, batch_code: str) -> Dict[str, Any]:
 
 def _build_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
     events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).order_by(FundEvent.id).all()
+    source_files = _source_file_list(db, batch.id)
     if not events and batch.source_type == "manual_quick":
         return {
             "batch_code": batch.batch_code,
@@ -79,6 +81,7 @@ def _build_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
             "abnormal_count": 0,
             "parsed_rows": [],
             "abnormal_rows": [],
+            "source_files": source_files,
         }
 
     valid_rows = []
@@ -107,17 +110,20 @@ def _build_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
         "abnormal_count": len(abnormal_rows),
         "parsed_rows": valid_rows,
         "abnormal_rows": abnormal_rows,
+        "source_files": source_files,
     }
 
 
 def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
     existing = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).count()
+    source_files = _source_file_list(db, batch.id)
+
     if existing > 0:
         return _build_preview(db, batch)
 
     file_path = bank_svc._find_uploaded_file(batch.batch_code, batch.source_name or "")
     if not file_path:
-        return _bank_unavailable_preview(batch, "原始文件未找到")
+        return _bank_unavailable_preview(batch, "原始文件未找到", source_files=source_files)
 
     context = bank_svc.build_bank_import_context(db, file_path, batch.source_name or "")
     parser_match = context["parser_match"]
@@ -125,6 +131,7 @@ def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
     if not parser_match.get("matched"):
         return _bank_unavailable_preview(
             batch, f"缺少解析规则: {parser_match.get('reason', '未知原因')}", context,
+            source_files=source_files,
         )
 
     try:
@@ -147,11 +154,12 @@ def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
         return _build_preview(db, batch)
     except Exception as e:
         logger.error("网银解析失败: %s", e, exc_info=True)
-        return _bank_unavailable_preview(batch, f"解析失败: {e}", context)
+        return _bank_unavailable_preview(batch, f"解析失败: {e}", context, source_files=source_files)
 
 
 def _bank_unavailable_preview(
     batch: ImportBatch, reason: str, context: Optional[Dict[str, Any]] = None,
+    source_files: Optional[list] = None,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "batch_code": batch.batch_code,
@@ -165,6 +173,7 @@ def _bank_unavailable_preview(
         "abnormal_rows": [],
         "parser_status": "unavailable",
         "parser_message": reason,
+        "source_files": source_files or [],
     }
     if context:
         result["identity_hints"] = context.get("identity_hints")
@@ -325,3 +334,21 @@ def _event_to_preview_dict(ev: FundEvent) -> Dict:
         "rolling_balance": float(ev.rolling_balance) if ev.rolling_balance else None,
         "parse_status": ev.state,
     }
+
+
+def _source_file_list(db: Session, batch_id: int) -> list:
+    sfs = get_source_files_for_batch(db, batch_id)
+    return [
+        {
+            "id": sf.id,
+            "original_filename": sf.original_filename,
+            "file_hash": sf.file_hash,
+            "file_size": sf.file_size,
+            "format_fingerprint": sf.format_fingerprint,
+            "parser_artifact_id": sf.parser_artifact_id,
+            "status": sf.status,
+            "error_code": sf.error_code,
+            "error_message": sf.error_message,
+        }
+        for sf in sfs
+    ]
