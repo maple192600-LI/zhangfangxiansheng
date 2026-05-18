@@ -76,14 +76,13 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
     with open(file_path, "wb") as f:
         f.write(file_data)
 
-    # 身份线索提取 + 银行解析 + 账户归属
-    identity_hints = extract_identity_hints(file_path, filename)
-    bank_resolution = resolve_bank_from_hints(db, identity_hints)
-    account_attribution = match_account_attribution(db, identity_hints)
-
-    # bank/format 级 parser 匹配
-    format_key = identity_hints.get("format_fingerprint", "unknown")
-    parser_match = _match_bank_format_parser_artifact(db, bank_resolution, format_key)
+    # 身份线索提取 + 银行解析 + 账户归属 + parser 匹配
+    context = build_bank_import_context(db, file_path, filename)
+    identity_hints = context["identity_hints"]
+    bank_resolution = context["bank_resolution"]
+    account_attribution = context["account_attribution"]
+    format_key = context["format_fingerprint"]
+    parser_match = context["parser_match"]
 
     # 创建批次
     batch = ImportBatch(
@@ -311,6 +310,23 @@ def _parser_conflict(
         "format_key": format_key,
         "match_level": "conflict",
         "reason": f"{len(artifacts)} 个同级 active parser 冲突",
+    }
+
+
+def build_bank_import_context(db: Session, file_path: str, filename: str) -> Dict[str, Any]:
+    """Build full import context for a bank file: identity, bank resolution,
+    account attribution, parser match. Reusable by upload_file and import_preview."""
+    identity_hints = extract_identity_hints(file_path, filename)
+    bank_resolution = resolve_bank_from_hints(db, identity_hints)
+    account_attribution = match_account_attribution(db, identity_hints)
+    format_key = identity_hints.get("format_fingerprint", "unknown")
+    parser_match = _match_bank_format_parser_artifact(db, bank_resolution, format_key)
+    return {
+        "identity_hints": identity_hints,
+        "bank_resolution": bank_resolution,
+        "account_attribution": account_attribution,
+        "format_fingerprint": format_key,
+        "parser_match": parser_match,
     }
 
 

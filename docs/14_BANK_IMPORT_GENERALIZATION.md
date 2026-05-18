@@ -75,7 +75,7 @@
 
 ### 当前架构状态
 
-`bank_import_service` 已通过 09D 接入 bank/format 级 parser 匹配（`_match_bank_format_parser_artifact`），按 bank_id + format_key 四级优先匹配，不再按 account_code 匹配银行 parser。详见下方"已实现服务"章节。
+`bank_import_service` 已通过 09D 接入 bank/format 级 parser 匹配（`_match_bank_format_parser_artifact`），按 bank_id + format_key 四级优先匹配，不再按 account_code 匹配银行 parser。`import_preview_service` 已通过 09D2 使用 bank/format 匹配路径（`build_bank_import_context`），bank 批次 commit 不再重新 parser，不覆盖用户编辑结果。银行歧义在账户匹配中不再静默降级为"无银行过滤"。详见下方"已实现服务"章节。
 
 ## 已有的匹配能力
 
@@ -126,7 +126,7 @@
 - **完整账号不匹配**：当 `identity_hints.account_number` 存在但不匹配任何账户时，直接返回 `ACCOUNT_HINT_NOT_FOUND`，不 fallback 到实体名匹配
 - **银行强过滤**：当银行 hint 可解析为唯一 Bank 但过滤后候选为空，返回 `BANK_ACCOUNT_CONFLICT`，不恢复原候选
 
-这两个服务已通过测试验证，但尚未接入 `bank_import_service` 的导入流程，也未接入前端和 ParserArtifact bank/format 匹配。接入工作将在 09D 和 09G 中完成。
+这两个服务已通过测试验证，并已接入 `bank_import_service` 的上传流程（09D）和 `import_preview_service` 的预览/提交流程（09D2）。前端展示将在 09G 中完成。
 
 ---
 **校准来源：** `ai_coordination/parser-runtime/09_bank_parser_generalization_revised_plan_v2.md`、`backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`

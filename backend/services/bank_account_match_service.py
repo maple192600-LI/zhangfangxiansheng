@@ -43,6 +43,20 @@ def match_account_attribution(
         result["bank_resolution"] = bank_resolution
         return result
 
+    if bank_resolution.get("status") == "ambiguous" and not has_account:
+        result = {
+            "status": "ambiguous",
+            "entity_code": "", "entity_name": "",
+            "account_code": "", "account_name": "",
+            "confidence": 0.0,
+            "match_reason": "银行线索命中多个银行，无法自动匹配账户",
+            "candidates": bank_resolution.get("candidates", []),
+            "raw_hints": hints,
+            "error_code": "BANK_HINT_AMBIGUOUS",
+        }
+        result["bank_resolution"] = bank_resolution
+        return result
+
     if has_account:
         result = _by_account_number(db, account_number, bank_candidates, entity_hint, hints)
     elif has_last_four:

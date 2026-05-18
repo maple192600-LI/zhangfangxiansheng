@@ -488,9 +488,9 @@ def test_candidates_hit_multiple_banks_no_guess(db_session, test_data):
         ),
     )
     # "中行工行联合流水" contains both "中行" (BOC) and "工行" (ICBC) → ambiguous bank
-    # Bank not resolved → no bank filter → all online accounts kept → ambiguous
+    # No account_number → BANK_HINT_AMBIGUOUS, not silently treated as no filter
     assert r["status"] == "ambiguous"
-    assert r["error_code"] == "MULTIPLE_ACCOUNT_MATCHES"
+    assert r["error_code"] == "BANK_HINT_AMBIGUOUS"
 
 
 # ── resolve_bank_from_hints 公开 API ──
@@ -527,3 +527,47 @@ def test_match_attribution_includes_bank_resolution(db_session, test_data):
     )
     assert "bank_resolution" in r
     assert r["bank_resolution"]["status"] in ("matched", "unresolved", "ambiguous")
+
+
+# ── 银行歧义 + 只有 entity hint → BANK_HINT_AMBIGUOUS ──
+
+def test_bank_ambiguous_entity_only_returns_ambiguous(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            entity_name="TestCo2",
+            bank_text_candidates=["中行工行联合流水"],
+        ),
+    )
+    assert r["status"] == "ambiguous"
+    assert r["error_code"] == "BANK_HINT_AMBIGUOUS"
+    assert r["bank_resolution"]["status"] == "ambiguous"
+
+
+# ── 银行歧义 + 后四位 → BANK_HINT_AMBIGUOUS ──
+
+def test_bank_ambiguous_last_four_returns_ambiguous(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            account_last_four="3210",
+            bank_text_candidates=["中行工行联合流水"],
+        ),
+    )
+    assert r["status"] == "ambiguous"
+    assert r["error_code"] == "BANK_HINT_AMBIGUOUS"
+
+
+# ── 银行歧义 + 完整账号唯一匹配 → matched，bank_resolution 保留 ambiguous ──
+
+def test_bank_ambiguous_account_number_still_matched(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints_with_candidates(
+            account_number="6217001234567890",
+            bank_text_candidates=["中行工行联合流水"],
+        ),
+    )
+    assert r["status"] == "matched"
+    assert r["account_code"] == "A001"
+    assert r["bank_resolution"]["status"] == "ambiguous"

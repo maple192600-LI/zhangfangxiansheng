@@ -115,30 +115,45 @@ def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
     if existing > 0:
         return _build_preview(db, batch)
 
-    parser_artifact = bank_svc._match_active_parser_artifact(db, "bank")
+    file_path = bank_svc._find_uploaded_file(batch.batch_code, batch.source_name or "")
+    if not file_path:
+        return _bank_unavailable_preview(batch, "原始文件未找到")
 
-    if parser_artifact:
-        try:
-            file_path = bank_svc._find_uploaded_file(batch.batch_code, batch.source_name or "")
-            if file_path:
-                rows = list(artifact_runtime.run_parser(
-                    db, parser_artifact.id, file_path,
-                    {"batch_code": batch.batch_code},
-                ))
-                for row in rows:
-                    db.add(FundEvent(**row, batch_id=batch.id, parser_artifact_id=parser_artifact.id))
-                batch.status = "previewed"
-                db.commit()
-                return _build_preview(db, batch)
-        except Exception as e:
-            logger.error("网银解析失败: %s", e, exc_info=True)
-            return _bank_unavailable_preview(batch, f"解析失败: {e}")
+    context = bank_svc.build_bank_import_context(db, file_path, batch.source_name or "")
+    parser_match = context["parser_match"]
 
-    return _bank_unavailable_preview(batch, "缺少解析规则，当前不能生成基础数据，请先创建或启用解析器")
+    if not parser_match.get("matched"):
+        return _bank_unavailable_preview(
+            batch, f"缺少解析规则: {parser_match.get('reason', '未知原因')}", context,
+        )
+
+    try:
+        ctx = {
+            "batch_code": batch.batch_code,
+            "bank_resolution": context["bank_resolution"],
+            "account_attribution": context["account_attribution"],
+        }
+        rows = list(artifact_runtime.run_parser(
+            db, parser_match["parser_artifact_id"], file_path, ctx,
+        ))
+        for row in rows:
+            row.setdefault("state", "待确认")
+            db.add(FundEvent(
+                **row, batch_id=batch.id,
+                parser_artifact_id=parser_match["parser_artifact_id"],
+            ))
+        batch.status = "previewed"
+        db.commit()
+        return _build_preview(db, batch)
+    except Exception as e:
+        logger.error("网银解析失败: %s", e, exc_info=True)
+        return _bank_unavailable_preview(batch, f"解析失败: {e}", context)
 
 
-def _bank_unavailable_preview(batch: ImportBatch, reason: str) -> Dict[str, Any]:
-    return {
+def _bank_unavailable_preview(
+    batch: ImportBatch, reason: str, context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
         "batch_code": batch.batch_code,
         "source_type": batch.source_type,
         "source_name": batch.source_name,
@@ -151,6 +166,12 @@ def _bank_unavailable_preview(batch: ImportBatch, reason: str) -> Dict[str, Any]
         "parser_status": "unavailable",
         "parser_message": reason,
     }
+    if context:
+        result["identity_hints"] = context.get("identity_hints")
+        result["bank_resolution"] = context.get("bank_resolution")
+        result["account_attribution"] = context.get("account_attribution")
+        result["parser_match"] = context.get("parser_match")
+    return result
 
 
 def update_row(db: Session, batch_code: str, row_no: int, updates: Dict[str, Any]) -> Dict[str, Any]:
@@ -253,18 +274,10 @@ def commit(db: Session, batch_code: str) -> Dict[str, Any]:
     if not batch:
         raise ValueError("批次不存在")
 
-    if batch.source_type == "bank":
-        parser_artifact = bank_svc._match_active_parser_artifact(db, "bank")
-        if not parser_artifact:
-            raise ValueError("缺少解析规则，无法提交")
-        try:
-            result = bank_svc.commit(db, batch_code, parser_artifact.id)
-            return result
-        except artifact_runtime.ArtifactRuntimeError as e:
-            raise ValueError(str(e))
-
-    # manual paths: validate first, then change state
     events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).all()
+    if not events:
+        raise ValueError("没有可提交的预览数据")
+
     abnormal = 0
     for ev in events:
         errors = manual_svc._validate_fund_event(ev)
@@ -288,7 +301,7 @@ def commit(db: Session, batch_code: str) -> Dict[str, Any]:
         db,
         action="import_preview_commit",
         module="import_preview",
-        detail={"batch_code": batch_code, "committed_rows": committed},
+        detail={"batch_code": batch_code, "committed_rows": committed, "source_type": batch.source_type},
         batch_id=batch.id,
     )
 
