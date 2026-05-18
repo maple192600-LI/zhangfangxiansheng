@@ -22,8 +22,12 @@ def match_account_attribution(
     hints = identity_hints.get("identity_hints", identity_hints)
     bank_hint = identity_hints.get("bank_hint", "")
 
+    bank_resolution = resolve_bank_from_hints(db, identity_hints)
+
     if selected_account_code:
-        return _by_selected(db, selected_account_code)
+        result = _by_selected(db, selected_account_code)
+        result["bank_resolution"] = bank_resolution
+        return result
 
     account_number = (hints.get("account_number") or "").strip()
     last_four = (hints.get("account_last_four") or "").strip()
@@ -35,15 +39,91 @@ def match_account_attribution(
     has_entity = bool(entity_hint)
 
     if not has_account and not has_last_four and not has_entity:
-        return _unmatched(hints, "NO_IDENTITY_HINTS", "没有可用的身份线索")
+        result = _unmatched(hints, "NO_IDENTITY_HINTS", "没有可用的身份线索")
+        result["bank_resolution"] = bank_resolution
+        return result
 
     if has_account:
-        return _by_account_number(db, account_number, bank_candidates, entity_hint, hints)
+        result = _by_account_number(db, account_number, bank_candidates, entity_hint, hints)
+    elif has_last_four:
+        result = _by_last_four(db, last_four, bank_candidates, entity_hint, hints)
+    else:
+        result = _by_entity(db, entity_hint, bank_candidates, hints)
 
-    if has_last_four:
-        return _by_last_four(db, last_four, bank_candidates, entity_hint, hints)
+    result["bank_resolution"] = bank_resolution
+    return result
 
-    return _by_entity(db, entity_hint, bank_candidates, hints)
+
+def resolve_bank_from_hints(db: Session, identity_hints: dict) -> dict:
+    """Public API: resolve bank from identity hints against DB.
+
+    Returns structured result with status matched/ambiguous/unresolved.
+    """
+    hints = identity_hints.get("identity_hints", identity_hints)
+    bank_hint = identity_hints.get("bank_hint", "")
+    raw_hints = _bank_candidates(identity_hints, hints, bank_hint)
+
+    if not raw_hints:
+        return {
+            "status": "unresolved",
+            "bank_id": None, "bank_code": "", "bank_name": "", "short_name": "",
+            "candidates": [], "raw_hints": [],
+            "match_reason": "no_bank_hint",
+        }
+
+    all_banks = db.query(Bank).filter(Bank.status == "enabled").all()
+    found_ids = set()
+
+    for raw_hint in raw_hints:
+        h = raw_hint.strip()
+        if not h:
+            continue
+        for bank in all_banks:
+            if bank.id in found_ids:
+                continue
+            if h == bank.bank_name or h == bank.short_name or h == bank.bank_code:
+                found_ids.add(bank.id)
+                continue
+            for field_val in [bank.bank_name, bank.short_name, bank.bank_code]:
+                if field_val and len(field_val) >= 2 and len(h) >= 2:
+                    if field_val in h or h in field_val:
+                        found_ids.add(bank.id)
+                        break
+        if len(found_ids) > 1:
+            break
+
+    bank_list = [b for b in all_banks if b.id in found_ids]
+
+    def _bank_info(b):
+        return {
+            "bank_id": b.id, "bank_code": b.bank_code,
+            "bank_name": b.bank_name, "short_name": b.short_name or "",
+        }
+
+    if len(found_ids) == 1:
+        b = bank_list[0]
+        return {
+            "status": "matched",
+            "bank_id": b.id, "bank_code": b.bank_code,
+            "bank_name": b.bank_name, "short_name": b.short_name or "",
+            "candidates": [_bank_info(b)], "raw_hints": raw_hints,
+            "match_reason": "unique_bank_hint",
+        }
+
+    if len(found_ids) > 1:
+        return {
+            "status": "ambiguous",
+            "bank_id": None, "bank_code": "", "bank_name": "", "short_name": "",
+            "candidates": [_bank_info(b) for b in bank_list], "raw_hints": raw_hints,
+            "match_reason": "multiple_bank_hints",
+        }
+
+    return {
+        "status": "unresolved",
+        "bank_id": None, "bank_code": "", "bank_name": "", "short_name": "",
+        "candidates": [], "raw_hints": raw_hints,
+        "match_reason": "no_bank_hint",
+    }
 
 
 # ── Scenario A: user selected ──

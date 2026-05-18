@@ -261,3 +261,17 @@ def test_candidates_deduplicated():
     result = extract_identity_hints_from_workbook(wb)
     cands = result["bank_text_candidates"]
     assert cands.count("中国银行") == 1
+
+
+# ── stable fingerprint ──
+
+def test_fingerprint_stable_across_calls():
+    wb = _make_workbook([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "test", 100, 0, 100],
+    ])
+    r1 = extract_identity_hints_from_workbook(wb)
+    r2 = extract_identity_hints_from_workbook(wb)
+    assert r1["format_fingerprint"] == r2["format_fingerprint"]
+    assert r1["format_fingerprint"].startswith("fp_")
+    assert len(r1["format_fingerprint"]) > 7  # fp_ + sha256[:12]

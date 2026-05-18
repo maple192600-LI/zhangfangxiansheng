@@ -5,6 +5,7 @@
 
 契约锚点：docs/14_BANK_IMPORT_GENERALIZATION.md
 """
+import hashlib
 import re
 from typing import Optional
 
@@ -272,5 +273,6 @@ def _fingerprint(evidence: dict) -> str:
     headers = evidence.get("headers", [])
     if not headers:
         return "unknown"
-    key = "|".join(h[:10] for h in headers[:5])
-    return f"fp_{abs(hash(key)) % 10000:04d}"
+    key = "|".join(h[:40] for h in headers[:12])
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    return f"fp_{digest}"

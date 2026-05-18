@@ -242,3 +242,65 @@ def test_list_parsers_filter_by_kind(db_session):
     bank_only = artifact_service.list_parser_artifacts(db_session, kind="bank")
     assert len(bank_only) == 1
     assert bank_only[0]["kind"] == "bank"
+
+
+# ── bank/format 元数据 ──
+
+def test_create_parser_draft_with_bank_format(db_session):
+    data = ParserArtifactDraftCreate(
+        name="BOC_Standard",
+        kind=ArtifactKind.bank,
+        account_code=None,
+        bank_id=1,
+        format_key="fp_abc123",
+        match_rules={"header_match": "exact"},
+        code="# parser",
+        primitives_imports=[],
+    )
+    result = artifact_service.create_parser_draft(db_session, data)
+    assert result["bank_id"] == 1
+    assert result["format_key"] == "fp_abc123"
+    assert result["match_rules"] == {"header_match": "exact"}
+    assert result["account_code"] is None
+
+
+def test_approve_parser_retires_same_bank_format(db_session):
+    d1 = ParserArtifactDraftCreate(
+        name="BOC_Std", kind=ArtifactKind.bank,
+        bank_id=1, format_key="fp_x",
+        code="# v1", primitives_imports=[],
+    )
+    v1 = artifact_service.create_parser_draft(db_session, d1)
+    artifact_service.approve_parser_artifact(db_session, v1["id"], "admin")
+
+    d2 = ParserArtifactDraftCreate(
+        name="BOC_Std", kind=ArtifactKind.bank,
+        bank_id=1, format_key="fp_x",
+        code="# v2", primitives_imports=[],
+    )
+    v2 = artifact_service.create_parser_draft(db_session, d2)
+    artifact_service.approve_parser_artifact(db_session, v2["id"], "admin")
+
+    v1_row = db_session.query(ParserArtifact).filter(ParserArtifact.id == v1["id"]).first()
+    assert v1_row.status == "retired"
+
+
+def test_approve_parser_different_bank_format_not_retired(db_session):
+    d1 = ParserArtifactDraftCreate(
+        name="BOC_Std", kind=ArtifactKind.bank,
+        bank_id=1, format_key="fp_x",
+        code="# boc", primitives_imports=[],
+    )
+    v1 = artifact_service.create_parser_draft(db_session, d1)
+    artifact_service.approve_parser_artifact(db_session, v1["id"], "admin")
+
+    d2 = ParserArtifactDraftCreate(
+        name="ICBC_Std", kind=ArtifactKind.bank,
+        bank_id=2, format_key="fp_x",
+        code="# icbc", primitives_imports=[],
+    )
+    v2 = artifact_service.create_parser_draft(db_session, d2)
+    artifact_service.approve_parser_artifact(db_session, v2["id"], "admin")
+
+    v1_row = db_session.query(ParserArtifact).filter(ParserArtifact.id == v1["id"]).first()
+    assert v1_row.status == "active"  # different bank_id, not retired

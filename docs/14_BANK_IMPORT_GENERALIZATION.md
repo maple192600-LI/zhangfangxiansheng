@@ -73,9 +73,9 @@
 - `ParserArtifact.account_code` 对银行导入**不应作为主匹配键**，只能作为旧兼容字段或非银行场景字段
 - 银行导入匹配 parser 应按 bank/format 级匹配，不按 account_code 匹配
 
-### 当前架构问题
+### 当前架构状态
 
-`bank_import_service._match_active_parser_artifact()` 当前按 `account_code` 优先匹配 bank parser。这是架构级设计问题，将在 09D 中通过引入 bank/format 级匹配策略解决。
+`bank_import_service` 已通过 09D 接入 bank/format 级 parser 匹配（`_match_bank_format_parser_artifact`），按 bank_id + format_key 四级优先匹配，不再按 account_code 匹配银行 parser。详见下方"已实现服务"章节。
 
 ## 已有的匹配能力
 

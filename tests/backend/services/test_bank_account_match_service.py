@@ -491,3 +491,39 @@ def test_candidates_hit_multiple_banks_no_guess(db_session, test_data):
     # Bank not resolved → no bank filter → all online accounts kept → ambiguous
     assert r["status"] == "ambiguous"
     assert r["error_code"] == "MULTIPLE_ACCOUNT_MATCHES"
+
+
+# ── resolve_bank_from_hints 公开 API ──
+
+def test_resolve_bank_matched(db_session, test_data):
+    from services.bank_account_match_service import resolve_bank_from_hints
+    r = resolve_bank_from_hints(db_session, _hints(bank_name="中国银行"))
+    assert r["status"] == "matched"
+    assert r["bank_name"] == "中国银行"
+    assert r["match_reason"] == "unique_bank_hint"
+
+
+def test_resolve_bank_ambiguous(db_session, test_data):
+    from services.bank_account_match_service import resolve_bank_from_hints
+    r = resolve_bank_from_hints(db_session, _hints_with_candidates(
+        bank_text_candidates=["中行工行联合"],
+    ))
+    assert r["status"] == "ambiguous"
+    assert len(r["candidates"]) >= 2
+
+
+def test_resolve_bank_unresolved(db_session, test_data):
+    from services.bank_account_match_service import resolve_bank_from_hints
+    r = resolve_bank_from_hints(db_session, _hints())
+    assert r["status"] == "unresolved"
+
+
+# ── bank_resolution 在 match_account_attribution 输出中 ──
+
+def test_match_attribution_includes_bank_resolution(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints(account_number="6217001234567890"),
+    )
+    assert "bank_resolution" in r
+    assert r["bank_resolution"]["status"] in ("matched", "unresolved", "ambiguous")

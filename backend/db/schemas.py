@@ -571,7 +571,10 @@ class InferenceJobStatus(str, Enum):
 class ParserArtifactDraftCreate(BaseModel):
     name: str = Field(..., max_length=100)
     kind: ArtifactKind
-    account_code: str = Field(..., max_length=50)
+    account_code: Optional[str] = Field(None, max_length=50)
+    bank_id: Optional[int] = None
+    format_key: Optional[str] = Field(None, max_length=100)
+    match_rules: dict = {}
     code: str
     primitives_imports: list[str]
     sample_check_log: dict = {}
@@ -604,6 +607,9 @@ class ParserArtifactResponse(BaseModel):
     name: str
     kind: str
     account_code: Optional[str] = None
+    bank_id: Optional[int] = None
+    format_key: Optional[str] = None
+    match_rules: dict = {}
     version: int
     status: str
     code: Optional[str] = None

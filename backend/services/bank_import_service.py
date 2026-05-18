@@ -15,6 +15,8 @@ from core.parser_engine import detect_format, detect_header_row, read_file_from_
 from db.tables import FundEvent, ImportBatch, ParserArtifact
 from config import DATA_DIR
 from services import log_service
+from services.bank_statement_identity_service import extract_identity_hints
+from services.bank_account_match_service import match_account_attribution, resolve_bank_from_hints
 
 
 # ──────────────────────────────────────────
@@ -67,15 +69,21 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         if any(c and str(c).strip() for c in row)
     ]
 
-    # 匹配 ParserArtifact
-    parser_artifact = _match_active_parser_artifact(db, "bank")
-
-    # 保存文件
+    # 保存文件（先保存，identity extraction 需要 file_path）
     os.makedirs(os.path.join(DATA_DIR, "uploads"), exist_ok=True)
     batch_code = f"BANK_{date.today().strftime('%Y%m%d')}_{uuid.uuid4().hex[:4].upper()}"
     file_path = os.path.join(DATA_DIR, "uploads", f"{batch_code}_{filename}")
     with open(file_path, "wb") as f:
         f.write(file_data)
+
+    # 身份线索提取 + 银行解析 + 账户归属
+    identity_hints = extract_identity_hints(file_path, filename)
+    bank_resolution = resolve_bank_from_hints(db, identity_hints)
+    account_attribution = match_account_attribution(db, identity_hints)
+
+    # bank/format 级 parser 匹配
+    format_key = identity_hints.get("format_fingerprint", "unknown")
+    parser_match = _match_bank_format_parser_artifact(db, bank_resolution, format_key)
 
     # 创建批次
     batch = ImportBatch(
@@ -97,7 +105,11 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         "headers": headers,
         "sample_rows": sample_rows,
         "header_row": header_idx,
-        "parser_match": _parser_match_out(parser_artifact) if parser_artifact else None,
+        "identity_hints": identity_hints,
+        "bank_resolution": bank_resolution,
+        "account_attribution": account_attribution,
+        "format_fingerprint": format_key,
+        "parser_match": parser_match,
     }
 
     log_service.write_log(db, action="batch_upload", module="bank_import", detail={
@@ -127,14 +139,20 @@ def preview(
     if not file_path:
         raise ValueError("原始文件未找到")
 
+    # Re-extract identity hints for ctx enrichment
+    identity_hints = extract_identity_hints(file_path, filename)
+    bank_resolution = resolve_bank_from_hints(db, identity_hints)
+    account_attribution = match_account_attribution(db, identity_hints)
+
+    ctx = {
+        "batch_code": batch_code,
+        "bank_resolution": bank_resolution,
+        "account_attribution": account_attribution,
+    }
+
     try:
         rows = list(
-            artifact_runtime.run_parser(
-                db,
-                parser_artifact_id,
-                file_path,
-                {"batch_code": batch_code},
-            )
+            artifact_runtime.run_parser(db, parser_artifact_id, file_path, ctx),
         )
     except artifact_runtime.ArtifactRuntimeError as e:
         raise ValueError(str(e))
@@ -193,39 +211,106 @@ def commit(db: Session, batch_code: str, parser_artifact_id: int) -> Dict[str, A
 # 内部辅助
 # ──────────────────────────────────────────
 
-def _match_active_parser_artifact(
+def _match_bank_format_parser_artifact(
     db: Session,
-    kind: str,
-    account_code: Optional[str] = None,
-) -> Optional[ParserArtifact]:
-    query = db.query(ParserArtifact).filter(
-        ParserArtifact.kind == kind,
+    bank_resolution: Dict[str, Any],
+    format_key: str,
+) -> Dict[str, Any]:
+    """Match parser by bank/format priority. Returns structured result."""
+    bank_id = bank_resolution.get("bank_id")
+    bank_status = bank_resolution.get("status", "unresolved")
+
+    base_q = db.query(ParserArtifact).filter(
+        ParserArtifact.kind == "bank",
         ParserArtifact.status == "active",
     )
-    if account_code:
-        account_parser = query.filter(ParserArtifact.account_code == account_code).order_by(
-            ParserArtifact.version.desc(),
-            ParserArtifact.id.desc(),
-        ).first()
-        if account_parser:
-            return account_parser
-    return query.filter(
+
+    # Level 1: bank_id + format_key
+    if bank_id is not None:
+        arts = base_q.filter(
+            ParserArtifact.bank_id == bank_id,
+            ParserArtifact.format_key == format_key,
+        ).all()
+        if len(arts) == 1:
+            return _parser_match_out(arts[0], "bank_format", bank_id, format_key)
+        if len(arts) > 1:
+            return _parser_conflict(arts, bank_id, format_key)
+
+    # Level 2: bank_id + format_key IS NULL (bank default)
+    if bank_id is not None:
+        arts = base_q.filter(
+            ParserArtifact.bank_id == bank_id,
+            ParserArtifact.format_key.is_(None),
+        ).all()
+        if len(arts) == 1:
+            return _parser_match_out(arts[0], "bank_default", bank_id, None)
+        if len(arts) > 1:
+            return _parser_conflict(arts, bank_id, None)
+
+    # Level 3: bank_id IS NULL + format_key (format default)
+    if format_key and format_key != "unknown":
+        arts = base_q.filter(
+            ParserArtifact.bank_id.is_(None),
+            ParserArtifact.format_key == format_key,
+        ).all()
+        if len(arts) == 1:
+            return _parser_match_out(arts[0], "format_default", None, format_key)
+        if len(arts) > 1:
+            return _parser_conflict(arts, None, format_key)
+
+    # Level 4: global default (bank_id IS NULL + format_key IS NULL + account_code IS NULL)
+    arts = base_q.filter(
+        ParserArtifact.bank_id.is_(None),
+        ParserArtifact.format_key.is_(None),
         ParserArtifact.account_code.is_(None),
-    ).order_by(
-        ParserArtifact.version.desc(),
-        ParserArtifact.id.desc(),
-    ).first()
+    ).all()
+    if len(arts) == 1:
+        return _parser_match_out(arts[0], "global_default", None, None)
+    if len(arts) > 1:
+        return _parser_conflict(arts, None, None)
+
+    reason = "no matching parser"
+    if bank_status == "ambiguous":
+        reason = "银行歧义，无法按 bank_id 匹配 parser"
+    return {
+        "matched": False,
+        "parser_artifact_id": None, "name": None,
+        "bank_id": None, "format_key": None,
+        "match_level": "none",
+        "reason": reason,
+    }
 
 
-def _parser_match_out(artifact: ParserArtifact) -> Dict[str, Any]:
+def _parser_match_out(
+    artifact: ParserArtifact,
+    match_level: str,
+    bank_id: Optional[int],
+    format_key: Optional[str],
+) -> Dict[str, Any]:
     return {
         "matched": True,
         "parser_artifact_id": artifact.id,
         "name": artifact.name,
-        "kind": artifact.kind,
-        "account_code": artifact.account_code,
-        "confidence": str(artifact.confidence) if artifact.confidence is not None else None,
-        "sample_check_log": artifact.sample_check_log or {},
+        "bank_id": bank_id,
+        "format_key": format_key,
+        "match_level": match_level,
+        "reason": f"matched via {match_level}",
+    }
+
+
+def _parser_conflict(
+    artifacts: list,
+    bank_id: Optional[int],
+    format_key: Optional[str],
+) -> Dict[str, Any]:
+    return {
+        "matched": False,
+        "parser_artifact_id": None,
+        "name": None,
+        "bank_id": bank_id,
+        "format_key": format_key,
+        "match_level": "conflict",
+        "reason": f"{len(artifacts)} 个同级 active parser 冲突",
     }
 
 
