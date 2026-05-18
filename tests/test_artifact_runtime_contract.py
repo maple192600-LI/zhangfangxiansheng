@@ -379,12 +379,12 @@ def test_generator_non_dict_row_wrapped_as_execution_error(db_session, xlsx_file
         list(run_parser(db_session, art.id, xlsx_file))
 
 
-# ── Fix D-2: generator execution under no_ai_runtime ──
+# ── Fix D-2: AST guard blocks network imports before runtime ──
 
-def test_generator_network_access_blocked_during_iteration(db_session, xlsx_file):
-    """Generator that attempts urllib access during iteration is blocked."""
+def test_ast_guard_blocks_network_import_before_runtime(db_session, xlsx_file):
+    """Parser importing urllib is rejected by AST guard, never reaches runtime."""
     art = _make_artifact(db_session, code=GENERATOR_NETWORK_CODE)
-    with pytest.raises((ArtifactExecutionError, Exception)):
+    with pytest.raises(PrimitivesViolationError, match="urllib"):
         list(run_parser(db_session, art.id, xlsx_file))
 
 
@@ -425,3 +425,42 @@ def test_workbook_closed_after_parse_error(db_session, xlsx_file):
     with open(xlsx_file, "rb") as f:
         header = f.read(4)
         assert header[:2] == b"PK"
+
+
+# ── Fix E: many-row output does not cause false timeout ──
+
+MANY_ROWS_CODE = '''
+def parse(wb, ctx):
+    total = int(ctx.get("total", 2000))
+    for i in range(total):
+        yield {
+            "business_date": None,
+            "entity_code": "E001",
+            "entity_name": "TestEntity",
+            "account_code": "A001",
+            "account_name": "TestAccount",
+            "summary": f"row {i}",
+            "counterparty": None,
+            "amount_in": 0,
+            "amount_out": 0,
+            "rolling_balance": None,
+            "state": "待确认",
+            "source": "网银导入",
+        }
+'''
+
+
+def test_many_rows_no_false_timeout(db_session, xlsx_file, monkeypatch):
+    """Parser yielding 2000 rows should not trigger timeout (pipe drain works)."""
+    from core import artifact_sandbox
+    short_config = artifact_sandbox.ArtifactSandboxConfig(timeout_seconds=10)
+    monkeypatch.setattr(
+        artifact_sandbox,
+        "get_default_sandbox_config",
+        lambda: short_config,
+    )
+    art = _make_artifact(db_session, code=MANY_ROWS_CODE)
+    rows = list(run_parser(db_session, art.id, xlsx_file, ctx={"total": 2000}))
+    assert len(rows) == 2000
+    assert rows[0]["summary"] == "row 0"
+    assert rows[-1]["summary"] == "row 1999"

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
-import pickle
+import time
 import traceback
 from datetime import date, datetime
 from decimal import Decimal
@@ -73,6 +73,8 @@ _SAFE_BUILTINS = {
     and not k.startswith("__")
 }
 
+_POLL_INTERVAL = 0.05
+
 
 def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
     """Worker process: load workbook, exec parser, send rows back via pipe."""
@@ -103,7 +105,6 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
                         conn.send(("error", f"row {count}: expected dict, got {type(row).__name__}"))
                         conn.close()
                         return
-                    # Convert non-serializable types before sending
                     conn.send(("row", _serialize_row(row)))
                     count += 1
         except ArtifactRuntimeError as e:
@@ -186,31 +187,52 @@ def run_parser(
     rows: list[dict[str, Any]] = []
     timed_out = False
     try:
-        # Wait for worker to finish, with timeout
-        proc.join(timeout=sandbox.timeout_seconds)
+        deadline = time.monotonic() + sandbox.timeout_seconds
 
-        if proc.is_alive():
-            # Worker exceeded timeout — terminate it
-            timed_out = True
-            proc.terminate()
-            proc.join(timeout=5)
-            raise SandboxTimeoutError(artifact.id, sandbox.timeout_seconds)
-
-        # Worker finished — drain all messages from pipe
         while True:
-            try:
-                if not parent_conn.poll(0.1):
+            # Drain all available messages from pipe
+            while True:
+                try:
+                    if not parent_conn.poll(_POLL_INTERVAL):
+                        break
+                    msg_type, payload = parent_conn.recv()
+                except (EOFError, BrokenPipeError, OSError):
                     break
-                msg_type, payload = parent_conn.recv()
-            except (EOFError, BrokenPipeError, OSError):
+
+                if msg_type == "row":
+                    rows.append(payload)
+                elif msg_type == "error":
+                    _join_worker(proc)
+                    raise ArtifactExecutionError(artifact.id, payload)
+                elif msg_type == "runtime_error":
+                    _join_worker(proc)
+                    raise _reconstruct_runtime_error(payload)
+
+            # Worker finished — drain any remaining messages then exit loop
+            if not proc.is_alive():
+                proc.join(timeout=0)
+                # Final drain after worker exited
+                while True:
+                    try:
+                        if not parent_conn.poll(0.01):
+                            break
+                        msg_type, payload = parent_conn.recv()
+                    except (EOFError, BrokenPipeError, OSError):
+                        break
+                    if msg_type == "row":
+                        rows.append(payload)
+                    elif msg_type == "error":
+                        raise ArtifactExecutionError(artifact.id, payload)
+                    elif msg_type == "runtime_error":
+                        raise _reconstruct_runtime_error(payload)
                 break
 
-            if msg_type == "row":
-                rows.append(payload)
-            elif msg_type == "error":
-                raise ArtifactExecutionError(artifact.id, payload)
-            elif msg_type == "runtime_error":
-                raise _reconstruct_runtime_error(payload)
+            # Check timeout — but only if worker is not producing output
+            if time.monotonic() >= deadline:
+                timed_out = True
+                proc.terminate()
+                proc.join(timeout=5)
+                raise SandboxTimeoutError(artifact.id, sandbox.timeout_seconds)
     finally:
         if proc.is_alive():
             proc.terminate()
@@ -226,6 +248,14 @@ def run_parser(
 
     for i, row in enumerate(rows):
         yield _coerce_row(artifact.id, row, i)
+
+
+def _join_worker(proc: multiprocessing.Process) -> None:
+    """Wait for worker process to finish after it reported an error."""
+    proc.join(timeout=5)
+    if proc.is_alive():
+        proc.terminate()
+        proc.join(timeout=5)
 
 
 def _reconstruct_runtime_error(payload: dict) -> ArtifactRuntimeError:
