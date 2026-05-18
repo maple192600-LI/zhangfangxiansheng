@@ -11,17 +11,7 @@ from typing import Optional
 from openpyxl import load_workbook
 
 
-_BANK_NAMES = {
-    "中国银行": "中国银行", "中国工商银行": "中国工商银行", "工商银行": "中国工商银行",
-    "中国建设银行": "中国建设银行", "建设银行": "中国建设银行", "中国农业银行": "中国农业银行",
-    "农业银行": "中国农业银行", "招商银行": "招商银行", "交通银行": "交通银行",
-    "中信银行": "中信银行", "光大银行": "光大银行", "民生银行": "民生银行",
-    "兴业银行": "兴业银行", "浦发银行": "浦发银行", "上海浦东发展银行": "浦发银行",
-    "华夏银行": "华夏银行", "平安银行": "平安银行", "北京银行": "北京银行",
-    "宁波银行": "宁波银行", "广发银行": "广发银行", "渤海银行": "渤海银行",
-    "中行": "中国银行", "工行": "中国工商银行", "建行": "中国建设银行",
-    "农行": "中国农业银行", "招行": "招商银行", "交行": "交通银行",
-}
+_BANK_TEXT_RE = re.compile(r"([一-鿿]+银行)")
 
 _ACCOUNT_NUMBER_KW = ["账号", "账户号码", "账户号", "帐号", "Account"]
 _ACCOUNT_HOLDER_KW = ["户名", "账户名称", "账户名", "户名全称"]
@@ -53,7 +43,7 @@ def extract_identity_hints_from_workbook(wb, filename: Optional[str] = None) -> 
     evidence = {"cells": [], "headers": [], "filename": filename or ""}
 
     if filename:
-        fn_bank = _match_bank_name(filename)
+        fn_bank = _extract_bank_text(filename)
         if fn_bank:
             hints["bank_name"] = fn_bank
         fn_last4 = _extract_last_four_from_filename(filename)
@@ -118,7 +108,7 @@ def _scan_sheet(sheet, hints: dict, evidence: dict):
 
 def _extract_from_cell(text: str, hints: dict):
     if not hints["bank_name"]:
-        bank = _match_bank_name(text)
+        bank = _extract_bank_text(text)
         if bank:
             hints["bank_name"] = bank
 
@@ -172,10 +162,12 @@ def _extract_adjacent(prev_text: str, current_text: str, hints: dict):
                 break
 
 
-def _match_bank_name(text: str) -> str:
-    for name, canonical in _BANK_NAMES.items():
-        if name in text:
-            return canonical
+def _extract_bank_text(text: str) -> str:
+    """Extract raw bank name text containing '银行'. No normalization —
+    the match service resolves against banks master data."""
+    m = _BANK_TEXT_RE.search(text)
+    if m:
+        return m.group(1)
     return ""
 
 

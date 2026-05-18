@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from db.tables import Account, Bank, Division, Entity
+from db.tables import Account, AccountAlias, Bank, Division, Entity
 from services.bank_account_match_service import match_account_attribution
 
 
@@ -90,10 +90,16 @@ def _seed(db):
         created_at=now, updated_at=now,
     )
     db.add_all([a1, a2, a3, a4, a5])
+    db.flush()
+
+    al1 = AccountAlias(account_id=a1.id, alias_text="测试公司基本户", alias_type="自动")
+    al2 = AccountAlias(account_id=a3.id, alias_text="测试公司基本户", alias_type="自动")
+    db.add_all([al1, al2])
     db.commit()
     return {
         "entities": [e1, e2], "banks": [boc, icbc],
         "accounts": [a1, a2, a3, a4, a5],
+        "aliases": [al1, al2],
     }
 
 
@@ -265,13 +271,133 @@ def test_entity_name_no_match(db_session, test_data):
     assert r["error_code"] == "NO_ACCOUNT_MATCH"
 
 
-# ── 账号匹配到但实体无可用账户（不会出现，但验证 fallback）──
+# ── 完整账号不存在时，不 fallback 到实体 ──
 
-def test_account_number_no_match_falls_to_entity(db_session, test_data):
+def test_account_number_no_match_does_not_fallback_to_entity(db_session, test_data):
     r = match_account_attribution(
         db_session,
         _hints(account_number="9999999999999999", entity_name="TestCo1"),
     )
+    assert r["status"] == "unmatched"
+    assert r["error_code"] == "ACCOUNT_HINT_NOT_FOUND"
+
+
+# ── 银行强过滤后为空，不 fallback ──
+
+def test_bank_filter_eliminated_returns_conflict(db_session, test_data):
+    now = datetime.now()
+    custom = Bank(bank_code="CUST", bank_name="自定义测试银行",
+                  short_name="自测行", status="enabled",
+                  created_at=now, updated_at=now)
+    db_session.add(custom)
+    db_session.flush()
+
+    r = match_account_attribution(
+        db_session,
+        _hints(entity_name="TestCo1", bank_name="自测行"),
+    )
+    assert r["status"] == "unmatched"
+    assert r["error_code"] == "BANK_ACCOUNT_CONFLICT"
+
+
+# ── DB 银行归一化：short_name 精确匹配 ──
+
+def test_bank_short_name_resolved_from_db(db_session, test_data):
+    now = datetime.now()
+    custom = Bank(bank_code="CUST", bank_name="自定义测试银行",
+                  short_name="自测行", status="enabled",
+                  created_at=now, updated_at=now)
+    db_session.add(custom)
+    db_session.commit()
+
+    r = match_account_attribution(
+        db_session,
+        _hints(entity_name="TestCo1", bank_name="自测行"),
+    )
+    assert r["status"] == "unmatched"
+    assert r["error_code"] == "BANK_ACCOUNT_CONFLICT"
+
+
+# ── 新增银行主数据不改代码即可参与匹配 ──
+
+def test_new_bank_data_no_code_change(db_session, test_data):
+    now = datetime.now()
+    e = test_data["entities"][0]
+    new_bank = Bank(bank_code="NEWB", bank_name="新银行",
+                    short_name="新行", status="enabled",
+                    created_at=now, updated_at=now)
+    db_session.add(new_bank)
+    db_session.flush()
+
+    new_acc = Account(
+        entity_id=e.id, bank_id=new_bank.id,
+        account_code="A010", account_alias="新行账户",
+        bank_name="新银行", branch_name="新银行分行",
+        account_number="1234567890123456", account_last_four="3456",
+        account_type="基本户", instrument_type="银行存款",
+        input_method="online", has_online_banking=True,
+        status="enabled", currency="CNY",
+        initial_balance=0, balance_date=date(2026, 1, 1),
+        created_at=now, updated_at=now,
+    )
+    db_session.add(new_acc)
+    db_session.commit()
+
+    r = match_account_attribution(
+        db_session,
+        _hints(entity_name="TestCo1", bank_name="新行"),
+    )
+    assert r["status"] == "matched"
+    assert r["account_code"] == "A010"
+    assert r["match_reason"] == "entity_name_match"
+
+
+# ── AccountAlias 精确匹配唯一账户 ──
+
+def test_alias_unique_match(db_session, test_data):
+    db_session.query(AccountAlias).delete()
+    db_session.flush()
+
+    a1 = test_data["accounts"][0]
+    db_session.add(AccountAlias(
+        account_id=a1.id, alias_text="唯一别名", alias_type="手动",
+    ))
+    db_session.commit()
+
+    r = match_account_attribution(
+        db_session,
+        _hints(entity_name="唯一别名"),
+    )
     assert r["status"] == "matched"
     assert r["account_code"] == "A001"
-    assert r["match_reason"] == "entity_name_match"
+    assert r["match_reason"] == "alias_match"
+
+
+# ── AccountAlias 多账户命中 → ambiguous ──
+
+def test_alias_multiple_match(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints(entity_name="测试公司基本户"),
+    )
+    assert r["status"] == "ambiguous"
+    assert r["error_code"] == "MULTIPLE_ACCOUNT_MATCHES"
+    assert len(r["candidates"]) == 2
+
+
+# ── _BANK_NAMES 不存在于 backend ──
+
+def test_no_bank_names_in_services():
+    import services.bank_account_match_service as mod
+    assert not hasattr(mod, "_BANK_NAMES")
+
+
+# ── 银行 contains 匹配唯一时也可解析 ──
+
+def test_bank_contains_unique_match(db_session, test_data):
+    r = match_account_attribution(
+        db_session,
+        _hints(entity_name="TestCo2", bank_name="中国工商"),
+    )
+    assert r["status"] == "matched"
+    assert r["account_code"] == "A005"

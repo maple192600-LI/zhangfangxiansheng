@@ -11,7 +11,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from db.tables import Account, Bank, Entity
+from db.tables import Account, AccountAlias, Bank, Entity
 
 
 def match_account_attribution(
@@ -69,7 +69,11 @@ def _by_account_number(db: Session, account_number: str, bank_name: str,
     ).all()
 
     if bank_name and candidates:
+        pre_count = len(candidates)
         candidates = _bank_filter(db, candidates, bank_name)
+        if not candidates and pre_count > 0:
+            return _unmatched(hints, "BANK_ACCOUNT_CONFLICT",
+                              f"账号 {account_number} 匹配到账户但银行过滤后无结果")
 
     if len(candidates) == 1:
         acc = candidates[0]
@@ -84,10 +88,8 @@ def _by_account_number(db: Session, account_number: str, bank_name: str,
         return _ambig(candidates, db, "MULTIPLE_ACCOUNT_MATCHES",
                       f"账号 {account_number} 匹配到 {len(candidates)} 个账户", hints)
 
-    if entity_hint:
-        return _by_entity(db, entity_hint, bank_name, hints)
-
-    return _unmatched(hints, "NO_ACCOUNT_MATCH", f"账号 {account_number} 未匹配到账户")
+    return _unmatched(hints, "ACCOUNT_HINT_NOT_FOUND",
+                      f"账号 {account_number} 未匹配到账户")
 
 
 # ── Scenario C: last four digits ──
@@ -100,7 +102,11 @@ def _by_last_four(db: Session, last_four: str, bank_name: str,
     ).all()
 
     if bank_name and candidates:
+        pre_count = len(candidates)
         candidates = _bank_filter(db, candidates, bank_name)
+        if not candidates and pre_count > 0:
+            return _unmatched(hints, "BANK_ACCOUNT_CONFLICT",
+                              f"后四位 {last_four} 匹配到账户但银行过滤后无结果")
 
     if len(candidates) == 1:
         acc = candidates[0]
@@ -124,6 +130,25 @@ def _by_last_four(db: Session, last_four: str, bank_name: str,
 # ── Scenario D: entity name only ──
 
 def _by_entity(db: Session, name_hint: str, bank_name: str, hints: dict) -> dict:
+    # Strategy 1: try AccountAlias
+    alias_accounts = _find_accounts_by_alias(db, name_hint)
+    if alias_accounts:
+        candidates = alias_accounts
+        if bank_name:
+            pre_count = len(candidates)
+            candidates = _bank_filter(db, candidates, bank_name)
+            if not candidates and pre_count > 0:
+                return _unmatched(hints, "BANK_ACCOUNT_CONFLICT",
+                                  f"别名 '{name_hint}' 匹配到账户但银行过滤后无结果")
+        if len(candidates) == 1:
+            acc = candidates[0]
+            ent = db.query(Entity).filter(Entity.id == acc.entity_id).first()
+            return _ok(acc, ent, "alias_match", 0.80, hints)
+        if len(candidates) > 1:
+            return _ambig(candidates, db, "MULTIPLE_ACCOUNT_MATCHES",
+                          f"别名 '{name_hint}' 匹配到 {len(candidates)} 个账户", hints)
+
+    # Strategy 2: entity matching
     entity = _find_entity(db, name_hint)
     if not entity:
         return _unmatched(hints, "NO_ACCOUNT_MATCH", f"单位/户名 '{name_hint}' 未匹配到法人实体")
@@ -139,7 +164,11 @@ def _by_entity(db: Session, name_hint: str, bank_name: str, hints: dict) -> dict
         accounts = online
 
     if bank_name and accounts:
+        pre_count = len(accounts)
         accounts = _bank_filter(db, accounts, bank_name)
+        if not accounts and pre_count > 0:
+            return _unmatched(hints, "BANK_ACCOUNT_CONFLICT",
+                              f"实体 '{entity.short_name}' 的账户银行过滤后无结果")
 
     if len(accounts) == 1:
         return _ok(accounts[0], entity, "entity_name_match", 0.75, hints)
@@ -167,17 +196,55 @@ def _find_entity(db: Session, hint: str) -> Optional[Entity]:
     return None
 
 
-def _bank_filter(db: Session, accounts: list, bank_name: str) -> list:
+def _resolve_bank(db: Session, bank_hint: str) -> Optional[Bank]:
+    """Resolve bank hint against banks master data.
+
+    Exact match on bank_name / short_name / bank_code, then contains match
+    (unique only). Returns None if ambiguous or not found.
+    """
+    h = bank_hint.strip()
+    if not h:
+        return None
     bank = db.query(Bank).filter(
-        (Bank.bank_name == bank_name) | (Bank.short_name == bank_name),
+        (Bank.bank_name == h) | (Bank.short_name == h) | (Bank.bank_code == h),
         Bank.status == "enabled",
     ).first()
     if bank:
-        filtered = [a for a in accounts if a.bank_id == bank.id]
-        if filtered:
-            return filtered
-    filtered = [a for a in accounts if a.bank_name and bank_name in a.bank_name]
-    return filtered if filtered else accounts
+        return bank
+    candidates = db.query(Bank).filter(
+        (Bank.bank_name.contains(h)) | (Bank.short_name.contains(h)),
+        Bank.status == "enabled",
+    ).all()
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _bank_filter(db: Session, accounts: list, bank_hint: str) -> list:
+    """Filter accounts by resolved bank. Returns original list if bank
+    cannot be resolved. Returns empty list if bank resolved but no
+    accounts match — caller must treat this as BANK_ACCOUNT_CONFLICT."""
+    bank = _resolve_bank(db, bank_hint)
+    if not bank:
+        return accounts
+    return [a for a in accounts if a.bank_id == bank.id]
+
+
+def _find_accounts_by_alias(db: Session, hint: str) -> list:
+    """Find enabled accounts whose AccountAlias.alias_text matches hint."""
+    h = hint.strip()
+    if not h:
+        return []
+    aliases = db.query(AccountAlias).filter(
+        AccountAlias.alias_text == h,
+    ).all()
+    if not aliases:
+        return []
+    account_ids = [a.account_id for a in aliases]
+    return db.query(Account).filter(
+        Account.id.in_(account_ids),
+        Account.status == "enabled",
+    ).all()
 
 
 def _check_conflict(db: Session, account: Account, entity_hint: str) -> Optional[dict]:

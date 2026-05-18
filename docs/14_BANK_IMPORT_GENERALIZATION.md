@@ -115,8 +115,15 @@
 
 | 服务 | 文件 | 职责 |
 |------|------|------|
-| 身份线索提取 | `backend/services/bank_statement_identity_service.py` | 从 xlsx 文件和文件名提取银行名、账号、户名、开户行等线索 |
-| 账户归属匹配 | `backend/services/bank_account_match_service.py` | 根据身份线索匹配主数据，输出 matched / ambiguous / unmatched |
+| 身份线索提取 | `backend/services/bank_statement_identity_service.py` | 从 xlsx 文件和文件名提取银行名（原始文本）、账号、户名、开户行等线索。不硬编码银行名，不归一化 |
+| 账户归属匹配 | `backend/services/bank_account_match_service.py` | 根据身份线索匹配主数据（banks + entities + accounts + account_aliases），输出 matched / ambiguous / unmatched |
+
+### 设计要点
+
+- **银行归一化**：身份线索提取服务只返回原始文本（含"银行"的子串），不硬编码银行名。归一化由匹配服务通过 `_resolve_bank()` 查询 `banks` 主数据完成（精确匹配 bank_name / short_name / bank_code，包含匹配仅取唯一候选）
+- **AccountAlias**：匹配服务在实体名匹配路径中优先尝试 `account_aliases.alias_text` 精确匹配，可命中别名
+- **完整账号不匹配**：当 `identity_hints.account_number` 存在但不匹配任何账户时，直接返回 `ACCOUNT_HINT_NOT_FOUND`，不 fallback 到实体名匹配
+- **银行强过滤**：当银行 hint 可解析为唯一 Bank 但过滤后候选为空，返回 `BANK_ACCOUNT_CONFLICT`，不恢复原候选
 
 这两个服务已通过测试验证，但尚未接入 `bank_import_service` 的导入流程，也未接入前端和 ParserArtifact bank/format 匹配。接入工作将在 09D 和 09G 中完成。
 

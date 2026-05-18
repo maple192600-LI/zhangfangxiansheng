@@ -93,7 +93,9 @@ def test_extract_bank_short_name():
         ["日期", "摘要", "收入", "支出", "余额"],
     ])
     result = extract_identity_hints_from_workbook(wb)
-    assert result["identity_hints"]["bank_name"] == "中国工商银行"
+    # Short names without '银行' are NOT detected — identity service
+    # returns raw text only; normalization is done by match service via DB
+    assert result["identity_hints"]["bank_name"] == ""
 
 
 def test_extract_bank_from_filename():
@@ -213,3 +215,19 @@ def test_standalone_last_four():
     ])
     result = extract_identity_hints_from_workbook(wb)
     assert result["identity_hints"]["account_last_four"] == "7890"
+
+
+# ── _BANK_NAMES removed ──
+
+def test_no_bank_names_hardcoded_dict():
+    import services.bank_statement_identity_service as mod
+    assert not hasattr(mod, "_BANK_NAMES"), "_BANK_NAMES must be removed"
+
+
+def test_full_bank_name_extracted_as_raw():
+    wb = _make_workbook([
+        ["招商银行流水明细"],
+        ["日期", "摘要"],
+    ])
+    result = extract_identity_hints_from_workbook(wb)
+    assert result["identity_hints"]["bank_name"] == "招商银行"
