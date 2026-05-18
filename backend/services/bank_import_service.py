@@ -17,6 +17,12 @@ from config import DATA_DIR
 from services import log_service
 from services.bank_statement_identity_service import extract_identity_hints
 from services.bank_account_match_service import match_account_attribution, resolve_bank_from_hints
+from services.source_file_service import (
+    create_source_file_for_upload,
+    update_source_file_status,
+    resolve_source_file_status,
+)
+from services.account_resolution_audit_service import record_account_resolution_attempt
 
 
 # ──────────────────────────────────────────
@@ -95,6 +101,30 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
     db.commit()
     db.refresh(batch)
 
+    # 创建 SourceFile 记录
+    source_file = create_source_file_for_upload(
+        db, batch, file_path, filename, file_data, context=context,
+    )
+
+    # 更新 SourceFile 状态
+    sf_status = resolve_source_file_status(
+        parser_matched=parser_match.get("matched", False),
+        account_status=account_attribution.get("status", "unmatched"),
+    )
+    update_source_file_status(
+        db, source_file, status=sf_status,
+        parser_artifact_id=parser_match.get("parser_artifact_id"),
+        format_fingerprint=format_key,
+    )
+
+    # 记录账户归属判断和证据
+    record_account_resolution_attempt(
+        db, source_file, account_attribution,
+        identity_hints=identity_hints,
+        bank_resolution=bank_resolution,
+    )
+    db.commit()
+
     result: Dict[str, Any] = {
         "batch_code": batch_code,
         "batch_id": batch.id,
@@ -109,10 +139,13 @@ def upload_file(db: Session, file_data: bytes, filename: str) -> Dict[str, Any]:
         "account_attribution": account_attribution,
         "format_fingerprint": format_key,
         "parser_match": parser_match,
+        "source_file_id": source_file.id,
+        "source_file_status": source_file.status,
     }
 
     log_service.write_log(db, action="batch_upload", module="bank_import", detail={
         "batch_code": batch_code, "filename": filename, "rows": len(rows) - header_idx - 1,
+        "source_file_id": source_file.id, "source_file_status": sf_status,
     }, batch_id=batch.id)
     return result
 

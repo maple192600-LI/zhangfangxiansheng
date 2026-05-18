@@ -93,7 +93,7 @@ ZF_LOG_LEVEL=INFO
 
 | 目录 | 用途 |
 |------|------|
-| `backend/` | FastAPI 后端：API 路由（22 模块）、服务层（25 模块）、ORM 表（28 张）、Agent 运行时 |
+| `backend/` | FastAPI 后端：API 路由（22 模块）、服务层（25 模块）、ORM 表（31 张）、Agent 运行时 |
 | `frontend/` | Vue 3 前端：42 个视图组件 |
 | `alembic/` | SQLite schema 迁移 |
 | `tests/` | 后端测试、端到端测试、样本测试 |

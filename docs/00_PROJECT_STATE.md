@@ -13,7 +13,7 @@
 | 前端 `.vue` 文件                        | 40                         |
 | 后端 API 模块                           | 22                         |
 | 后端 service 模块                       | 25                         |
-| ORM 表                               | 28                         |
+| ORM 表                               | 31                         |
 | API inventory（effective path）       | 165 endpoints, 0 duplicate |
 
 ## 当前可用能力
@@ -58,4 +58,4 @@
 ***
 
 **校准来源：** `frontend/src/router/index.js`、`backend/main.py`、`backend/api/`、`backend/services/`、`backend/db/tables.py`、`backend/core/artifact_runtime.py`、`tools/guards/check_api_inventory.py --list`
-**最后校准：** 2026-05-18
+**最后校准：** 2026-05-19
