@@ -57,7 +57,7 @@ backend\venv\Scripts\pytest.exe tests\e2e -q
 
 ## 当前已知验证风险
 
-- `run_parser` / `run_rule` 为 NotImplementedError，任何依赖 artifact runtime 执行的链路无法端到端验证
+- `run_parser` 已实现；`run_rule` 仍为 NotImplementedError。依赖 `run_parser` 的链路可端到端验证
 - Case 4 of guard 测试依赖中文 fixture 内容，在某些终端编码下可能输出异常（已通过 UTF-8 环境变量缓解）
 
 ---

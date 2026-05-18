@@ -1,9 +1,10 @@
 from datetime import date, datetime
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from conftest import add_import_batch, make_xlsx
-from db.tables import FundEvent
+from db.tables import FundEvent, ParserArtifact
 from services import import_preview_service, manual_flow_service
+from services import bank_import_service as bank_svc
 
 
 def _make_event(db, batch, entity_code=None, entity_name="", account_code=None, account_name=""):
@@ -26,6 +27,29 @@ def _make_event(db, batch, entity_code=None, entity_name="", account_code=None, 
     db.add(ev)
     db.commit()
     return ev
+
+
+def _add_parser_artifact(db, name="Test Parser", bank_id=None, format_key=None):
+    artifact = ParserArtifact(
+        name=name,
+        kind="bank",
+        account_code=None,
+        bank_id=bank_id,
+        format_key=format_key,
+        match_rules={},
+        version=1,
+        status="active",
+        code="def parse(wb, ctx): return []",
+        primitives_imports=[],
+        sample_check_log={},
+        confidence=0.9,
+        created_by="test",
+        created_at=datetime.now(),
+    )
+    db.add(artifact)
+    db.commit()
+    db.refresh(artifact)
+    return artifact
 
 
 def test_get_preview_manual_excel_returns_unified_schema(db_session, chart_of_accounts, tmp_path, monkeypatch):
@@ -102,3 +126,194 @@ def test_update_row_unmatched_saves_none_and_preserves_input(db_session, chart_o
     assert ev.entity_code is None
     assert ev.entity_name == "NO_SUCH_ENTITY"
     assert result["row"]["_errors"]
+
+
+# ── bank preview tests ──
+
+
+def test_bank_preview_uses_build_context_not_old_match(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    """_build_bank_preview 不再引用 _match_active_parser_artifact"""
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+
+    batch = add_import_batch(db_session, batch_code="BANK-PV-001", source_type="bank", source_name="bank.xlsx")
+
+    monkeypatch.setattr(bank_svc, "DATA_DIR", str(tmp_path))
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    file_data = make_xlsx([
+        ["Date", "Summary", "Income"],
+        ["2026-04-24", "test", "100"],
+    ])
+    (upload_dir / f"{batch.batch_code}_bank.xlsx").write_bytes(file_data)
+
+    # Ensure old function doesn't exist — _build_bank_preview should still work
+    assert not hasattr(bank_svc, "_match_active_parser_artifact")
+
+    # No parser → unavailable, but should not crash
+    result = import_preview_service.get_preview(db_session, batch.batch_code)
+    assert result["parser_status"] == "unavailable"
+    assert "bank_resolution" in result
+
+
+def test_bank_preview_with_parser_creates_fund_events(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    """bank 批次 parser matched 时写入 FundEvent 并返回预览"""
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+    artifact = _add_parser_artifact(db_session)
+
+    batch = add_import_batch(db_session, batch_code="BANK-PV-002", source_type="bank", source_name="bank.xlsx")
+
+    monkeypatch.setattr(bank_svc, "DATA_DIR", str(tmp_path))
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    file_data = make_xlsx([
+        ["Date", "Summary", "Income"],
+        ["2026-04-24", "test", "100"],
+    ])
+    (upload_dir / f"{batch.batch_code}_bank.xlsx").write_bytes(file_data)
+
+    canonical_rows = [{
+        "business_date": date(2026, 4, 24),
+        "entity_code": entity.entity_code,
+        "entity_name": entity.short_name,
+        "account_code": account.account_code,
+        "account_name": account.account_alias,
+        "summary": "test row",
+        "counterparty": "",
+        "amount_in": 100.0,
+        "amount_out": 0,
+        "rolling_balance": None,
+        "state": "正常",
+        "source": "网银导入",
+    }]
+
+    with patch.object(bank_svc.artifact_runtime, "run_parser", return_value=iter(canonical_rows)):
+        result = import_preview_service.get_preview(db_session, batch.batch_code)
+
+    assert result["total_count"] == 1
+    events = db_session.query(FundEvent).filter(FundEvent.batch_id == batch.id).all()
+    assert len(events) == 1
+    assert events[0].parser_artifact_id == artifact.id
+
+
+def test_bank_preview_no_parser_returns_context(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    """parser_match none/conflict 时返回 parser_status=unavailable 且带 context"""
+    batch = add_import_batch(db_session, batch_code="BANK-PV-003", source_type="bank", source_name="bank.xlsx")
+
+    monkeypatch.setattr(bank_svc, "DATA_DIR", str(tmp_path))
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    file_data = make_xlsx([
+        ["Date", "Summary", "Income"],
+        ["2026-04-24", "test", "100"],
+    ])
+    (upload_dir / f"{batch.batch_code}_bank.xlsx").write_bytes(file_data)
+
+    result = import_preview_service.get_preview(db_session, batch.batch_code)
+    assert result["parser_status"] == "unavailable"
+    assert "bank_resolution" in result
+    assert "account_attribution" in result
+    assert "parser_match" in result
+    assert result["parser_match"]["matched"] is False
+
+
+def test_bank_commit_does_not_call_bank_svc_commit(db_session, chart_of_accounts):
+    """bank 批次 commit 不调用 bank_svc.commit()"""
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+
+    batch = add_import_batch(db_session, batch_code="BANK-CM-001", source_type="bank", status="previewed")
+    ev = FundEvent(
+        batch_id=batch.id,
+        business_date=date(2026, 4, 24),
+        entity_code=entity.entity_code,
+        entity_name=entity.short_name,
+        account_code=account.account_code,
+        account_name=account.account_alias,
+        summary="test",
+        counterparty="",
+        amount_in=100,
+        amount_out=0,
+        state="待确认",
+        source="网银导入",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db_session.add(ev)
+    db_session.commit()
+
+    # bank_svc.commit should not exist or be callable for this path
+    with patch.object(bank_svc, "commit", side_effect=AssertionError("should not call bank_svc.commit")):
+        result = import_preview_service.commit(db_session, batch.batch_code)
+
+    assert result["committed_count"] == 1
+    ev_after = db_session.query(FundEvent).one()
+    assert ev_after.state == "正常"
+    assert ev_after.entity_code == entity.entity_code
+
+
+def test_bank_commit_rejects_abnormal_rows(db_session, chart_of_accounts):
+    """bank 批次 commit 拒绝异常行"""
+    entity = chart_of_accounts["entity"]
+
+    batch = add_import_batch(db_session, batch_code="BANK-CM-002", source_type="bank", status="previewed")
+    ev = FundEvent(
+        batch_id=batch.id,
+        business_date=date(2026, 4, 24),
+        entity_code=entity.entity_code,
+        entity_name=entity.short_name,
+        account_code=None,  # missing → abnormal
+        account_name="",
+        summary="test",
+        counterparty="",
+        amount_in=100,
+        amount_out=0,
+        state="待确认",
+        source="网银导入",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db_session.add(ev)
+    db_session.commit()
+
+    try:
+        import_preview_service.commit(db_session, batch.batch_code)
+        assert False, "should have raised"
+    except ValueError as e:
+        assert "异常行" in str(e)
+
+
+def test_bank_commit_preserves_user_edits(db_session, chart_of_accounts):
+    """bank 批次 commit 保留用户编辑后的数据"""
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+
+    batch = add_import_batch(db_session, batch_code="BANK-CM-003", source_type="bank", status="previewed")
+    ev = FundEvent(
+        batch_id=batch.id,
+        business_date=date(2026, 4, 24),
+        entity_code=entity.entity_code,
+        entity_name="用户编辑后的单位名",
+        account_code=account.account_code,
+        account_name=account.account_alias,
+        summary="用户编辑后的摘要",
+        counterparty="某对手方",
+        amount_in=999.99,
+        amount_out=0,
+        state="待确认",
+        source="网银导入",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db_session.add(ev)
+    db_session.commit()
+
+    result = import_preview_service.commit(db_session, batch.batch_code)
+    assert result["committed_count"] == 1
+
+    ev_after = db_session.query(FundEvent).one()
+    assert ev_after.state == "正常"
+    assert ev_after.entity_name == "用户编辑后的单位名"
+    assert ev_after.summary == "用户编辑后的摘要"
+    assert float(ev_after.amount_in) == 999.99

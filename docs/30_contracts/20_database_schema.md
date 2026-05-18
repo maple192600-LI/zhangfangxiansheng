@@ -396,6 +396,9 @@ CREATE TABLE parser_artifacts (
   name VARCHAR(100) NOT NULL,
   kind VARCHAR(20) NOT NULL,
   account_code VARCHAR(50),
+  bank_id INTEGER REFERENCES banks(id) ON DELETE SET NULL,
+  format_key VARCHAR(100),
+  match_rules JSON NOT NULL DEFAULT '{}',
   version INTEGER NOT NULL DEFAULT 1,
   status VARCHAR(20) NOT NULL DEFAULT 'draft',
   code TEXT NOT NULL,
@@ -413,9 +416,12 @@ CREATE TABLE parser_artifacts (
 );
 CREATE INDEX idx_parser_artifacts_account ON parser_artifacts(account_code, status);
 CREATE INDEX idx_parser_artifacts_kind ON parser_artifacts(kind, status);
+CREATE INDEX idx_parser_artifacts_bank_format ON parser_artifacts(kind, bank_id, format_key, status);
 ```
 
-### §T4.2 · `rule_artifacts`
+`account_code` 字段说明：对银行导入场景，此字段不应作为主匹配键。银行导入应按 bank/format 级匹配 parser（09D 已交付），不按 account_code 匹配。此字段保留作为旧兼容或非银行场景字段。
+
+`bank_id` + `format_key`：银行导入 parser 的匹配键。bank/format 级 parser 服务同银行同格式的所有账户。
 
 ```sql
 CREATE TABLE rule_artifacts (

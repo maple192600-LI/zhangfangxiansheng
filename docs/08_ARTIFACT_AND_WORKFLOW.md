@@ -8,7 +8,8 @@
 - **表：** `parser_artifacts`
 - **状态流转：** `draft` → `active` → `retired`
 - **当前能力：** 创建、编辑、审核（approve/reject）、激活 — **全部可用**
-- **阻断：** `backend/core/artifact_runtime.py::run_parser` 是 `NotImplementedError`，无法执行
+- **已实现：** `backend/core/artifact_runtime.py::run_parser` 已实现 ParserArtifact deterministic runtime（底层执行器）
+- **未实现：** 银行格式识别（Bank Format Identification）、身份线索提取（Identity Hints Extraction）、主数据匹配（Master Data Matching）、账户归属（Account Attribution）— 这些是独立于 Parser Runtime 的能力，详见 [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md)
 
 ### RuleArtifact
 
@@ -34,7 +35,7 @@
 
 AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`datetime`、`decimal`、`typing`、`re`、`collections` 等。
 
-沙箱配置已定义但实际执行器尚未实现（Phase E1 / H1 待交付）。
+沙箱配置已定义。`run_parser` 已实现执行器；`run_rule` 执行器尚未实现（Phase H1 待交付）。
 
 ## Workflow 系统
 

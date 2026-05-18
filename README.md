@@ -105,7 +105,7 @@ ZF_LOG_LEVEL=INFO
 ## 当前开发状态
 
 - **Agent 系统**：已存在。通用 Agent 支持会话、工具调用、记忆、技能管理。
-- **Artifact runtime 阻断**：`backend/core/artifact_runtime.py` 中的 `run_parser` 和 `run_rule` 均为 `NotImplementedError`（contract placeholder），ParserArtifact 和 RuleArtifact 可创建和审核，但无法通过 artifact runtime 执行。Phase E1 / H1 待交付。
+- **Artifact runtime**：`run_parser` 已实现（ParserArtifact deterministic runtime，底层执行器）；`run_rule` 仍为 `NotImplementedError`（Phase H1 待交付）。ParserArtifact 可创建、审核、执行。RuleArtifact 可创建和审核，但无法通过 artifact runtime 执行。银行格式识别、身份线索提取、主数据匹配、账户归属均尚未实现（详见 `docs/14_BANK_IMPORT_GENERALIZATION.md`）。
 - **手工流水快速录入**：已有独立路径可直接写入 FundEvent，不应被重建。
 - **文档体系**：docs 已完成重建和旧文档物理清理。14 个 active docs + 4 个受保护契约文件。
 - **API 端点**：当前为 166 effective endpoints，0 duplicate route identities。来源：`python tools/guards/check_api_inventory.py --list`。

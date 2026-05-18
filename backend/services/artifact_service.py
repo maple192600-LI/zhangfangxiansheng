@@ -45,6 +45,9 @@ def create_parser_draft(db: Session, data: Any) -> dict[str, Any]:
         name=data.name,
         kind=data.kind.value if hasattr(data.kind, "value") else data.kind,
         account_code=data.account_code,
+        bank_id=data.bank_id,
+        format_key=data.format_key,
+        match_rules=data.match_rules or {},
         version=version,
         status="draft",
         code=data.code,
@@ -65,12 +68,26 @@ def approve_parser_artifact(db: Session, artifact_id: int, approver: str) -> dic
         raise ValueError(f"Parser artifact {artifact_id} 不存在")
     if row.status != "draft":
         raise ValueError(f"Parser artifact {artifact_id} 状态为 {row.status}，只有 draft 可审批")
-    # retire current active of same account+kind
-    db.query(ParserArtifact).filter(
-        ParserArtifact.account_code == row.account_code,
-        ParserArtifact.kind == row.kind,
-        ParserArtifact.status == "active",
-    ).update({"status": "retired"})
+
+    # Retire current active parsers using bank/format for bank kind, account_code otherwise
+    if row.kind == "bank" and row.bank_id is not None:
+        retire_q = db.query(ParserArtifact).filter(
+            ParserArtifact.kind == "bank",
+            ParserArtifact.bank_id == row.bank_id,
+            ParserArtifact.status == "active",
+        )
+        if row.format_key is not None:
+            retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
+        else:
+            retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
+        retire_q.update({"status": "retired"})
+    else:
+        db.query(ParserArtifact).filter(
+            ParserArtifact.account_code == row.account_code,
+            ParserArtifact.kind == row.kind,
+            ParserArtifact.status == "active",
+        ).update({"status": "retired"})
+
     row.status = "active"
     row.approved_by = approver
     row.approved_at = datetime.now()
@@ -236,6 +253,9 @@ def parser_to_dict(row: ParserArtifact, *, include_code: bool = False) -> dict[s
         "name": row.name,
         "kind": row.kind,
         "account_code": row.account_code,
+        "bank_id": row.bank_id,
+        "format_key": row.format_key,
+        "match_rules": row.match_rules or {},
         "version": row.version,
         "status": row.status,
         "primitives_imports": row.primitives_imports,

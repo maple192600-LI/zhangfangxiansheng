@@ -58,10 +58,10 @@ tests/         ← pytest 测试
 
 | 阻断点 | 位置 | 状态 |
 |--------|------|------|
-| `run_parser` | `backend/core/artifact_runtime.py:109` | NotImplementedError，Phase E1 待交付 |
-| `run_rule` | `backend/core/artifact_runtime.py:153` | NotImplementedError，Phase H1 待交付 |
+| `run_parser` | `backend/core/artifact_runtime.py` | 已实现 ParserArtifact deterministic runtime |
+| `run_rule` | `backend/core/artifact_runtime.py` | NotImplementedError，Phase H1 待交付 |
 
-在 artifact runtime 实现之前，不应把 parser/rule 链路写成已完成。手工流水快速录入已有独立路径，不应被重建。
+`run_parser` 已实现，ParserArtifact 可真实解析 xlsx 并返回 CANONICAL_12 rows。注意：这是底层确定性执行器，不等于银行通用识别（银行格式识别、身份线索提取、主数据匹配、账户归属均尚未实现，详见 `docs/14_BANK_IMPORT_GENERALIZATION.md`）。`run_rule` 仍为阻断。
 
 ## V1 范围
 

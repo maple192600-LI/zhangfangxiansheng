@@ -239,6 +239,9 @@ class ParserArtifact(Base):
     name = Column(String(100), nullable=False)
     kind = Column(String(20), nullable=False)
     account_code = Column(String(50), nullable=True)
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="SET NULL"), nullable=True)
+    format_key = Column(String(100), nullable=True)
+    match_rules = Column(JSON, nullable=False, default=dict, server_default="{}")
     version = Column(Integer, nullable=False, default=1, server_default="1")
     status = Column(String(20), nullable=False, default="draft", server_default="draft")
     code = Column(Text, nullable=False)
@@ -252,6 +255,7 @@ class ParserArtifact(Base):
     updated_at = Column(DateTime, nullable=True, onupdate=datetime.now)
 
     fund_events = relationship("FundEvent", back_populates="parser_artifact")
+    bank = relationship("Bank")
 
     __table_args__ = (
         CheckConstraint("kind IN ('bank','manual')", name="ck_parser_artifacts_kind"),
@@ -259,6 +263,7 @@ class ParserArtifact(Base):
         Index("uq_parser_artifacts_name_version", "name", "version", unique=True),
         Index("idx_parser_artifacts_account", "account_code", "status"),
         Index("idx_parser_artifacts_kind", "kind", "status"),
+        Index("idx_parser_artifacts_bank_format", "kind", "bank_id", "format_key", "status"),
     )
 
 

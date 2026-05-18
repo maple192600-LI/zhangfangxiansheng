@@ -1,7 +1,7 @@
 """Tests for artifact runtime guard rails.
 
 Verifies:
-- run_parser / run_rule still raise NotImplementedError
+- run_rule still raises NotImplementedError
 - artifact_runtime does not import FundAgent or fund_skill_run
 - artifact_ast_guard is importable and functional
 - artifact_sandbox config is defined
@@ -15,13 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-# ── Stub behavior ──
-
-def test_run_parser_still_not_implemented():
-    from core.artifact_runtime import run_parser
-    with pytest.raises(NotImplementedError, match="Phase E1"):
-        run_parser(None, 1, "/tmp/test.xlsx")
-
+# ── run_rule still NotImplementedError ──
 
 def test_run_rule_still_not_implemented():
     from core.artifact_runtime import run_rule
@@ -109,15 +103,3 @@ def test_no_ai_runtime_still_blocks():
     with no_ai_runtime():
         with pytest.raises(RuntimeAICallBlocked):
             urllib.request.urlopen("http://example.com")
-
-
-# ── Docstring mentions Phase E1 / H1 ──
-
-def test_run_parser_docstring_mentions_e1():
-    from core.artifact_runtime import run_parser
-    assert "Phase E1" in run_parser.__doc__
-
-
-def test_run_rule_docstring_mentions_h1():
-    from core.artifact_runtime import run_rule
-    assert "Phase H1" in run_rule.__doc__

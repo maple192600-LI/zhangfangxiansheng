@@ -93,9 +93,7 @@ def get_account_by_code(code: str) -> Account
 - `register_alias`：把成功匹配的新别名写入 `account_aliases`
 - `get_account_by_code`：精确查询
 
----
-
-## §P5 · `fund.primitives.base_queries` · 6 个
+**银行导入扩展**：银行导入需要从文件中提取账号、户名、银行名等多维度身份线索，然后按多维度综合匹配主数据。当前 `master_match` 只提供单线索匹配，银行导入匹配能力将在 09C/09E 中独立实现。详见 [`../14_BANK_IMPORT_GENERALIZATION.md`](../14_BANK_IMPORT_GENERALIZATION.md)。
 
 ```python
 def opening_balance(account_code: str, as_of: date) -> Decimal

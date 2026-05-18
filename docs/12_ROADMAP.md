@@ -26,8 +26,23 @@
 
 ### Artifact Runtime 实现
 
-- [ ] Phase E1：`run_parser` 实现（确定性解析执行器）
+- [x] Phase E1：`run_parser` 实现（确定性解析执行器）
 - [ ] Phase H1：`run_rule` 实现（确定性规则执行器）
+
+### 银行通用识别
+
+Parser Runtime（Phase E1）只解决"代码能不能执行"。银行通用识别是独立能力，尚未实现。完整契约见 [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md)。
+
+- [x] Step 09B：建立银行通用识别 + 主数据归属匹配能力契约和文档
+- [x] Step 09C：银行文件识别 + 身份线索提取服务（后端基础完成，尚未接入导入流程）
+- [x] Step 09C2：加固银行身份匹配（移除硬编码银行词典、DB 驱动归一化、AccountAlias、收紧 fallback）
+- [x] Step 09C3：银行原始文本候选收集 + DB 驱动短名/bank_code 识别
+- [x] Step 09D：ParserArtifact bank/format 级匹配 + 银行导入后端接入（身份提取/银行解析/账户归属/parser匹配全部接入上传阶段）
+- [x] Step 09D2：修复上传结果预览 bank 闭环 + 银行歧义语义（预览使用 bank/format 匹配、commit 不重新 parser、歧义不静默降级）
+- [x] Step 09E：主数据账户/单位归属匹配服务（后端基础完成，尚未接入导入流程）
+- [ ] Step 09F：parser 硬编码 guard
+- [ ] Step 09G：前端展示银行识别和账户归属匹配结果
+- [ ] Step 09H：多银行/多账户/多线索场景端到端验收
 
 ### 导入闭环
 
