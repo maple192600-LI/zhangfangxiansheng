@@ -8,6 +8,7 @@ parser code are test fixtures, not a claim of bank-specific capability.
 import os
 import sys
 import tempfile
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -464,3 +465,71 @@ def test_many_rows_no_false_timeout(db_session, xlsx_file, monkeypatch):
     assert len(rows) == 2000
     assert rows[0]["summary"] == "row 0"
     assert rows[-1]["summary"] == "row 1999"
+
+
+# ── Fix D: date type preservation across worker subprocess ──
+
+DATE_TYPES_CODE = '''
+from datetime import date, datetime
+
+def parse(wb, ctx):
+    yield {
+        "business_date": datetime(2026, 5, 1, 15, 30),
+        "entity_code": "E001",
+        "entity_name": "TestEntity",
+        "account_code": "A001",
+        "account_name": "TestAccount",
+        "summary": "datetime row",
+        "counterparty": None,
+        "amount_in": 100,
+        "amount_out": 0,
+        "rolling_balance": None,
+        "source": "网银导入",
+    }
+    yield {
+        "business_date": date(2026, 5, 2),
+        "entity_code": "E002",
+        "entity_name": "TestEntity",
+        "account_code": "A002",
+        "account_name": "TestAccount",
+        "summary": "date row",
+        "counterparty": None,
+        "amount_in": 200,
+        "amount_out": 0,
+        "rolling_balance": None,
+        "source": "网银导入",
+    }
+    yield {
+        "business_date": "2026-05-03T09:15:00",
+        "entity_code": "E003",
+        "entity_name": "TestEntity",
+        "account_code": "A003",
+        "account_name": "TestAccount",
+        "summary": "iso datetime string row",
+        "counterparty": None,
+        "amount_in": 300,
+        "amount_out": 0,
+        "rolling_balance": None,
+        "source": "网银导入",
+    }
+'''
+
+
+def test_datetime_business_date_normalized_to_date(db_session, xlsx_file):
+    """datetime(2026,5,1,15,30) → date(2026,5,1) after subprocess round-trip."""
+    art = _make_artifact(db_session, code=DATE_TYPES_CODE)
+    rows = list(run_parser(db_session, art.id, xlsx_file))
+    assert len(rows) == 3
+
+    # Row 0: datetime → date
+    assert rows[0]["business_date"] == date(2026, 5, 1)
+    assert isinstance(rows[0]["business_date"], date)
+    assert not isinstance(rows[0]["business_date"], datetime)
+
+    # Row 1: date stays date
+    assert rows[1]["business_date"] == date(2026, 5, 2)
+    assert isinstance(rows[1]["business_date"], date)
+
+    # Row 2: ISO datetime string → date
+    assert rows[2]["business_date"] == date(2026, 5, 3)
+    assert isinstance(rows[2]["business_date"], date)

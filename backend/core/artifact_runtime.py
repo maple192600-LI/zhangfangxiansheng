@@ -127,7 +127,7 @@ def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
             out[key] = str(v)
     bd = out.get("business_date")
     if isinstance(bd, datetime):
-        out["business_date"] = bd.isoformat()
+        out["business_date"] = bd.date().isoformat()
     elif isinstance(bd, date) and not isinstance(bd, datetime):
         out["business_date"] = bd.isoformat()
     return out
@@ -281,12 +281,15 @@ def _coerce_row(artifact_id: int, row: dict[str, Any], index: int) -> dict[str, 
     if isinstance(bd, datetime):
         out["business_date"] = bd.date()
     elif isinstance(bd, str) and bd:
-        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日"):
-            try:
-                out["business_date"] = datetime.strptime(bd, fmt).date()
-                break
-            except ValueError:
-                continue
+        try:
+            out["business_date"] = datetime.fromisoformat(bd).date()
+        except ValueError:
+            for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日"):
+                try:
+                    out["business_date"] = datetime.strptime(bd, fmt).date()
+                    break
+                except ValueError:
+                    continue
     return out
 
 
