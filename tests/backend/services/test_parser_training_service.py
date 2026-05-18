@@ -424,3 +424,109 @@ def parse(wb, ctx):
     assert err is None
     assert len(rows) == 1
     assert rows[0]["summary"] == "test"
+
+
+# ── 12C: agents endpoint + agent-session validation + starter prompt ──
+
+
+def test_list_active_agents_returns_active(db_session):
+    """GET /parser-training/agents returns only active agents."""
+    from db.tables import Agent
+    active = Agent(
+        agent_code="A_TEST_1", display_name="测试智能体1",
+        status="active", ai_config_id=None, workspace_path="/tmp/a1",
+    )
+    inactive = Agent(
+        agent_code="A_TEST_2", display_name="测试智能体2",
+        status="inactive", ai_config_id=None, workspace_path="/tmp/a2",
+    )
+    db_session.add_all([active, inactive])
+    db_session.commit()
+
+    from api.parser_training import list_active_agents
+    result = list_active_agents(db=db_session)
+    data = result["data"]
+    assert len(data) == 1
+    assert data[0]["display_name"] == "测试智能体1"
+    assert data[0]["agent_code"] == "A_TEST_1"
+
+
+def test_list_active_agents_returns_empty_when_none(db_session):
+    """GET /parser-training/agents returns empty array when no active agents."""
+    from api.parser_training import list_active_agents
+    result = list_active_agents(db=db_session)
+    data = result["data"]
+    assert data == []
+
+
+def test_agent_session_requires_explicit_agent_id(db_session, tmp_path, monkeypatch):
+    """POST agent-session with non-existent agent returns error."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=99999)
+    result = create_agent_session(created["job_code"], body, db=db_session)
+    assert result["code"] != 0
+
+
+def test_agent_session_rejects_inactive_agent(db_session, tmp_path, monkeypatch):
+    """POST agent-session with inactive agent returns error."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    inactive = Agent(
+        agent_code="A_INACTIVE", display_name="未启用智能体",
+        status="inactive", ai_config_id=None, workspace_path="/tmp/ai",
+    )
+    db_session.add(inactive)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=inactive.id)
+    result = create_agent_session(created["job_code"], body, db=db_session)
+    assert result["code"] != 0
+
+
+def test_starter_prompt_contains_required_terms(db_session, tmp_path, monkeypatch):
+    """Starter prompt includes parser_training_update_candidate and job_code."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job = parser_training_service.get_job(db_session, created["job_code"])
+
+    from api.parser_training import _build_starter_prompt
+    prompt = _build_starter_prompt(job)
+
+    assert "parser_training_update_candidate" in prompt
+    assert created["job_code"] in prompt
+    assert "用户选中的现有智能体" in prompt
+
+
+def test_starter_prompt_no_rule_agent(db_session, tmp_path, monkeypatch):
+    """Starter prompt must NOT contain '规则智能体'."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job = parser_training_service.get_job(db_session, created["job_code"])
+
+    from api.parser_training import _build_starter_prompt
+    prompt = _build_starter_prompt(job)
+
+    assert "规则智能体" not in prompt
+    assert "用户最终审核的是解析结果表格，不是代码" in prompt

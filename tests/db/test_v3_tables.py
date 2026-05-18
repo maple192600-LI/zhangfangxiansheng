@@ -102,6 +102,8 @@ def migrated_engine(tmp_db_path):
         "account_resolution_evidence",
         "account_resolution_attempts",
         "source_files",
+        # 010 migration 创建的表
+        "parser_training_jobs",
     ]
     with engine.begin() as conn:
         for t in v3_tables:

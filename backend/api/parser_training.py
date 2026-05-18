@@ -132,7 +132,7 @@ def _build_starter_prompt(job: dict) -> str:
     context = job.get("context", {})
     job_code = job.get("job_code", "")
 
-    prompt = f"""请为以下银行流水样本生成解析规则。
+    prompt = f"""你是用户选中的现有智能体，被邀请协助为银行流水生成解析规则。你不是专用解析引擎，只是当前任务需要你帮忙。
 
 ## 样本信息
 - 文件名: {filename}
@@ -149,12 +149,12 @@ def _build_starter_prompt(job: dict) -> str:
     accounts = context.get("accounts", [])
 
     if entities:
-        prompt += "\n## 系统中的法人单位\n"
+        prompt += "\n## 系统中的法人单位（已由系统自动提供，不需要用户再提供）\n"
         for e in entities[:10]:
             prompt += f"- {e['entity_code']}: {e['name']}\n"
 
     if banks:
-        prompt += "\n## 系统中的银行\n"
+        prompt += "\n## 系统中的银行（已由系统自动提供）\n"
         for b in banks[:10]:
             prompt += f"- {b.get('bank_name', '')}"
             if b.get("short_name"):
@@ -162,14 +162,17 @@ def _build_starter_prompt(job: dict) -> str:
             prompt += "\n"
 
     if accounts:
-        prompt += "\n## 系统中的银行账户\n"
+        prompt += "\n## 系统中的银行账户（已由系统自动提供）\n"
         for a in accounts[:10]:
             prompt += f"- {a['account_code']}: {a['account_alias']}"
             if a.get("account_last_four"):
                 prompt += f" (后四位: {a['account_last_four']})"
             prompt += "\n"
 
-    prompt += """
+    prompt += f"""
+## 你的任务
+根据样本文件结构和系统提供的主数据上下文，生成一个候选 parser。
+
 ## 输出要求
 定义 parse(wb, ctx) 函数，返回 CANONICAL_12 字段列表:
 business_date, entity_code, entity_name, account_code, account_name, summary, counterparty, amount_in, amount_out, rolling_balance, state, source
@@ -177,9 +180,14 @@ business_date, entity_code, entity_name, account_code, account_name, summary, co
 ## 禁止事项
 - 不允许硬编码 DEFAULT_ACCOUNT_CODE / DEFAULT_ENTITY_CODE
 - 不允许固定 account_code / entity_code 作为默认值
-- Parser 只负责读取文件结构，不负责账户归属
+- Parser 只负责读取文件结构和标准字段，不负责把某个单位/账户硬编码进去
+- 不允许要求用户手工提供主数据，系统已经在上方给出受控主数据摘要
 
-完成后请调用 parser_training_update_candidate 工具提交候选代码。
+## 完成方式
+完成后请调用 parser_training_update_candidate 工具提交候选代码：
+parser_training_update_candidate(job_code="{job_code}", code=你的代码, notes=说明)
+
+注意：用户最终审核的是解析结果表格，不是代码。
 """
 
     return prompt

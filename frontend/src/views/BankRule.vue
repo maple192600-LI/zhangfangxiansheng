@@ -71,9 +71,9 @@
           <n-card title="AI 协作生成规则" size="small">
             <template v-if="agents.length === 0">
               <div style="font-size:13px;color:#999;margin-bottom:8px;">
-                系统中没有可用的智能体。请先在「AI智能体」页面创建一个智能体并配置 AI。
+                当前没有可用的协作智能体。请先在左侧「AI智能体」模块确认已有智能体已启用并配置 AI 模型，然后回到本页刷新列表。
               </div>
-              <n-button @click="goToAgentList">前往创建智能体</n-button>
+              <n-button @click="loadAgents">刷新智能体列表</n-button>
             </template>
             <template v-else>
               <n-space vertical>
@@ -90,7 +90,7 @@
                     :loading="agentLoading"
                     :disabled="!selectedAgentId || !job.job_code"
                   >
-                    创建协作会话
+                    让该智能体协助生成规则
                   </n-button>
                   <n-button v-if="agentSession.session_id" @click="goToAgent">
                     打开会话
@@ -99,7 +99,7 @@
               </n-space>
             </template>
             <div v-if="agentSession.session_id" style="margin-top:8px;font-size:13px;color:#666;">
-              已关联会话 #{{ agentSession.session_id }}（{{ agentSession.agent_name }}）
+              已创建协作会话：{{ agentSession.agent_name }}
             </div>
           </n-card>
 
@@ -254,9 +254,9 @@ async function handleFileChange({ file }) {
   const fd = new FormData()
   fd.append('file', file.file)
   try {
-    const res = await createTrainingJob(fd)
-    if (res.data?.code === 0) {
-      job.value = res.data.data
+    const data = await createTrainingJob(fd)
+    if (data) {
+      job.value = data
       trialResult.value = null
       saveSuccess.value = false
       parserName.value = ''
@@ -269,9 +269,9 @@ async function handleFileChange({ file }) {
 async function refreshJob() {
   if (!job.value.job_code) return
   try {
-    const res = await getJob(job.value.job_code)
-    if (res.data?.code === 0) {
-      job.value = res.data.data
+    const data = await getJob(job.value.job_code)
+    if (data) {
+      job.value = data
       if (job.value.trial_result && !trialResult.value) {
         trialResult.value = job.value.trial_result
       }
@@ -286,9 +286,9 @@ async function runTrial() {
   trialLoading.value = true
   trialResult.value = null
   try {
-    const res = await runCandidate(job.value.job_code)
-    if (res.data?.code === 0) {
-      trialResult.value = res.data.data
+    const data = await runCandidate(job.value.job_code)
+    if (data) {
+      trialResult.value = data
       await refreshJob()
     }
   } catch (e) {
@@ -302,8 +302,8 @@ async function saveRule() {
   if (!parserName.value || !job.value.job_code) return
   saveLoading.value = true
   try {
-    const res = await saveParser(job.value.job_code, { name: parserName.value })
-    if (res.data?.code === 0) {
+    const data = await saveParser(job.value.job_code, { name: parserName.value })
+    if (data) {
       saveSuccess.value = true
       loadParsers()
       await refreshJob()
@@ -317,9 +317,9 @@ async function saveRule() {
 
 async function loadAgents() {
   try {
-    const res = await listActiveAgents()
-    if (res.data?.code === 0) {
-      agents.value = res.data.data || []
+    const data = await listActiveAgents()
+    if (Array.isArray(data)) {
+      agents.value = data
       agentOptions.value = agents.value.map(a => ({
         label: a.display_name,
         value: a.id,
@@ -334,9 +334,9 @@ async function openAgentSession() {
   if (!job.value.job_code || !selectedAgentId.value) return
   agentLoading.value = true
   try {
-    const res = await createAgentSession(job.value.job_code, { agent_id: selectedAgentId.value })
-    if (res.data?.code === 0) {
-      agentSession.value = res.data.data
+    const data = await createAgentSession(job.value.job_code, { agent_id: selectedAgentId.value })
+    if (data) {
+      agentSession.value = data
     }
   } catch (e) {
     console.error('创建会话失败', e)
@@ -351,15 +351,11 @@ function goToAgent() {
   }
 }
 
-function goToAgentList() {
-  router.push({ name: 'agent-review' })
-}
-
 async function loadParsers() {
   try {
-    const res = await listParsers({ kind: 'bank' })
-    if (res.data?.code === 0) {
-      parsers.value = res.data.data || []
+    const data = await listParsers({ kind: 'bank' })
+    if (Array.isArray(data)) {
+      parsers.value = data
     }
   } catch (e) {
     console.error('加载规则列表失败', e)
