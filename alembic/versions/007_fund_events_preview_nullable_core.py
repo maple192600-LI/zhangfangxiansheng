@@ -19,6 +19,22 @@ def upgrade() -> None:
         batch_op.alter_column("entity_code", nullable=True)
         batch_op.alter_column("account_code", nullable=True)
         batch_op.create_check_constraint(
+            "ck_fund_events_amount_mutex",
+            "NOT (amount_in > 0 AND amount_out > 0)",
+        )
+        batch_op.create_check_constraint(
+            "ck_fund_events_amount_nonneg",
+            "amount_in >= 0 AND amount_out >= 0",
+        )
+        batch_op.create_check_constraint(
+            "ck_fund_events_state_enum",
+            "state IN ('正常','待确认','异常','已作废')",
+        )
+        batch_op.create_check_constraint(
+            "ck_fund_events_source_enum",
+            "source IN ('网银导入','手工录入','现金录入','票据录入','财务公司单据')",
+        )
+        batch_op.create_check_constraint(
             "ck_fund_events_normal_core_required",
             "state != '正常' OR (business_date IS NOT NULL AND entity_code IS NOT NULL AND entity_code != '' AND account_code IS NOT NULL AND account_code != '')",
         )
@@ -30,3 +46,19 @@ def downgrade() -> None:
         batch_op.alter_column("account_code", nullable=False)
         batch_op.alter_column("entity_code", nullable=False)
         batch_op.alter_column("business_date", nullable=False)
+        batch_op.create_check_constraint(
+            "ck_fund_events_amount_mutex",
+            "NOT (amount_in > 0 AND amount_out > 0)",
+        )
+        batch_op.create_check_constraint(
+            "ck_fund_events_amount_nonneg",
+            "amount_in >= 0 AND amount_out >= 0",
+        )
+        batch_op.create_check_constraint(
+            "ck_fund_events_state_enum",
+            "state IN ('正常','待确认','异常','已作废')",
+        )
+        batch_op.create_check_constraint(
+            "ck_fund_events_source_enum",
+            "source IN ('网银导入','手工录入','现金录入','票据录入','财务公司单据')",
+        )
