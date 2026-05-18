@@ -1,11 +1,9 @@
 """Tests for artifact runtime contract.
 
-Verifies:
-- run_parser executes active ParserArtifact and returns canonical rows
-- run_parser rejects missing, non-active, unsafe artifacts
-- run_rule still raises NotImplementedError
-- Structured exception hierarchy
-- Runtime guard behavior
+These are RUNTIME MECHANISM tests — they verify that the deterministic executor
+can load, validate, exec, and coerce artifact code. They do NOT verify bank
+generalization or account matching. Hardcoded entity/account codes in test
+parser code are test fixtures, not a claim of bank-specific capability.
 """
 import os
 import sys
@@ -83,6 +81,34 @@ def parse(wb, ctx):
         rolling_balance=None,
         source="网银导入",
     )]
+'''
+
+# Demonstrates the correct pattern: parser takes account from ctx, not hardcoded.
+CTX_PARSER_CODE = '''
+from fund.primitives.canonical import emit_row
+
+def parse(wb, ctx):
+    entity_code = ctx.get("entity_code", "")
+    entity_name = ctx.get("entity_name", "")
+    account_code = ctx.get("account_code", "")
+    account_name = ctx.get("account_name", "")
+    sheet = wb.active
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if not row or not row[0]:
+            continue
+        yield emit_row(
+            business_date=None,
+            entity_code=entity_code,
+            entity_name=entity_name,
+            account_code=account_code,
+            account_name=account_name,
+            summary=str(row[0]) if row[0] else "",
+            counterparty=None,
+            amount_in=0,
+            amount_out=0,
+            rolling_balance=None,
+            source="网银导入",
+        )
 '''
 
 
@@ -261,3 +287,25 @@ def test_no_ai_runtime_restores_after_exit():
     with no_ai_runtime():
         pass
     assert urllib.request.urlopen is original
+
+
+# ── ctx-based parser: account from ctx, not hardcoded ──
+
+def test_run_parser_uses_ctx_for_account(db_session, xlsx_file):
+    art = _make_artifact(db_session, code=CTX_PARSER_CODE)
+    ctx_a = {"entity_code": "ENT_A", "entity_name": "Unit A",
+             "account_code": "ACC_A", "account_name": "Account A"}
+    rows_a = list(run_parser(db_session, art.id, xlsx_file, ctx_a))
+    assert len(rows_a) >= 1
+    assert rows_a[0]["entity_code"] == "ENT_A"
+    assert rows_a[0]["account_code"] == "ACC_A"
+
+    ctx_b = {"entity_code": "ENT_B", "entity_name": "Unit B",
+             "account_code": "ACC_B", "account_name": "Account B"}
+    rows_b = list(run_parser(db_session, art.id, xlsx_file, ctx_b))
+    assert len(rows_b) >= 1
+    assert rows_b[0]["entity_code"] == "ENT_B"
+    assert rows_b[0]["account_code"] == "ACC_B"
+
+    # Same parser, same file, different ctx → different account归属
+    assert rows_a[0]["account_code"] != rows_b[0]["account_code"]

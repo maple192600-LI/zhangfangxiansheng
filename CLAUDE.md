@@ -61,7 +61,7 @@ tests/         ← pytest 测试
 | `run_parser` | `backend/core/artifact_runtime.py` | 已实现 ParserArtifact deterministic runtime |
 | `run_rule` | `backend/core/artifact_runtime.py` | NotImplementedError，Phase H1 待交付 |
 
-`run_parser` 已实现，ParserArtifact 可真实解析 xlsx 并返回 CANONICAL_12 rows。`run_rule` 仍为阻断。
+`run_parser` 已实现，ParserArtifact 可真实解析 xlsx 并返回 CANONICAL_12 rows。注意：这是底层确定性执行器，不等于银行通用识别（银行格式识别和账户归属匹配尚未实现）。`run_rule` 仍为阻断。
 
 ## V1 范围
 

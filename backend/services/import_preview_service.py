@@ -130,8 +130,6 @@ def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
                 batch.status = "previewed"
                 db.commit()
                 return _build_preview(db, batch)
-        except NotImplementedError:
-            return _bank_unavailable_preview(batch, "解析器运行时未实现，当前不能生成基础数据")
         except Exception as e:
             logger.error("网银解析失败: %s", e, exc_info=True)
             return _bank_unavailable_preview(batch, f"解析失败: {e}")
@@ -262,8 +260,8 @@ def commit(db: Session, batch_code: str) -> Dict[str, Any]:
         try:
             result = bank_svc.commit(db, batch_code, parser_artifact.id)
             return result
-        except NotImplementedError:
-            raise ValueError("解析器运行时未实现，无法提交")
+        except artifact_runtime.ArtifactRuntimeError as e:
+            raise ValueError(str(e))
 
     # manual paths: validate first, then change state
     events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).all()

@@ -27,6 +27,8 @@ Artifact runtime 状态：
 
 ParserArtifact 可创建、审核、执行。RuleArtifact 可创建和审核，但无法通过 artifact runtime 执行。
 
+银行格式识别和账户归属匹配尚未实现。`run_parser` 只是底层确定性执行器，不等于银行通用识别能力。
+
 手工流水快速录入路径已可直接写入 FundEvent，不应被重建。
 
 ## HARD RULES

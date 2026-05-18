@@ -29,6 +29,18 @@
 - [x] Phase E1：`run_parser` 实现（确定性解析执行器）
 - [ ] Phase H1：`run_rule` 实现（确定性规则执行器）
 
+### 银行通用识别
+
+Parser Runtime（Phase E1）只解决"代码能不能执行"。银行通用识别是独立能力，尚未实现。
+
+- [ ] Step 09B：建立银行通用识别能力契约和文档
+- [ ] Step 09C：银行文件识别 + format fingerprint 服务
+- [ ] Step 09D：ParserArtifact bank/format 级匹配（替代 account_code 匹配）
+- [ ] Step 09E：账户归属匹配服务
+- [ ] Step 09F：parser 硬编码 guard
+- [ ] Step 09G：前端展示银行识别和账户匹配结果
+- [ ] Step 09H：多银行/多账户端到端验收
+
 ### 导入闭环
 
 - [ ] 银行导入走 `run_parser` 路径
