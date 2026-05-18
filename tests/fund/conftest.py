@@ -102,6 +102,11 @@ def primitives_db(tmp_db_path):
         "workflow_runs",
         "workflow_versions",
         "workflows",
+        # 009 migration 创建的表，Base.metadata.create_all() 会提前创建，
+        # Alembic upgrade head 会再次创建，因此必须先 drop（子表在前）
+        "account_resolution_evidence",
+        "account_resolution_attempts",
+        "source_files",
     ]
     with new_engine.begin() as conn:
         for t in v3_tables:
