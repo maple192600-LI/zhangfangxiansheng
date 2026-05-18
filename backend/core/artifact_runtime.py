@@ -9,6 +9,9 @@ Implementation status:
 """
 from __future__ import annotations
 
+import json
+import multiprocessing
+import pickle
 import traceback
 from datetime import date, datetime
 from decimal import Decimal
@@ -19,7 +22,7 @@ from openpyxl.workbook.workbook import Workbook
 from sqlalchemy.orm import Session
 
 from core.artifact_ast_guard import PrimitivesViolationError
-from core.artifact_sandbox import get_default_sandbox_config
+from core import artifact_sandbox
 from core.runtime_guard import no_ai_runtime
 from db.tables import ParserArtifact
 
@@ -71,6 +74,64 @@ _SAFE_BUILTINS = {
 }
 
 
+def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
+    """Worker process: load workbook, exec parser, send rows back via pipe."""
+    try:
+        from openpyxl import load_workbook as _load_wb
+        wb = _load_wb(file_path, data_only=True)
+        try:
+            ns = {"__builtins__": _SAFE_BUILTINS}
+            ctx = json.loads(ctx_json) if ctx_json else {}
+            code_obj = compile(code_str, "<parser_artifact_worker>", "exec")
+
+            with no_ai_runtime():
+                exec(code_obj, ns)
+                parse_fn = ns.get("parse")
+                if parse_fn is None or not callable(parse_fn):
+                    conn.send(("error", "artifact code must define a callable 'parse(wb, ctx)' function"))
+                    conn.close()
+                    return
+                gen = parse_fn(wb, ctx)
+                iterator = iter(gen)
+                count = 0
+                while count < max_output_rows:
+                    try:
+                        row = next(iterator)
+                    except StopIteration:
+                        break
+                    if not isinstance(row, dict):
+                        conn.send(("error", f"row {count}: expected dict, got {type(row).__name__}"))
+                        conn.close()
+                        return
+                    # Convert non-serializable types before sending
+                    conn.send(("row", _serialize_row(row)))
+                    count += 1
+        except ArtifactRuntimeError as e:
+            conn.send(("runtime_error", {"artifact_id": e.artifact_id, "msg": str(e), "type": type(e).__name__}))
+        except Exception as e:
+            conn.send(("error", f"{type(e).__name__}: {e}\n{traceback.format_exc()}"))
+        finally:
+            wb.close()
+    except Exception as e:
+        conn.send(("error", f"worker setup error: {type(e).__name__}: {e}\n{traceback.format_exc()}"))
+    conn.close()
+
+
+def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Make row JSON-serializable for cross-process transfer."""
+    out = dict(row)
+    for key in ("amount_in", "amount_out", "rolling_balance"):
+        v = out.get(key)
+        if isinstance(v, Decimal):
+            out[key] = str(v)
+    bd = out.get("business_date")
+    if isinstance(bd, datetime):
+        out["business_date"] = bd.isoformat()
+    elif isinstance(bd, date) and not isinstance(bd, datetime):
+        out["business_date"] = bd.isoformat()
+    return out
+
+
 def run_parser(
     db: Session,
     artifact_id: int,
@@ -86,15 +147,14 @@ def run_parser(
         ctx         — optional dict with account_code, entity_code, etc.
 
     Output contract:
-        Yields dicts, each conforming to CANONICAL_12 schema (§C1).
-
-    Implementation: Phase E1 delivered deterministic runtime.
+        Yields dicts, each conforming to CANONICAL_12 schema (C1).
 
     Raises:
         ArtifactNotFoundError    — artifact_id does not exist
         ArtifactNotActiveError   — artifact exists but status != 'active'
         PrimitivesViolationError — AST scan finds disallowed imports
         ArtifactExecutionError   — artifact code raises during execution
+        SandboxTimeoutError      — execution exceeds configured timeout
     """
     if ctx is None:
         ctx = {}
@@ -111,52 +171,71 @@ def run_parser(
 
     validate_artifact_code(artifact.code, artifact.id)
 
-    wb = load_workbook(file_path, data_only=True)
-    sandbox = get_default_sandbox_config()
+    sandbox = artifact_sandbox.get_default_sandbox_config()
 
-    ns: dict[str, Any] = {"__builtins__": _SAFE_BUILTINS}
-    code_obj = compile(artifact.code, f"<parser_artifact_{artifact.id}>", "exec")
+    ctx_json = json.dumps(ctx)
 
-    with no_ai_runtime():
-        exec(code_obj, ns)
-        parse_fn = ns.get("parse")
-        if parse_fn is None or not callable(parse_fn):
+    parent_conn, child_conn = multiprocessing.Pipe()
+    proc = multiprocessing.Process(
+        target=_worker_main,
+        args=(child_conn, artifact.code, file_path, ctx_json, sandbox.max_output_rows),
+    )
+    proc.start()
+    child_conn.close()
+
+    rows: list[dict[str, Any]] = []
+    timed_out = False
+    try:
+        # Wait for worker to finish, with timeout
+        proc.join(timeout=sandbox.timeout_seconds)
+
+        if proc.is_alive():
+            # Worker exceeded timeout — terminate it
+            timed_out = True
+            proc.terminate()
+            proc.join(timeout=5)
+            raise SandboxTimeoutError(artifact.id, sandbox.timeout_seconds)
+
+        # Worker finished — drain all messages from pipe
+        while True:
+            try:
+                if not parent_conn.poll(0.1):
+                    break
+                msg_type, payload = parent_conn.recv()
+            except (EOFError, BrokenPipeError, OSError):
+                break
+
+            if msg_type == "row":
+                rows.append(payload)
+            elif msg_type == "error":
+                raise ArtifactExecutionError(artifact.id, payload)
+            elif msg_type == "runtime_error":
+                raise _reconstruct_runtime_error(payload)
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=5)
+        parent_conn.close()
+
+    if proc.exitcode != 0 and proc.exitcode is not None and not timed_out:
+        if not rows:
             raise ArtifactExecutionError(
                 artifact.id,
-                "artifact code must define a callable 'parse(wb, ctx)' function"
+                f"worker process exited with code {proc.exitcode}"
             )
-        try:
-            result = parse_fn(wb, ctx)
-        except ArtifactRuntimeError:
-            raise
-        except Exception as e:
-            raise ArtifactExecutionError(
-                artifact.id, f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-            ) from e
 
-    if callable(getattr(result, "__next__", None)):
-        iterator = result
-    else:
-        iterator = iter(result)
+    for i, row in enumerate(rows):
+        yield _coerce_row(artifact.id, row, i)
 
-    count = 0
-    while count < sandbox.max_output_rows:
-        try:
-            row = next(iterator)
-        except StopIteration:
-            break
-        except ArtifactRuntimeError:
-            raise
-        except Exception as e:
-            raise ArtifactExecutionError(
-                artifact.id, f"row {count}: {type(e).__name__}: {e}"
-            ) from e
-        if not isinstance(row, dict):
-            raise ArtifactExecutionError(
-                artifact.id, f"row {count}: expected dict, got {type(row).__name__}"
-            )
-        count += 1
-        yield _coerce_row(artifact.id, row, count - 1)
+
+def _reconstruct_runtime_error(payload: dict) -> ArtifactRuntimeError:
+    """Reconstruct a runtime error from worker-serialized payload."""
+    error_type = payload.get("type", "ArtifactRuntimeError")
+    msg = payload.get("msg", "")
+    artifact_id = payload.get("artifact_id", 0)
+    if error_type == "SandboxTimeoutError":
+        return SandboxTimeoutError(artifact_id, 60)
+    return ArtifactExecutionError(artifact_id, msg)
 
 
 def _coerce_row(artifact_id: int, row: dict[str, Any], index: int) -> dict[str, Any]:

