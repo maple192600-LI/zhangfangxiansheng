@@ -1,4 +1,7 @@
-"""手工流水 API — 快速录入 + Excel上传/预览/提交 + 方案管理"""
+"""手工流水 API — 快速录入 + Excel上传/预览 + 方案管理
+
+最终提交通过 POST /api/import-preview/{batch_code}/commit 完成。
+"""
 import logging
 from typing import List, Optional
 
@@ -15,7 +18,6 @@ from db.schemas import (
     ManualSchemeUpdate,
     QuickEntrySave,
     ManualPreviewBody,
-    ManualCommitBody,
     ManualExportTemplateBody,
 )
 from services import manual_scheme_service as scheme_svc
@@ -94,21 +96,6 @@ def preview(body: ManualPreviewBody, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error("手工流水预览失败: %s", str(e), exc_info=True)
         return error(5000, "手工流水预览失败，请查看操作日志")
-
-@router.post("/commit")
-def commit(body: ManualCommitBody, db: Session = Depends(get_db)):
-    try:
-        result = flow_svc.commit_manual(
-            db,
-            body.batch_code,
-            body.confirm_rows,
-            body.fixes,
-            body.parser_artifact_id,
-        )
-        return success(result)
-    except Exception as e:
-        logger.error("手工流水提交失败: %s", str(e), exc_info=True)
-        return error(5000, "手工流水提交失败，请查看操作日志")
 
 @router.post("/export-template")
 def export_template(body: ManualExportTemplateBody, db: Session = Depends(get_db)):

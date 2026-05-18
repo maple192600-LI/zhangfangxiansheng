@@ -9,19 +9,19 @@
 | 维度                                  | 数字                         |
 | ----------------------------------- | -------------------------- |
 | 前端 placeholder route                | 26                         |
-| 前端 implemented route import entries | 36                         |
-| 前端 `.vue` 文件                        | 42                         |
+| 前端 implemented route import entries | 33                         |
+| 前端 `.vue` 文件                        | 40                         |
 | 后端 API 模块                           | 22                         |
 | 后端 service 模块                       | 25                         |
 | ORM 表                               | 28                         |
-| API inventory（effective path）       | 166 endpoints, 0 duplicate |
+| API inventory（effective path）       | 165 endpoints, 0 duplicate |
 
 ## 当前可用能力
 
 - 主数据中心（板块/法人/账户/银行 CRUD + 批量导入）
-- 银行流水导入（upload → preview → commit）
-- 手工流水快速录入（直接写 FundEvent）
-- 手工流水 Excel 上传（上传 → AI 解析 → 预览 → 提交）
+- 银行流水导入（上传 → Parser 识别 → 解析预览 → 上传结果预览统一校验和提交）
+- 手工流水快速录入（写入待确认 FundEvent，进入上传结果预览统一校验和提交）
+- 手工流水 Excel 上传（上传 → 上传结果预览统一解析/校验/提交）
 - 日报/报表生成（多个报表类型，硬编码模板填充）
 - 导出打印
 - 基础看板
@@ -59,4 +59,4 @@ ParserArtifact 和 RuleArtifact 可以创建和审核，但无法被 artifact ru
 ***
 
 **校准来源：** `frontend/src/router/index.js`、`backend/main.py`、`backend/api/`、`backend/services/`、`backend/db/tables.py`、`backend/core/artifact_runtime.py`、`tools/guards/check_api_inventory.py --list`
-**最后校准：** 2026-05-17
+**最后校准：** 2026-05-18

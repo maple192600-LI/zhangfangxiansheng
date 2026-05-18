@@ -9,9 +9,10 @@
 | `home.py` | `home_service` | 概览/待办/快捷方式/系统状态 |
 | `master_data.py` | `master_data_service`, `master_data_batch` | Division, Entity, Account, AccountAlias |
 | `bank_master.py` | `bank_service` | Bank |
-| `bank_import.py` | `bank_import_service` | FundEvent, ImportBatch, ParserArtifact |
-| `manual_flow.py` | `manual_flow_service`, `manual_scheme_service` | FundEvent, ManualFieldPool, ManualTemplateScheme |
+| `bank_import.py` | `bank_import_service` | FundEvent, ImportBatch, ParserArtifact（不再公开 commit） |
+| `manual_flow.py` | `manual_flow_service`, `manual_scheme_service` | FundEvent, ManualFieldPool, ManualTemplateScheme（不再公开 commit） |
 | `base_data.py` | `base_data_service` | FundEvent（聚合查询） |
+| `import_preview.py` | `import_preview_service` | ImportBatch, FundEvent（唯一正式提交入口：get/update/validate/commit） |
 | `reports.py` | `report_service` | FundEvent, DailyReportRun, ReportTemplate |
 | `report_template.py` | `report_template_service` | ReportTemplate |
 | `dashboard.py` | `dashboard_service` | FundEvent（趋势/构成） |
@@ -23,7 +24,6 @@
 | `agent_config.py` | `agent_init` | Agent workspace 初始化 |
 | `agent.py` | — | Agent, AgentSession, AgentMessage, AgentRun, Skill, AgentMemory |
 | `artifacts.py` | `artifact_service`, `template_analysis` | ParserArtifact, RuleArtifact, TemplateInferenceJob |
-| `events.py` | `exception_center_service` | FundEvent（异常处理） |
 | `reset.py` | `reset_service` | 数据库重置 |
 | `workflow.py` | `workflow_service`, `workflow_executor` | Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep |
 
@@ -36,11 +36,19 @@
 | Service 模块（`.py`，含 `__init__.py`） | 26 |
 | 业务 Service 模块 | 25 |
 | ORM 表 | 28 |
-| API inventory（effective path） | 166 endpoints, 0 duplicate |
+| API inventory（effective path） | 165 endpoints, 0 duplicate |
 
 ## ORM 表清单（28 张）
 
 Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateScheme, ImportBatch, FundEvent, ParserArtifact, RuleArtifact, TemplateInferenceJob, DailyReportRun, AIConfig, AICallLog, OperationLog, User, ReportTemplate, Agent, Skill, AgentSession, AgentMessage, AgentRun, AgentMemory, Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep
+
+## FundEvent 状态边界
+
+`FundEvent` 既保存上传结果预览阶段的未完成行，也保存 `state == "正常"` 的正式基础数据行。
+
+- `待确认` / `异常`：预览阶段，可允许 `business_date`、`entity_code`、`account_code` 暂缺，由 `import_preview_service` 在上传结果预览页校验和修正。
+- `正常`：正式基础数据，必须具备业务日期、单位编码、账户编码；`base_data_service`、报表、导出只读取该状态。
+- 不新增 `import_batch_rows` 暂存表，行级隔离由 `ImportBatch` + `FundEvent.state` 完成。
 
 ## API Inventory Guard
 

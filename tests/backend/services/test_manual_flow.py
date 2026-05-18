@@ -17,8 +17,7 @@ def test_quick_entry_save_creates_valid_manual_event(db_session, chart_of_accoun
     event = db_session.query(FundEvent).one()
 
     assert result["inserted_rows"] == 1
-    assert event.source == "手工录入"
-    assert event.state == "正常"
+    assert event.state == "待确认"
     assert event.entity_code == entity.entity_code
     assert event.account_code == account.account_code
     assert event.amount_in == 88.0
@@ -39,7 +38,75 @@ def test_quick_entry_save_keeps_unmatched_rows_pending(db_session, chart_of_acco
 
     assert result["inserted_rows"] == 1
     assert event.state == "待确认"
-    assert event.entity_code == "UNKNOWN"
+    assert event.entity_code is None
+    assert event.entity_name == "UNKNOWN"
+    assert event.account_code == account.account_code
+
+
+def test_quick_entry_save_unmatched_account(db_session, chart_of_accounts):
+    entity = chart_of_accounts["entity"]
+    result = manual_flow_service.quick_entry_save(db_session, [{
+        "entity_match_key": entity.entity_code,
+        "account_match_key": "BADCOUNT",
+        "business_date": "2026-04-24",
+        "summary_text": "manual receipt",
+        "income_amount": "50.00",
+        "expense_amount": "",
+    }])
+    event = db_session.query(FundEvent).one()
+
+    assert result["inserted_rows"] == 1
+    assert event.account_code is None
+    assert event.account_name == "BADCOUNT"
+
+
+def test_quick_entry_save_bad_date_no_crash(db_session, chart_of_accounts):
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+    result = manual_flow_service.quick_entry_save(db_session, [{
+        "entity_match_key": entity.entity_code,
+        "account_match_key": account.account_code,
+        "business_date": "not-a-date",
+        "summary_text": "manual receipt",
+        "income_amount": "88.00",
+        "expense_amount": "",
+    }])
+    event = db_session.query(FundEvent).one()
+
+    assert result["inserted_rows"] == 1
+    assert event.business_date is None
+    errors = manual_flow_service._validate_fund_event(event)
+    assert "DATE_INVALID" in errors
+
+
+def test_validate_fund_event_entity_match_failed(db_session, chart_of_accounts):
+    account = chart_of_accounts["account"]
+    manual_flow_service.quick_entry_save(db_session, [{
+        "entity_match_key": "NO_SUCH_ENTITY",
+        "account_match_key": account.account_code,
+        "business_date": "2026-04-24",
+        "summary_text": "test",
+        "income_amount": "10.00",
+        "expense_amount": "",
+    }])
+    event = db_session.query(FundEvent).one()
+    errors = manual_flow_service._validate_fund_event(event)
+    assert "ENTITY_MATCH_FAILED" in errors
+
+
+def test_validate_fund_event_account_match_failed(db_session, chart_of_accounts):
+    entity = chart_of_accounts["entity"]
+    manual_flow_service.quick_entry_save(db_session, [{
+        "entity_match_key": entity.entity_code,
+        "account_match_key": "NO_SUCH_ACCOUNT",
+        "business_date": "2026-04-24",
+        "summary_text": "test",
+        "income_amount": "10.00",
+        "expense_amount": "",
+    }])
+    event = db_session.query(FundEvent).one()
+    errors = manual_flow_service._validate_fund_event(event)
+    assert "ACCOUNT_MATCH_FAILED" in errors
 
 
 def test_commit_manual_with_parser_artifact(db_session, chart_of_accounts, tmp_path, monkeypatch):

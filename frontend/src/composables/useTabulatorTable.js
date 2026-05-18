@@ -6,6 +6,8 @@ export function useTabulatorTable(containerRef, options) {
   const isReady = ref(false)
   let initialized = false
   let destroyed = false
+  let editNavDirection = null
+  let keydownHandler = null
 
   function createTable() {
     if (!containerRef.value || initialized || destroyed) return
@@ -47,6 +49,8 @@ export function useTabulatorTable(containerRef, options) {
           navDown: 'arrowdown',
           navNext: 'tab',
           navPrev: 'shift+tab',
+          scrollPageUp: '',
+          scrollPageDown: '',
         },
         editTriggerEvent: 'click',
       } : {}
@@ -69,6 +73,39 @@ export function useTabulatorTable(containerRef, options) {
         if (destroyed) return
         isReady.value = true
         options.onTableReady?.()
+
+        if (editable) {
+          instance.on('cellEditCancelled', () => {})
+
+          editNavDirection = null
+          keydownHandler = (e) => {
+            if (e.key === 'Enter') {
+              editNavDirection = e.shiftKey ? 'up' : 'down'
+            }
+          }
+          containerRef.value.addEventListener('keydown', keydownHandler, true)
+
+          instance.on('cellEdited', (cell) => {
+            const field = cell.getColumn()?.getField()
+            const value = cell.getValue()
+            const rowData = cell.getRow()?.getData()
+            options.onCellEdited?.({ field, value, rowData })
+
+            if (editNavDirection) {
+              const row = cell.getRow()
+              const col = cell.getColumn()
+              const targetRow = editNavDirection === 'down'
+                ? row.getNextRow()
+                : row.getPrevRow()
+              editNavDirection = null
+              if (targetRow) {
+                setTimeout(() => {
+                  try { targetRow.getCell(col).edit() } catch (_) {}
+                }, 0)
+              }
+            }
+          })
+        }
       })
 
       if (options.rowClick) {
@@ -114,15 +151,6 @@ export function useTabulatorTable(containerRef, options) {
         instance.on('cellClick', (e, cell) => options.cellClick(e, cell))
       }
 
-      if (options.onCellEdited) {
-        instance.on('cellEdited', (cell) => {
-          const field = cell.getColumn()?.getField()
-          const value = cell.getValue()
-          const rowData = cell.getRow()?.getData()
-          options.onCellEdited({ field, value, rowData })
-        })
-      }
-
       if (options.onPaste) {
         instance.on('clipboardPasted', (rows, rowsData) => {
           options.onPaste(rowsData || [])
@@ -138,6 +166,11 @@ export function useTabulatorTable(containerRef, options) {
 
   function destroyTable() {
     destroyed = true
+    if (keydownHandler && containerRef.value) {
+      containerRef.value.removeEventListener('keydown', keydownHandler, true)
+      keydownHandler = null
+    }
+    editNavDirection = null
     if (table.value) {
       try { table.value.destroy() } catch (e) { console.warn('[useTabulatorTable] destroy failed:', e) }
       table.value = null

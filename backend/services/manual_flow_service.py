@@ -173,16 +173,14 @@ def _create_batch(db: Session, source_type: str, source_name: str = None, status
 # ── Track A: 快速录入保存 ──────────────────────────────
 
 def quick_entry_save(db: Session, rows: List[Dict], scheme_code: str = "manual_multi_subject_basic") -> Dict:
-    batch = _create_batch(db, "manual_quick", "quick_entry", status="committed")
+    batch = _create_batch(db, "manual_quick", "quick_entry", status="uploaded")
     inserted = 0
     for raw in rows:
         parsed = _process_row(db, raw)
-        errors = _validate_row(parsed)
         event = _canonical_event_from_manual(parsed)
-        event["state"] = "正常" if not errors else "待确认"
+        event["state"] = "待确认"
         db.add(FundEvent(**event, batch_id=batch.id))
         inserted += 1
-    batch.updated_at = datetime.now()
     db.commit()
     log_service.write_log(
         db,
@@ -211,14 +209,15 @@ def upload_workbook(db: Session, file_data: bytes, filename: str, scheme_code: s
     # 过滤空行
     data_rows = [r for r in data_rows if any(c and c.strip() for c in r)]
 
-    # 保存文件
+    batch = _create_batch(db, "manual_excel", filename)
+
+    # Save file with batch_code prefix for stable lookup
     upload_dir = os.path.join(DATA_DIR, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, f"manual_{uuid.uuid4().hex[:8]}_{filename}")
+    safe_name = re.sub(r'[\/:*?"<>|]', '_', filename or 'upload.xlsx')
+    file_path = os.path.join(upload_dir, f"{batch.batch_code}_{safe_name}")
     with open(file_path, "wb") as f:
         f.write(file_data)
-
-    batch = _create_batch(db, "manual_excel", filename)
 
     return {
         "batch_code": batch.batch_code,
@@ -239,12 +238,13 @@ def preview_manual(db: Session, batch_code: str, scheme_code: str = None) -> Dic
     if batch.source_type == "manual_quick":
         return _preview_from_events(db, batch)
 
-    # Excel 上传场景：如果已有 parser_artifact，通过 artifact runtime 生成预览
-    if batch.source_type == "manual_file":
+    # Excel 上传场景：如果有 FundEvent 直接构建预览，否则从文件解析
+    if batch.source_type in ("manual_excel", "manual_file"):
         existing_events = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).count()
         if existing_events > 0:
             return _preview_from_events(db, batch)
-        raise ValueError("Excel 预览需要先通过 commit 步骤指定解析器，请使用 commit 接口并传入 parser_artifact_id")
+        # Parse file and create FundEvents
+        return _preview_from_excel_file(db, batch, scheme_code)
 
     raise ValueError(f"不支持的批次类型: {batch.source_type}")
 
@@ -259,7 +259,11 @@ def _preview_from_events(db: Session, batch: ImportBatch) -> Dict:
     for i, ev in enumerate(events):
         row = _event_to_dict(ev)
         row["_row_no"] = i + 1
-        if ev.state in ("待确认", "异常"):
+        # Validate row to determine if it's valid or abnormal
+        errors = _validate_fund_event(ev)
+        row["_errors"] = errors
+        row["abnormal_code"] = ",".join(errors) if errors else None
+        if errors:
             abnormal_rows.append(row)
         else:
             parsed_rows.append(row)
@@ -506,6 +510,83 @@ def _map_raw_row(headers: List[str], raw: List[str], mapping: Dict[str, str]) ->
     return result
 
 
+def _validate_fund_event(ev: FundEvent) -> List[str]:
+    """Validate a FundEvent ORM row, return error codes."""
+    errors = []
+    if not ev.business_date:
+        errors.append("DATE_INVALID")
+    if not ev.entity_code or not ev.entity_code.strip():
+        errors.append("ENTITY_MATCH_FAILED")
+    if not ev.account_code or not ev.account_code.strip():
+        errors.append("ACCOUNT_MATCH_FAILED")
+    inc = float(ev.amount_in) if ev.amount_in else 0
+    exp = float(ev.amount_out) if ev.amount_out else 0
+    if inc == 0 and exp == 0:
+        errors.append("AMOUNT_INVALID")
+    elif inc > 0 and exp > 0:
+        errors.append("AMOUNT_INVALID")
+    return errors
+
+
+def _preview_from_excel_file(db: Session, batch: ImportBatch, scheme_code: str = None) -> Dict:
+    """Parse uploaded Excel file for manual_excel/manual_file batches and create FundEvents."""
+    mapping = _build_column_mapping(db, scheme_code or "manual_multi_subject_basic")
+
+    upload_dir = os.path.join(DATA_DIR, "uploads")
+    file_path = None
+    # Prefer batch_code-based lookup
+    for f in os.listdir(upload_dir):
+        if f.startswith(batch.batch_code + "_") and os.path.isfile(os.path.join(upload_dir, f)):
+            file_path = os.path.join(upload_dir, f)
+            break
+    if not file_path:
+        file_path = _find_manual_upload(batch)
+    if not file_path:
+        raise ValueError("上传文件已丢失，请重新上传")
+
+    source = batch.source_name or ""
+    fmt = detect_format(source)
+    with open(file_path, "rb") as fh:
+        file_data = fh.read()
+    rows = read_file_from_bytes(file_data, source, fmt)
+    header_idx = detect_header_row(rows)
+    headers = [h.strip() for h in rows[header_idx] if h and h.strip()]
+    data_rows = rows[header_idx + 1:]
+    data_rows = [r for r in data_rows if any(c and str(c).strip() for c in r)]
+
+    # Delete old fund_events if re-previewing
+    db.query(FundEvent).filter(FundEvent.batch_id == batch.id).delete()
+
+    parsed_rows = []
+    abnormal_rows = []
+    for i, raw in enumerate(data_rows):
+        row_dict = _map_raw_row(headers, raw, mapping)
+        parsed = _process_row(db, row_dict)
+        errors = _validate_row(parsed)
+        parsed["parse_status"] = "valid" if not errors else "abnormal"
+        parsed["abnormal_code"] = ",".join(errors) if errors else None
+        parsed["_row_no"] = i + 1
+        _create_fund_event(db, batch.id, "手工录入", parsed)
+        if errors:
+            abnormal_rows.append(parsed)
+        else:
+            parsed_rows.append(parsed)
+
+    batch.status = "previewed"
+    db.commit()
+
+    return {
+        "batch_code": batch.batch_code,
+        "source_type": batch.source_type,
+        "source_name": batch.source_name,
+        "total_count": len(data_rows),
+        "valid_count": len(parsed_rows),
+        "abnormal_count": len(abnormal_rows),
+        "parsed_rows": parsed_rows,
+        "abnormal_rows": abnormal_rows,
+    }
+
+
 def _event_to_dict(ev: FundEvent) -> Dict:
     """FundEvent ORM → 预览用的 dict"""
     return {
@@ -526,21 +607,35 @@ def _event_to_dict(ev: FundEvent) -> Dict:
 def _create_fund_event(db: Session, batch_id: int, source_type: str, parsed: Dict):
     income = parsed.get("income_amount")
     expense = parsed.get("expense_amount")
-    entity_code = str(parsed.get("entity_match_key") or parsed.get("_entity_name") or "").strip()
-    account_code = str(parsed.get("account_match_key") or parsed.get("_account_name") or "").strip()
+
+    raw_entity = str(parsed.get("entity_match_key") or "").strip()
+    entity_code = raw_entity if parsed.get("_entity_id") and raw_entity else None
+    entity_name = parsed.get("_entity_name") or raw_entity or ""
+
+    raw_account = str(parsed.get("account_match_key") or "").strip()
+    account_code = raw_account if parsed.get("_account_id") and raw_account else None
+    account_name = parsed.get("_account_name") or raw_account or ""
+
+    biz_date = parsed.get("business_date")
+    if isinstance(biz_date, str) and biz_date:
+        try:
+            biz_date = datetime.strptime(biz_date[:10].replace("/", "-"), "%Y-%m-%d").date()
+        except (ValueError, IndexError):
+            biz_date = None
+
     ev = FundEvent(
         batch_id=batch_id,
-        business_date=parsed.get("business_date"),
+        business_date=biz_date,
         entity_code=entity_code,
-        entity_name=parsed.get("_entity_name") or entity_code,
+        entity_name=entity_name,
         account_code=account_code,
-        account_name=parsed.get("_account_name") or account_code,
+        account_name=account_name,
         summary=parsed.get("summary_text", ""),
         counterparty=parsed.get("counterparty_name", ""),
         amount_in=float(income) if income else 0,
         amount_out=float(expense) if expense else 0,
         rolling_balance=parsed.get("ending_balance_input"),
-        state="正常" if parsed.get("parse_status") == "valid" else "待确认",
+        state="待确认",
         source="手工录入",
     )
     db.add(ev)
@@ -551,35 +646,52 @@ def _find_manual_upload(batch: ImportBatch) -> Optional[str]:
     upload_dir = os.path.join(DATA_DIR, "uploads")
     if not os.path.isdir(upload_dir):
         return None
+    # Prefer batch_code-based lookup
+    for filename in os.listdir(upload_dir):
+        if filename.startswith(batch.batch_code + "_") and os.path.isfile(os.path.join(upload_dir, filename)):
+            return os.path.join(upload_dir, filename)
+    # Fallback to source_name suffix
     source = batch.source_name or ""
     for filename in os.listdir(upload_dir):
-        if source and filename.endswith(source):
-            path = os.path.join(upload_dir, filename)
-            if os.path.isfile(path):
-                return path
+        if source and filename.endswith(source) and os.path.isfile(os.path.join(upload_dir, filename)):
+            return os.path.join(upload_dir, filename)
     return None
 
 
 def _canonical_event_from_manual(parsed: Dict) -> Dict:
     biz_date = parsed.get("business_date")
-    if isinstance(biz_date, str):
-        biz_date = datetime.strptime(biz_date[:10].replace("/", "-"), "%Y-%m-%d").date()
+    if isinstance(biz_date, str) and biz_date:
+        try:
+            biz_date = datetime.strptime(biz_date[:10].replace("/", "-"), "%Y-%m-%d").date()
+        except (ValueError, IndexError):
+            biz_date = None
+    else:
+        biz_date = None
     income = parsed.get("income_amount") or 0
     expense = parsed.get("expense_amount") or 0
-    entity_code = str(parsed.get("entity_match_key") or parsed.get("_entity_name") or "").strip()
-    account_code = str(parsed.get("account_match_key") or parsed.get("_account_name") or "").strip()
+
+    # If _entity_id exists, matching succeeded → use the match key as code
+    # If _entity_id is None, matching failed → code must be None, keep name for display
+    raw_entity = str(parsed.get("entity_match_key") or "").strip()
+    entity_code = raw_entity if parsed.get("_entity_id") and raw_entity else None
+    entity_name = parsed.get("_entity_name") or raw_entity or ""
+
+    raw_account = str(parsed.get("account_match_key") or "").strip()
+    account_code = raw_account if parsed.get("_account_id") and raw_account else None
+    account_name = parsed.get("_account_name") or raw_account or ""
+
     return {
         "business_date": biz_date,
         "entity_code": entity_code,
-        "entity_name": parsed.get("_entity_name") or entity_code,
+        "entity_name": entity_name,
         "account_code": account_code,
-        "account_name": parsed.get("_account_name") or account_code,
+        "account_name": account_name,
         "summary": parsed.get("summary_text") or "",
         "counterparty": parsed.get("counterparty_name") or "",
         "amount_in": income,
         "amount_out": expense,
         "rolling_balance": parsed.get("ending_balance_input"),
-        "state": "正常",
+        "state": "待确认",
         "source": "手工录入",
     }
 

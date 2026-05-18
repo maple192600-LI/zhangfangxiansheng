@@ -29,12 +29,9 @@ export const uploadManualWorkbook = (file, schemeCode) => {
   })
 }
 
-// 预览与提交
+// 预览
 export const previewManual = (data) =>
   http.post('/manual-flow/preview', data)
-
-export const commitManual = (data) =>
-  http.post('/manual-flow/commit', data)
 
 // 导出模板
 export const exportManualTemplate = (schemeCode) =>

@@ -19,7 +19,6 @@ const routes = [
       // 资金板块 > 工作台
       { path: 'bank-import', name: 'bank-import', component: () => import('@/views/BankImport.vue') },
       { path: 'manual-flow', name: 'manual-flow', component: () => import('@/views/ManualFlow.vue') },
-      { path: 'manual-maintenance', name: 'manual-maintenance', component: () => import('@/views/ManualMaintenance.vue') },
       { path: 'upload-preview', name: 'upload-preview', component: () => import('@/views/UploadPreview.vue') },
 
       // 工作流编排
@@ -82,9 +81,6 @@ const routes = [
       { path: 'rule/voucher', name: 'rule-voucher', component: Placeholder },
       { path: 'rule/other', name: 'rule-other', component: Placeholder },
 
-      // 系统设置 > 异常中心
-      { path: 'exception/receipt', name: 'exception-receipt', component: () => import('@/views/ExceptionCenter.vue') },
-      { path: 'exception/other', name: 'exception-other', component: () => import('@/views/ExceptionCenter.vue') },
 
       // 系统设置 > 模型配置
       { path: 'ai-config', name: 'ai-config', component: () => import('@/views/AIConfig.vue') },

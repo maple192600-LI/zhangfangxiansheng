@@ -14,6 +14,3 @@ export const uploadBankFile = (file) => {
 
 export const previewBankImport = (data) =>
   http.post('/bank-import/preview', data)
-
-export const commitBankImport = (data) =>
-  http.post('/bank-import/commit', data)

@@ -2,23 +2,27 @@
   <div class="section">
     <div class="section-title">
       <h3>银行流水导入</h3>
-      <span>上传银行流水文件，匹配已审核解析规则，预览确认后入库</span>
+      <span>上传银行流水文件，匹配已审核解析规则，预览确认后进入上传结果预览</span>
     </div>
 
     <div class="flow-steps">
       <div class="flow-step" :class="{ active: step >= 1, done: step > 1 }" @click="step > 1 && goToStep(1)">上传</div>
       <div class="flow-line"></div>
-      <div class="flow-step" :class="{ active: step >= 2, done: step > 2 }" @click="step > 2 && goToStep(2)">匹配规则</div>
+      <div class="flow-step" :class="{ active: step >= 2, done: step > 2 }" @click="step > 2 && goToStep(2)">识别解析器</div>
       <div class="flow-line"></div>
-      <div class="flow-step" :class="{ active: step >= 3, done: step > 3 }" @click="step > 3 && goToStep(3)">确认</div>
-      <div class="flow-line"></div>
-      <div class="flow-step" :class="{ active: step >= 4 }">完成</div>
+      <div class="flow-step" :class="{ active: step >= 3 }">解析预览</div>
     </div>
 
     <!-- 无匹配规则提示 -->
     <div v-if="noRuleHint" class="hint-panel" style="margin-bottom:14px">
-      当前银行/文件格式尚无已审核解析规则。请从左侧 AI 智能体创建财务助手后，再创建解析规则。
+      缺少解析规则，无法预览解析结果，请先创建或启用解析器。
       <NButton secondary size="small" style="margin-left:8px" @click="noRuleHint = false">关闭</NButton>
+    </div>
+
+    <!-- 运行时不可用提示 -->
+    <div v-if="runtimeError" class="hint-panel" style="margin-bottom:14px">
+      {{ runtimeError }}
+      <NButton secondary size="small" style="margin-left:8px" @click="runtimeError = ''">关闭</NButton>
     </div>
 
     <div v-if="step === 1" class="upload-box" @dragover.prevent @drop.prevent="onDrop" @click="triggerFileInput">
@@ -56,14 +60,16 @@
       </div>
       <div class="btn-row" style="margin-top:14px">
         <NButton secondary @click="reset">重新上传</NButton>
-        <NButton type="primary" @click="doPreview">预览解析结果</NButton>
+        <NButton type="primary" @click="doPreview" :disabled="previewing">
+          {{ previewing ? '解析中...' : '预览解析结果' }}
+        </NButton>
       </div>
     </div>
 
-    <!-- Step 3: 预览确认 -->
+    <!-- Step 3: 解析预览 + 进入上传结果预览 -->
     <div v-if="step === 3" style="margin-top:14px">
       <div class="bank-preview-header">
-        <span>解析预览（有效 {{ previewResult.valid_count }} 条，异常 {{ previewResult.abnormal_count }} 条）</span>
+        <span>解析预览（有效 {{ previewResult.valid_count || 0 }} 条，异常 {{ previewResult.abnormal_count || 0 }} 条）</span>
       </div>
       <div class="bank-preview-table">
         <AdvancedDataTable
@@ -79,23 +85,9 @@
       </div>
       <div class="btn-row" style="margin-top:14px">
         <NButton secondary @click="step = 2">返回</NButton>
-        <NButton type="primary" :disabled="committing" @click="doCommit">
-          {{ committing ? '提交中...' : `确认提交 ${previewResult.valid_count} 条记录` }}
+        <NButton type="primary" @click="goUploadPreview">
+          进入上传结果预览
         </NButton>
-      </div>
-    </div>
-
-    <!-- Step 4: 完成 -->
-    <div v-if="step === 4" class="panel" style="margin-top:14px">
-      <div class="panel-title">导入完成</div>
-      <div class="summary-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
-        <div><label>批次号</label><strong>{{ commitResult.batch_code }}</strong></div>
-        <div><label>Parser</label><strong>{{ parserMatch?.name || '-' }}</strong></div>
-        <div><label>入库行数</label><strong>{{ commitResult.inserted_rows }}</strong></div>
-      </div>
-      <div class="btn-row" style="margin-top:14px">
-        <NButton secondary @click="reset">继续导入</NButton>
-        <NButton type="primary" @click="$router.push({ name: 'base-data' })">查看基础数据表</NButton>
       </div>
     </div>
 
@@ -107,11 +99,14 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { NButton } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import * as bank from '@/api/bank'
 import { fmtAmt } from '@/utils/format'
 import AdvancedDataTable from '@/components/workbench/AdvancedDataTable.vue'
+
+const router = useRouter()
 
 const fileInput = ref(null)
 const uploadResult = ref({})
@@ -119,9 +114,9 @@ const hint = ref('')
 const step = ref(1)
 const parserMatch = ref(null)
 const previewResult = ref({})
-const committing = ref(false)
-const commitResult = ref({})
+const previewing = ref(false)
 const noRuleHint = ref(false)
+const runtimeError = ref('')
 
 const previewColumns = [
   { field: 'business_date', title: '日期', width: 110 },
@@ -164,17 +159,13 @@ function onDrop(event) {
 async function upload(file) {
   hint.value = ''
   noRuleHint.value = false
+  runtimeError.value = ''
   try {
     uploadResult.value = await bank.uploadBankFile(file)
-    step.value = 2
-
-    const match = uploadResult.value.parser_match
-    if (match && match.matched && match.parser_artifact_id) {
-      parserMatch.value = match
-      await doPreview()
+    parserMatch.value = uploadResult.value.parser_match || null
+    if (parserMatch.value) {
+      step.value = 2
     } else {
-      parserMatch.value = null
-      step.value = 1
       noRuleHint.value = true
     }
   } catch (e) {
@@ -184,17 +175,18 @@ async function upload(file) {
 
 async function doPreview() {
   hint.value = ''
+  runtimeError.value = ''
   if (!parserMatch.value?.parser_artifact_id) {
     noRuleHint.value = true
     step.value = 1
     return
   }
+  previewing.value = true
   try {
     previewResult.value = await bank.previewBankImport({
       batch_code: uploadResult.value.batch_code,
       parser_artifact_id: parserMatch.value.parser_artifact_id,
     })
-    // Add _idx for rowKey
     if (previewResult.value.parsed_rows) {
       previewResult.value.parsed_rows = previewResult.value.parsed_rows.map((r, i) => ({
         ...r,
@@ -203,35 +195,29 @@ async function doPreview() {
     }
     step.value = 3
   } catch (e) {
-    hint.value = e.message || '预览失败'
+    const msg = e.response?.data?.message || e.message || ''
+    if (msg.includes('未实现') || msg.includes('NotImplemented') || msg.includes('运行时')) {
+      runtimeError.value = '解析器运行时不可用/未实现，无法预览解析结果'
+    } else {
+      hint.value = msg || '预览失败'
+    }
+  } finally {
+    previewing.value = false
   }
 }
 
-async function doCommit() {
-  if (!confirm(`确认将 ${previewResult.value.valid_count} 条记录入库？此操作不可撤销。`)) return
-  committing.value = true
-  hint.value = ''
-  try {
-    commitResult.value = await bank.commitBankImport({
-      batch_code: uploadResult.value.batch_code,
-      parser_artifact_id: parserMatch.value.parser_artifact_id,
-    })
-    step.value = 4
-  } catch (e) {
-    hint.value = e.message || '提交失败，请重试'
-  } finally {
-    committing.value = false
-  }
+function goUploadPreview() {
+  router.push({ path: '/upload-preview', query: { batch_code: uploadResult.value.batch_code } })
 }
 
 function reset() {
   step.value = 1
   uploadResult.value = {}
   previewResult.value = {}
-  commitResult.value = {}
   parserMatch.value = null
   hint.value = ''
   noRuleHint.value = false
+  runtimeError.value = ''
 }
 </script>
 

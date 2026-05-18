@@ -2,7 +2,8 @@
 
 POST /api/bank-import/upload   — 上传文件
 POST /api/bank-import/preview  — 预览解析结果
-POST /api/bank-import/commit   — 确认提交
+
+最终提交通过 POST /api/import-preview/{batch_code}/commit 完成。
 """
 import logging
 
@@ -25,11 +26,6 @@ router = APIRouter()
 class PreviewBody(BaseModel):
     batch_code: str
     parser_artifact_id: Optional[int] = None
-
-
-class CommitBody(BaseModel):
-    batch_code: str
-    parser_artifact_id: int
 
 
 # ── 上传 ──
@@ -61,17 +57,6 @@ def preview(body: PreviewBody, db: Session = Depends(get_db)):
             batch_code=body.batch_code,
             parser_artifact_id=body.parser_artifact_id,
         )
-    except ValueError as e:
-        return error(ErrorCode.NOT_FOUND, str(e))
-    return success(result)
-
-
-# ── 确认提交 ──
-
-@router.post("/bank-import/commit")
-def commit(body: CommitBody, db: Session = Depends(get_db)):
-    try:
-        result = svc.commit(db, body.batch_code, body.parser_artifact_id)
     except ValueError as e:
         return error(ErrorCode.NOT_FOUND, str(e))
     return success(result)

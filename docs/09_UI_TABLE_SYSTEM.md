@@ -36,7 +36,6 @@
 | 账户管理 | `AccountManage.vue` |
 | 银行导入 | `BankImport.vue` |
 | 手工流水 | `ManualFlow.vue` |
-| 手工维护 | `ManualMaintenance.vue` |
 | 上传预览 | `UploadPreview.vue` |
 | 基础数据 | `BaseDataTable.vue` |
 | 日报 | `DailyReport.vue` |
@@ -44,7 +43,6 @@
 | 账户余额 | `AccountBalance.vue` |
 | 收入明细 | `IncomeList.vue` |
 | 支出明细 | `ExpenseList.vue` |
-| 异常中心 | `ExceptionCenter.vue` |
 | 操作日志 | `OperationLog.vue` |
 | 报表模板 | `TemplateReport.vue` |
 | 工作台实验 | `WorkbenchTableLab.vue` |

@@ -224,10 +224,10 @@ CREATE INDEX idx_import_batches_source ON import_batches(source_type);
 ```sql
 CREATE TABLE fund_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  business_date DATE NOT NULL,
-  entity_code VARCHAR(50) NOT NULL,
+  business_date DATE,
+  entity_code VARCHAR(50),
   entity_name VARCHAR(200) NOT NULL,
-  account_code VARCHAR(50) NOT NULL,
+  account_code VARCHAR(50),
   account_name VARCHAR(100) NOT NULL,
   summary VARCHAR(500),
   counterparty VARCHAR(200),
@@ -244,6 +244,18 @@ CREATE TABLE fund_events (
   CHECK (amount_in >= 0 AND amount_out >= 0),
   CHECK (state IN ('正常','待确认','异常','已作废')),
   CHECK (source IN ('网银导入','手工录入','现金录入','票据录入','财务公司单据')),
+  CHECK (
+    state != '正常'
+    OR (
+      business_date IS NOT NULL
+      AND entity_code IS NOT NULL
+      AND entity_code != ''
+      AND account_code IS NOT NULL
+      AND account_code != ''
+    )
+  ),
+  FOREIGN KEY (entity_code) REFERENCES entities(entity_code),
+  FOREIGN KEY (account_code) REFERENCES accounts(account_code),
   FOREIGN KEY (batch_id) REFERENCES import_batches(id),
   FOREIGN KEY (parser_artifact_id) REFERENCES parser_artifacts(id)
 );
@@ -258,6 +270,9 @@ CREATE INDEX idx_fund_events_batch ON fund_events(batch_id);
 - 元数据列只允许 `id`、`batch_id`、`parser_artifact_id`、`created_at`、`updated_at`。
 - 收支金额非负，且同一行不得同时出现正收入与正支出。
 - `state` 与 `source` 枚举值不得绕过 §ChangeFlow 修改。
+- `待确认` / `异常` 行属于上传结果预览阶段，允许 `business_date`、`entity_code`、`account_code` 暂缺，以便用户在预览页修正。
+- `正常` 行属于正式基础数据，必须满足 `business_date`、`entity_code`、`account_code` 非空且编码不为空字符串。
+- 查询基础数据、报表、导出时必须过滤 `state = '正常'`。
 
 ---
 

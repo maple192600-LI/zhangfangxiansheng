@@ -24,7 +24,7 @@
 ## §A1 · API Inventory 事实源
 
 - **来源**：`python tools/guards/check_api_inventory.py --list`
-- **当前为** 166 effective endpoints，0 duplicate route identities
+- **当前为** 165 effective endpoints，0 duplicate route identities
 - 端点数量不是固定上限；guard 检测 effective path 重复，不检查数量预算
 - effective path = `include_prefix + router_prefix + decorator_path`（归一化后）
 
@@ -43,8 +43,8 @@
 | 3 | `home.py` | `/api/home` | 首页总控台：概览、待办、快捷方式、系统状态 |
 | 4 | `master_data.py` | `/api` | 板块 / 法人 / 账户 CRUD + 批量导入 |
 | 5 | `bank_master.py` | `/api/banks` | 银行主数据 CRUD |
-| 6 | `bank_import.py` | `/api/bank-import` | 银行流水导入（upload → preview → commit） |
-| 7 | `manual_flow.py` | `/api/manual-flow` | 手工流水：字段池、方案、快速录入、上传、预览、提交、AI 解析 |
+| 6 | `bank_import.py` | `/api/bank-import` | 银行流水导入：上传、Parser 匹配、解析预览（upload → parser match → parser preview） |
+| 7 | `manual_flow.py` | `/api/manual-flow` | 手工流水：字段池、方案、快速录入、上传、预览、AI 解析 |
 | 8 | `base_data.py` | `/api/base-data` | 基础数据表：聚合查询、重建、批量删除 |
 | 9 | `reports.py` | `/api/reports` | 日报、现金日记账、余额表、收支明细等报表 + 生成 + 下载 |
 | 10 | `report_template.py` | `/api/report-templates` | 报表模板 CRUD + Excel 导入 + excel-html 预览 |
@@ -57,7 +57,7 @@
 | 17 | `agent_config.py` | `/api` | Agent workspace 初始化 |
 | 18 | `agent.py` | `/api/agent` | 通用 Agent：实例 / 会话 / 消息 / 文件 / 记忆 / 技能 / 权限管理 |
 | 19 | `artifacts.py` | `/api/artifacts` | ParserArtifact / RuleArtifact / TemplateInferenceJob CRUD + 审批 |
-| 20 | `events.py` | `/api/events` | 异常中心：待确认 / 异常列表、标记正常 / 作废 |
+| 20 | `import_preview.py` | `/api/import-preview` | 统一上传结果预览：get / update / validate / commit（唯一正式提交入口） |
 | 21 | `reset.py` | `/api/reset` | 数据库工厂重置 |
 | 22 | `workflow.py` | `/api/workflow` | 工作流：定义 CRUD + graph patch + 版本 + 运行 + 暂停恢复 |
 
@@ -123,6 +123,8 @@
 | `/api/bank-import/ai-parse` | 已删除，银行导入统一走 ParserArtifact 路线 |
 | `/api/bank-import/commit-by-mapping` | 已删除 |
 | `/api/bank-import/save-template` | 已删除 |
+| `/api/bank-import/commit` | 绕过统一预览，已迁移到 `/api/import-preview/{batch_code}/commit` |
+| `/api/manual-flow/commit` | 绕过统一预览，已迁移到 `/api/import-preview/{batch_code}/commit` |
 
 新能力必须走通用 Agent（`/api/agent`）+ Artifact API（`/api/artifacts`）。
 
