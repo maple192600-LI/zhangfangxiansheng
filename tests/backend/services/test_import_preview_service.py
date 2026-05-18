@@ -2,9 +2,10 @@ from datetime import date, datetime
 from unittest.mock import patch, MagicMock
 
 from conftest import add_import_batch, make_xlsx
-from db.tables import FundEvent, ParserArtifact
+from db.tables import FundEvent, ParserArtifact, SourceFile
 from services import import_preview_service, manual_flow_service
 from services import bank_import_service as bank_svc
+from services.source_file_service import create_source_file_for_upload, update_source_file_status
 
 
 def _make_event(db, batch, entity_code=None, entity_name="", account_code=None, account_name=""):
@@ -317,3 +318,99 @@ def test_bank_commit_preserves_user_edits(db_session, chart_of_accounts):
     assert ev_after.entity_name == "用户编辑后的单位名"
     assert ev_after.summary == "用户编辑后的摘要"
     assert float(ev_after.amount_in) == 999.99
+
+
+# ── SourceFile status write-back tests ──
+
+
+def _add_source_file(db, batch, status="ready", error_code=None, error_message=None):
+    sf = create_source_file_for_upload(db, batch, "/uploads/test.xlsx", "test.xlsx", b"data")
+    if status != "uploaded":
+        update_source_file_status(db, sf, status=status, error_code=error_code, error_message=error_message)
+        db.commit()
+    return sf
+
+
+def test_bank_preview_success_updates_source_file_to_parsed(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    """parser 成功时 ready → parsed"""
+    entity = chart_of_accounts["entity"]
+    account = chart_of_accounts["account"]
+    _add_parser_artifact(db_session)
+
+    batch = add_import_batch(db_session, batch_code="BANK-SF-001", source_type="bank", source_name="bank.xlsx")
+    sf = _add_source_file(db_session, batch, status="ready")
+
+    monkeypatch.setattr(bank_svc, "DATA_DIR", str(tmp_path))
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    file_data = make_xlsx([
+        ["Date", "Summary", "Income"],
+        ["2026-04-24", "test", "100"],
+    ])
+    (upload_dir / f"{batch.batch_code}_bank.xlsx").write_bytes(file_data)
+
+    canonical_rows = [{
+        "business_date": date(2026, 4, 24),
+        "entity_code": entity.entity_code,
+        "entity_name": entity.short_name,
+        "account_code": account.account_code,
+        "account_name": account.account_alias,
+        "summary": "test row",
+        "counterparty": "",
+        "amount_in": 100.0,
+        "amount_out": 0,
+        "rolling_balance": None,
+        "state": "正常",
+        "source": "网银导入",
+    }]
+
+    with patch.object(bank_svc.artifact_runtime, "run_parser", return_value=iter(canonical_rows)):
+        result = import_preview_service.get_preview(db_session, batch.batch_code)
+
+    assert result["total_count"] == 1
+    db_session.refresh(sf)
+    assert sf.status == "parsed"
+    assert sf.error_code is None
+
+
+def test_bank_preview_parser_failure_updates_source_file_failed(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    """parser runtime 抛错时 → failed + PARSER_RUNTIME_FAILED"""
+    _add_parser_artifact(db_session)
+
+    batch = add_import_batch(db_session, batch_code="BANK-SF-002", source_type="bank", source_name="bank.xlsx")
+    sf = _add_source_file(db_session, batch, status="ready")
+
+    monkeypatch.setattr(bank_svc, "DATA_DIR", str(tmp_path))
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    file_data = make_xlsx([["Date", "Summary"], ["2026-04-24", "test"]])
+    (upload_dir / f"{batch.batch_code}_bank.xlsx").write_bytes(file_data)
+
+    with patch.object(bank_svc.artifact_runtime, "run_parser", side_effect=Exception("boom")):
+        result = import_preview_service.get_preview(db_session, batch.batch_code)
+
+    assert result["parser_status"] == "unavailable"
+    db_session.refresh(sf)
+    assert sf.status == "failed"
+    assert sf.error_code == "PARSER_RUNTIME_FAILED"
+
+
+def test_bank_preview_no_parser_keeps_needs_rule_with_error(db_session, chart_of_accounts, tmp_path, monkeypatch):
+    """无 parser 时 → needs_rule + PARSER_NOT_FOUND"""
+    batch = add_import_batch(db_session, batch_code="BANK-SF-003", source_type="bank", source_name="bank.xlsx")
+    sf = _add_source_file(db_session, batch, status="uploaded")
+    update_source_file_status(db_session, sf, status="needs_rule")
+    db_session.commit()
+
+    monkeypatch.setattr(bank_svc, "DATA_DIR", str(tmp_path))
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    file_data = make_xlsx([["Date", "Summary"], ["2026-04-24", "test"]])
+    (upload_dir / f"{batch.batch_code}_bank.xlsx").write_bytes(file_data)
+
+    result = import_preview_service.get_preview(db_session, batch.batch_code)
+
+    assert result["parser_status"] == "unavailable"
+    db_session.refresh(sf)
+    assert sf.status == "needs_rule"
+    assert sf.error_code == "PARSER_NOT_FOUND"

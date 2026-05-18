@@ -113,6 +113,40 @@ def test_update_source_file_status(db_session):
     assert sf.format_fingerprint == "fp_abc123"
 
 
+def test_update_source_file_status_clear_error(db_session):
+    batch = ImportBatch(
+        batch_code="TEST_CLEAR",
+        source_type="bank",
+        source_name="test.xlsx",
+        status="uploaded",
+    )
+    db_session.add(batch)
+    db_session.commit()
+    db_session.refresh(batch)
+
+    sf = create_source_file_for_upload(
+        db_session, batch, "/uploads/test.xlsx", "test.xlsx", b"data",
+    )
+    db_session.commit()
+
+    update_source_file_status(
+        db_session, sf, status="failed",
+        error_code="PARSER_RUNTIME_FAILED", error_message="some error",
+    )
+    db_session.commit()
+    db_session.refresh(sf)
+    assert sf.error_code == "PARSER_RUNTIME_FAILED"
+    assert sf.error_message == "some error"
+
+    update_source_file_status(db_session, sf, status="parsed", clear_error=True)
+    db_session.commit()
+    db_session.refresh(sf)
+
+    assert sf.status == "parsed"
+    assert sf.error_code is None
+    assert sf.error_message is None
+
+
 def test_get_source_files_for_batch(db_session):
     batch = ImportBatch(
         batch_code="TEST003",

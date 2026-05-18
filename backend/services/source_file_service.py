@@ -51,13 +51,18 @@ def update_source_file_status(
     error_message: Optional[str] = None,
     parser_artifact_id: Optional[int] = None,
     format_fingerprint: Optional[str] = None,
+    clear_error: bool = False,
 ) -> SourceFile:
     source_file.status = status
     source_file.updated_at = datetime.now()
-    if error_code is not None:
-        source_file.error_code = error_code
-    if error_message is not None:
-        source_file.error_message = error_message
+    if clear_error:
+        source_file.error_code = None
+        source_file.error_message = None
+    else:
+        if error_code is not None:
+            source_file.error_code = error_code
+        if error_message is not None:
+            source_file.error_message = error_message
     if parser_artifact_id is not None:
         source_file.parser_artifact_id = parser_artifact_id
     if format_fingerprint is not None:
@@ -68,6 +73,10 @@ def update_source_file_status(
 
 def get_source_files_for_batch(db: Session, batch_id: int) -> list:
     return db.query(SourceFile).filter(SourceFile.batch_id == batch_id).all()
+
+
+def get_first_source_file_for_batch(db: Session, batch_id: int) -> Optional[SourceFile]:
+    return db.query(SourceFile).filter(SourceFile.batch_id == batch_id).first()
 
 
 def resolve_source_file_status(

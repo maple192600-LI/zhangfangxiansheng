@@ -10,7 +10,7 @@ from db.tables import Account, Entity, FundEvent, ImportBatch, ParserArtifact, S
 from services import bank_import_service as bank_svc
 from services import manual_flow_service as manual_svc
 from services import log_service
-from services.source_file_service import get_source_files_for_batch
+from services.source_file_service import get_source_files_for_batch, get_first_source_file_for_batch, update_source_file_status
 
 logger = logging.getLogger(__name__)
 
@@ -116,22 +116,30 @@ def _build_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
 
 def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
     existing = db.query(FundEvent).filter(FundEvent.batch_id == batch.id).count()
-    source_files = _source_file_list(db, batch.id)
 
     if existing > 0:
         return _build_preview(db, batch)
 
+    sf = get_first_source_file_for_batch(db, batch.id)
+
     file_path = bank_svc._find_uploaded_file(batch.batch_code, batch.source_name or "")
     if not file_path:
-        return _bank_unavailable_preview(batch, "原始文件未找到", source_files=source_files)
+        if sf:
+            update_source_file_status(db, sf, "failed", error_code="SOURCE_FILE_NOT_FOUND", error_message="原始文件未找到")
+            db.commit()
+        return _bank_unavailable_preview(batch, "原始文件未找到")
 
     context = bank_svc.build_bank_import_context(db, file_path, batch.source_name or "")
     parser_match = context["parser_match"]
 
     if not parser_match.get("matched"):
+        if sf:
+            reason = parser_match.get('reason', '未知原因')
+            error_code = "PARSER_CONFLICT" if parser_match.get("match_level") == "conflict" else "PARSER_NOT_FOUND"
+            update_source_file_status(db, sf, "needs_rule", error_code=error_code, error_message=f"缺少解析规则: {reason}")
+            db.commit()
         return _bank_unavailable_preview(
             batch, f"缺少解析规则: {parser_match.get('reason', '未知原因')}", context,
-            source_files=source_files,
         )
 
     try:
@@ -150,11 +158,18 @@ def _build_bank_preview(db: Session, batch: ImportBatch) -> Dict[str, Any]:
                 parser_artifact_id=parser_match["parser_artifact_id"],
             ))
         batch.status = "previewed"
+
+        if sf and sf.status == "ready":
+            update_source_file_status(db, sf, "parsed", clear_error=True)
+
         db.commit()
         return _build_preview(db, batch)
     except Exception as e:
         logger.error("网银解析失败: %s", e, exc_info=True)
-        return _bank_unavailable_preview(batch, f"解析失败: {e}", context, source_files=source_files)
+        if sf:
+            update_source_file_status(db, sf, "failed", error_code="PARSER_RUNTIME_FAILED", error_message=str(e))
+            db.commit()
+        return _bank_unavailable_preview(batch, f"解析失败: {e}", context)
 
 
 def _bank_unavailable_preview(

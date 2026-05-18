@@ -1,13 +1,13 @@
 # 20 · 数据库契约（当前 Schema）
 
-> 本文件定义当前 `backend/db/tables.py` 中 28 张业务 ORM 表的完整 DDL。
+> 本文件定义当前 `backend/db/tables.py` 中 31 张业务 ORM 表的完整 DDL。
 > 契约锚点见 [../00_governance/00_project_constitution.md](../00_governance/00_project_constitution.md) §C1 与 §C6。
 
 ---
 
 ## §T0 · 表清单
 
-当前 28 张业务 ORM 表（按 `backend/db/tables.py` 中 `__tablename__` 定义）：
+当前 31 张业务 ORM 表（按 `backend/db/tables.py` 中 `__tablename__` 定义）：
 
 ```text
 ── 主数据模块（6 张）──
@@ -22,37 +22,40 @@
 7.  manual_field_pool        手工流水字段池
 8.  manual_template_schemes  手工模板方案
 
-── 流水事实（2 张）──
+── 流水事实（5 张）──
 9.  import_batches           导入批次
 10. fund_events              CANONICAL_12 资金流水事实表（§C1）
+11. source_files             上传文件处理记录（每次上传创建一条）
+12. account_resolution_attempts  账户归属判断记录
+13. account_resolution_evidence  账户归属判断证据（结果预览证据抽屉数据来源）
 
 ── Agent 产物（3 张）──
-11. parser_artifacts         ParserArtifact 银行/手工解析器
-12. rule_artifacts           RuleArtifact 报表填充规则
-13. template_inference_job   template.inference 三阶段流水线状态
+14. parser_artifacts         ParserArtifact 银行/手工解析器
+15. rule_artifacts           RuleArtifact 报表填充规则
+16. template_inference_job   template.inference 三阶段流水线状态
 
 ── 报表（2 张）──
-14. report_templates         报表模板配置
-15. daily_report_runs        日报生成记录
+17. report_templates         报表模板配置
+18. daily_report_runs        日报生成记录
 
 ── AI / 日志（3 张）──
-16. ai_configs               AI Provider 配置
-17. ai_call_logs             AI 调用审计日志
-18. operation_logs           操作日志
+19. ai_configs               AI Provider 配置
+20. ai_call_logs             AI 调用审计日志
+21. operation_logs           操作日志
 
 ── Agent 系统（6 张）──
-19. agents_v2                Agent 实例
-20. skills_v2                技能注册表
-21. agent_sessions           Agent 会话
-22. agent_messages           Agent 消息
-23. agent_runs               Agent 运行记录
-24. agent_memories           Agent 记忆存储
+22. agents_v2                Agent 实例
+23. skills_v2                技能注册表
+24. agent_sessions           Agent 会话
+25. agent_messages           Agent 消息
+26. agent_runs               Agent 运行记录
+27. agent_memories           Agent 记忆存储
 
 ── 工作流编排（4 张）──
-25. workflows                工作流主表
-26. workflow_versions        工作流版本
-27. workflow_runs            工作流运行记录
-28. workflow_run_steps       工作流节点执行记录
+28. workflows                工作流主表
+29. workflow_versions        工作流版本
+30. workflow_runs            工作流运行记录
+31. workflow_run_steps       工作流节点执行记录
 ```
 
 已移除：
@@ -273,6 +276,84 @@ CREATE INDEX idx_fund_events_batch ON fund_events(batch_id);
 - `待确认` / `异常` 行属于上传结果预览阶段，允许 `business_date`、`entity_code`、`account_code` 暂缺，以便用户在预览页修正。
 - `正常` 行属于正式基础数据，必须满足 `business_date`、`entity_code`、`account_code` 非空且编码不为空字符串。
 - 查询基础数据、报表、导出时必须过滤 `state = '正常'`。
+
+### §T2.6 · `source_files`
+
+`source_files` 记录每次上传文件的处理状态。不是固定模板，而是每次上传都会创建的动态记录。
+
+```sql
+CREATE TABLE source_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES import_batches(id),
+  original_filename VARCHAR(300) NOT NULL,
+  storage_path VARCHAR(500) NOT NULL,
+  file_hash VARCHAR(64) NOT NULL,
+  file_size INTEGER NOT NULL,
+  sheet_name VARCHAR(100),
+  format_fingerprint VARCHAR(100),
+  parser_artifact_id INTEGER REFERENCES parser_artifacts(id),
+  status VARCHAR(30) NOT NULL DEFAULT 'uploaded',
+  error_code VARCHAR(50),
+  error_message TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME,
+  CHECK (status IN ('uploaded','parsed','needs_rule','needs_account','failed','ready'))
+);
+CREATE INDEX idx_source_files_batch ON source_files(batch_id);
+CREATE INDEX idx_source_files_hash ON source_files(file_hash);
+CREATE INDEX idx_source_files_parser ON source_files(parser_artifact_id);
+CREATE INDEX idx_source_files_status ON source_files(status);
+```
+
+`source_files` 与 `FundEvent` 的关系：`source_files` 记录文件级状态（parser 是否匹配、解析是否成功），`FundEvent` 记录行级流水数据。行级预览仍由 `ImportBatch + FundEvent.state` 完成，不新增 `import_batch_rows`。
+
+### §T2.7 · `account_resolution_attempts`
+
+每次账户归属判断的记录。
+
+```sql
+CREATE TABLE account_resolution_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_file_id INTEGER NOT NULL REFERENCES source_files(id),
+  status VARCHAR(30) NOT NULL,
+  recommended_entity_code VARCHAR(50),
+  recommended_account_code VARCHAR(50),
+  confidence NUMERIC(5,4),
+  match_reason TEXT,
+  error_code VARCHAR(50),
+  raw_hints JSON,
+  candidates JSON,
+  bank_resolution JSON,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME,
+  CHECK (status IN ('matched','ambiguous','unmatched','conflict'))
+);
+CREATE INDEX idx_account_resolution_attempts_file ON account_resolution_attempts(source_file_id);
+```
+
+### §T2.8 · `account_resolution_evidence`
+
+账户归属判断的证据记录，用于结果预览证据抽屉展示。
+
+```sql
+CREATE TABLE account_resolution_evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  attempt_id INTEGER NOT NULL REFERENCES account_resolution_attempts(id),
+  evidence_type VARCHAR(50) NOT NULL,
+  evidence_value TEXT,
+  matched_entity_code VARCHAR(50),
+  matched_account_code VARCHAR(50),
+  weight NUMERIC(5,4),
+  message TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (evidence_type IN (
+    'account_number','account_last_four','account_name',
+    'bank','filename','alias','history','balance_chain',
+    'parser_hint','entity_name'
+  ))
+);
+CREATE INDEX idx_account_resolution_evidence_attempt ON account_resolution_evidence(attempt_id);
+```
 
 ---
 
@@ -669,4 +750,4 @@ CREATE INDEX idx_workflow_run_steps_node ON workflow_run_steps(run_id, node_id);
 ---
 
 **校准来源：** `backend/db/tables.py`、`tools/guards/check_canonical_schema.py`
-**最后校准：** 2026-05-17
+**最后校准：** 2026-05-18

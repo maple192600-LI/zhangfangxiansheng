@@ -28,7 +28,7 @@ backend/
   main.py / config.py / database.py
   api/         ← 路由层（22 模块）
   services/    ← 业务逻辑（25 模块）
-  db/          ← ORM 表定义（28 张表）
+  db/          ← ORM 表定义（31 张表）
   core/        ← 安全、响应格式、运行时守卫
   agents/      ← Agent 引擎（运行时 + 工具 + 记忆）
   data/        ← SQLite 数据 + 上传/导出/备份

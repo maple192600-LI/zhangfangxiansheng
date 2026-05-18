@@ -9,10 +9,10 @@
 | `home.py` | `home_service` | 概览/待办/快捷方式/系统状态 |
 | `master_data.py` | `master_data_service`, `master_data_batch` | Division, Entity, Account, AccountAlias |
 | `bank_master.py` | `bank_service` | Bank |
-| `bank_import.py` | `bank_import_service` | FundEvent, ImportBatch, ParserArtifact（不再公开 commit） |
+| `bank_import.py` | `bank_import_service` | FundEvent, ImportBatch, ParserArtifact, SourceFile（不再公开 commit） |
 | `manual_flow.py` | `manual_flow_service`, `manual_scheme_service` | FundEvent, ManualFieldPool, ManualTemplateScheme（不再公开 commit） |
 | `base_data.py` | `base_data_service` | FundEvent（聚合查询） |
-| `import_preview.py` | `import_preview_service` | ImportBatch, FundEvent（唯一正式提交入口：get/update/validate/commit） |
+| `import_preview.py` | `import_preview_service` | ImportBatch, FundEvent, SourceFile, AccountResolutionAttempt, AccountResolutionEvidence（唯一正式提交入口：get/update/validate/commit） |
 | `reports.py` | `report_service` | FundEvent, DailyReportRun, ReportTemplate |
 | `report_template.py` | `report_template_service` | ReportTemplate |
 | `dashboard.py` | `dashboard_service` | FundEvent（趋势/构成） |
@@ -35,12 +35,12 @@
 | 业务 API 模块（扣除 `__init__.py`） | 22 |
 | Service 模块（`.py`，含 `__init__.py`） | 26 |
 | 业务 Service 模块 | 25 |
-| ORM 表 | 28 |
+| ORM 表 | 31 |
 | API inventory（effective path） | 165 endpoints, 0 duplicate |
 
-## ORM 表清单（28 张）
+## ORM 表清单（31 张）
 
-Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateScheme, ImportBatch, FundEvent, ParserArtifact, RuleArtifact, TemplateInferenceJob, DailyReportRun, AIConfig, AICallLog, OperationLog, User, ReportTemplate, Agent, Skill, AgentSession, AgentMessage, AgentRun, AgentMemory, Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep
+Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateScheme, ImportBatch, FundEvent, SourceFile, AccountResolutionAttempt, AccountResolutionEvidence, ParserArtifact, RuleArtifact, TemplateInferenceJob, DailyReportRun, AIConfig, AICallLog, OperationLog, User, ReportTemplate, Agent, Skill, AgentSession, AgentMessage, AgentRun, AgentMemory, Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep
 
 ## FundEvent 状态边界
 
@@ -60,4 +60,4 @@ Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateSc
 
 ---
 **校准来源：** `backend/main.py`、`backend/api/`、`backend/services/`、`backend/db/tables.py`、`tools/guards/check_api_inventory.py --list`
-**最后校准：** 2026-05-17
+**最后校准：** 2026-05-19

@@ -111,7 +111,28 @@
 | 09G | 前端展示银行识别和账户归属匹配结果 |
 | 09H | 多银行/多账户/多线索场景端到端验收 |
 
-## 已实现服务（尚未接入导入流程）
+## 已实现服务（已接入导入流程）
+
+| 服务 | 文件 | 职责 |
+|------|------|------|
+| 身份线索提取 | `backend/services/bank_statement_identity_service.py` | 从 xlsx 文件和文件名提取银行名（原始文本）、账号、户名、开户行等线索。不硬编码银行名，不归一化 |
+| 账户归属匹配 | `backend/services/bank_account_match_service.py` | 根据身份线索匹配主数据（banks + entities + accounts + account_aliases），输出 matched / ambiguous / unmatched |
+| SourceFile 记录 | `backend/services/source_file_service.py` | 每次上传创建 SourceFile 记录，跟踪文件状态（uploaded/parsed/ready/needs_rule/needs_account/failed） |
+| 账户归属审计 | `backend/services/account_resolution_audit_service.py` | 记录每次账户归属判断的 attempt 和 evidence |
+
+### 已完成（A1）
+
+- SourceFile 文件处理记录（上传时创建，状态随 parser 结果更新）
+- account_resolution_attempts / account_resolution_evidence（账户归属判断留痕）
+- 单文件上传已接入 SourceFile 创建、状态更新、归属判断记录
+- 结果预览阶段回写 SourceFile 状态（parser 成功 → parsed，失败 → failed + error_code）
+
+### 尚未完成
+
+- 批量上传 UI 未完成
+- 规则中心训练页面未完成
+- 结果预览证据抽屉未完成（evidence 数据已存但前端未展示）
+- 用户确认后沉淀 account_resolution_rules 未完成
 
 | 服务 | 文件 | 职责 |
 |------|------|------|
@@ -130,4 +151,4 @@
 
 ---
 **校准来源：** `ai_coordination/parser-runtime/09_bank_parser_generalization_revised_plan_v2.md`、`backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
-**最后校准：** 2026-05-18
+**最后校准：** 2026-05-19
