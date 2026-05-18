@@ -20,12 +20,12 @@ AI Coding 工具进入本项目的入口文件。
 
 ## CURRENT BLOCKERS
 
-两个 artifact runtime 函数为 `NotImplementedError`：
+Artifact runtime 状态：
 
-- `backend/core/artifact_runtime.py::run_parser` — ParserArtifact 驱动的解析执行路径阻断
-- `backend/core/artifact_runtime.py::run_rule` — RuleArtifact 驱动的规则执行路径阻断
+- `backend/core/artifact_runtime.py::run_parser` — 已实现 ParserArtifact deterministic runtime
+- `backend/core/artifact_runtime.py::run_rule` — NotImplementedError，Phase H1 待交付
 
-ParserArtifact 和 RuleArtifact 可以创建和审核，但无法被 artifact runtime 执行。
+ParserArtifact 可创建、审核、执行。RuleArtifact 可创建和审核，但无法通过 artifact runtime 执行。
 
 手工流水快速录入路径已可直接写入 FundEvent，不应被重建。
 

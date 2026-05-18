@@ -84,7 +84,7 @@
 
 | 阻断点 | 位置 | 影响 |
 |--------|------|------|
-| `run_parser` | `backend/core/artifact_runtime.py` | ParserArtifact 驱动的解析执行路径阻断 |
+| `run_parser` | `backend/core/artifact_runtime.py` | ParserArtifact 已实现 deterministic runtime |
 | `run_rule` | `backend/core/artifact_runtime.py` | RuleArtifact 驱动的规则执行路径阻断 |
 
 手工流水快速录入有独立路径可直接写入 FundEvent，不受上述阻断影响。

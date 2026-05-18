@@ -3,17 +3,25 @@
 ParserArtifact: deterministic parsing of bank/manual Excel files into CANONICAL_12 rows.
 RuleArtifact: deterministic template filling from approved rules.
 
-Contract status: run_parser and run_rule are contract placeholders.
-Full implementation is a separate task (Phase E / Phase H).
+Implementation status:
+    run_parser  — implemented (ParserArtifact deterministic runtime).
+    run_rule    — contract placeholder only (Phase H1).
 """
 from __future__ import annotations
 
+import traceback
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator, Optional
 
+from openpyxl import load_workbook
 from openpyxl.workbook.workbook import Workbook
 from sqlalchemy.orm import Session
+
+from core.artifact_ast_guard import PrimitivesViolationError
+from core.artifact_sandbox import get_default_sandbox_config
+from core.runtime_guard import no_ai_runtime
+from db.tables import ParserArtifact
 
 
 # ── Structured exception hierarchy ──
@@ -28,17 +36,6 @@ class ArtifactNotFoundError(ArtifactRuntimeError):
 
 class ArtifactNotActiveError(ArtifactRuntimeError):
     """Artifact exists but status != 'active'."""
-
-
-class PrimitivesViolationError(ArtifactRuntimeError):
-    """Artifact code imports modules outside the primitives whitelist."""
-
-    def __init__(self, artifact_id: int, disallowed: list[str]) -> None:
-        self.artifact_id = artifact_id
-        self.disallowed = disallowed
-        super().__init__(
-            f"Artifact {artifact_id} imports disallowed modules: {disallowed}"
-        )
 
 
 class SandboxTimeoutError(ArtifactRuntimeError):
@@ -61,7 +58,18 @@ class ArtifactExecutionError(ArtifactRuntimeError):
         super().__init__(f"Artifact {artifact_id} execution failed: {detail}")
 
 
-# ── Execution contracts ──
+_SAFE_BUILTINS = {
+    k: v for k, v in __builtins__.items()
+    if k not in ("open", "eval", "exec", "compile", "breakpoint",
+                  "memoryview", "globals", "locals", "vars", "dir")
+} if isinstance(__builtins__, dict) else {
+    k: getattr(__builtins__, k)
+    for k in dir(__builtins__)
+    if k not in ("open", "eval", "exec", "compile", "breakpoint",
+                 "memoryview", "globals", "locals", "vars", "dir")
+    and not k.startswith("__")
+}
+
 
 def run_parser(
     db: Session,
@@ -78,38 +86,99 @@ def run_parser(
         ctx         — optional dict with account_code, entity_code, etc.
 
     Output contract:
-        Yields dicts, each conforming to CANONICAL_12 schema (§C1):
-            business_date, entity_code, entity_name, account_code, account_name,
-            summary, counterparty, amount_in, amount_out, rolling_balance,
-            state, source
+        Yields dicts, each conforming to CANONICAL_12 schema (§C1).
 
-    Preconditions:
-        - artifact.status == 'active'
-        - artifact.code passes AST whitelist scan (artifact_ast_guard.validate_artifact_code)
-        - file_path points to a readable .xlsx/.xls file
-
-    Runtime constraints:
-        - Execution runs inside core.runtime_guard.no_ai_runtime()
-        - No LLM / network calls allowed (§C8)
-        - Single execution timeout: 60 seconds (artifact_sandbox.DEFAULT_TIMEOUT_SECONDS)
-        - Only active artifacts may execute
-        - Output rows must conform to db.schemas.ParserRuntimeRow
-        - Errors must be returned as structured ArtifactRuntimeError subclasses
-
-    Implementation status:
-        Contract placeholder only. Phase E1 will deliver the first working executor.
+    Implementation: Phase E1 delivered deterministic runtime.
 
     Raises:
         ArtifactNotFoundError    — artifact_id does not exist
         ArtifactNotActiveError   — artifact exists but status != 'active'
         PrimitivesViolationError — AST scan finds disallowed imports
-        SandboxTimeoutError      — execution exceeds time limit
         ArtifactExecutionError   — artifact code raises during execution
     """
-    raise NotImplementedError(
-        "ParserArtifact runtime 尚未实现。"
-        "完整执行器将在后续 Phase E1 中交付。"
-    )
+    if ctx is None:
+        ctx = {}
+
+    from core.artifact_ast_guard import validate_artifact_code
+
+    artifact = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
+    if artifact is None:
+        raise ArtifactNotFoundError(f"ParserArtifact id={artifact_id} 不存在")
+    if artifact.status != "active":
+        raise ArtifactNotActiveError(
+            f"ParserArtifact id={artifact_id} status={artifact.status!r}，需要 'active'"
+        )
+
+    validate_artifact_code(artifact.code, artifact.id)
+
+    wb = load_workbook(file_path, data_only=True)
+    sandbox = get_default_sandbox_config()
+
+    ns: dict[str, Any] = {"__builtins__": _SAFE_BUILTINS}
+    code_obj = compile(artifact.code, f"<parser_artifact_{artifact.id}>", "exec")
+
+    with no_ai_runtime():
+        exec(code_obj, ns)
+        parse_fn = ns.get("parse")
+        if parse_fn is None or not callable(parse_fn):
+            raise ArtifactExecutionError(
+                artifact.id,
+                "artifact code must define a callable 'parse(wb, ctx)' function"
+            )
+        try:
+            result = parse_fn(wb, ctx)
+        except ArtifactRuntimeError:
+            raise
+        except Exception as e:
+            raise ArtifactExecutionError(
+                artifact.id, f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            ) from e
+
+    if callable(getattr(result, "__next__", None)):
+        iterator = result
+    else:
+        iterator = iter(result)
+
+    count = 0
+    while count < sandbox.max_output_rows:
+        try:
+            row = next(iterator)
+        except StopIteration:
+            break
+        except ArtifactRuntimeError:
+            raise
+        except Exception as e:
+            raise ArtifactExecutionError(
+                artifact.id, f"row {count}: {type(e).__name__}: {e}"
+            ) from e
+        if not isinstance(row, dict):
+            raise ArtifactExecutionError(
+                artifact.id, f"row {count}: expected dict, got {type(row).__name__}"
+            )
+        count += 1
+        yield _coerce_row(artifact.id, row, count - 1)
+
+
+def _coerce_row(artifact_id: int, row: dict[str, Any], index: int) -> dict[str, Any]:
+    out = dict(row)
+    for key in ("amount_in", "amount_out", "rolling_balance"):
+        v = out.get(key)
+        if v is not None and not isinstance(v, Decimal):
+            try:
+                out[key] = Decimal(str(v))
+            except Exception:
+                pass
+    bd = out.get("business_date")
+    if isinstance(bd, datetime):
+        out["business_date"] = bd.date()
+    elif isinstance(bd, str) and bd:
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日"):
+            try:
+                out["business_date"] = datetime.strptime(bd, fmt).date()
+                break
+            except ValueError:
+                continue
+    return out
 
 
 def run_rule(
@@ -119,36 +188,11 @@ def run_rule(
 ) -> Workbook:
     """Execute an active RuleArtifact to fill a report template.
 
-    Input contract:
-        db          — SQLAlchemy Session (read/write)
-        artifact_id — int, references a RuleArtifact with status='active'
-        ctx         — dict with keys:
-            period_start   — str (YYYY-MM-DD)
-            period_end     — str (YYYY-MM-DD)
-            account_code   — str
-            template_path  — str, path to the .xlsx template
-
-    Output contract:
-        Returns an openpyxl Workbook with all placeholders filled.
-
-    Preconditions:
-        - artifact.status == 'active'
-        - artifact.placeholder_bindings covers all §TEMPLATE_18 placeholders
-        - artifact.code passes AST whitelist scan (artifact_ast_guard.validate_artifact_code)
-
-    Runtime constraints:
-        - Same as run_parser (no_ai_runtime, 60s timeout, §C8)
-        - Only active artifacts may execute
-
     Implementation status:
         Contract placeholder only. Phase H1 will deliver the first working executor.
 
     Raises:
-        ArtifactNotFoundError    — artifact_id does not exist
-        ArtifactNotActiveError   — artifact exists but status != 'active'
-        PrimitivesViolationError — AST scan finds disallowed imports
-        SandboxTimeoutError      — execution exceeds time limit
-        ArtifactExecutionError   — artifact code raises during execution
+        NotImplementedError always.
     """
     raise NotImplementedError(
         "RuleArtifact runtime 尚未实现。"

@@ -8,7 +8,15 @@ from __future__ import annotations
 import ast
 from typing import Sequence
 
-from core.artifact_runtime import PrimitivesViolationError
+class PrimitivesViolationError(RuntimeError):
+    """Artifact code imports modules outside the primitives whitelist."""
+
+    def __init__(self, artifact_id: int, disallowed: list[str]) -> None:
+        self.artifact_id = artifact_id
+        self.disallowed = disallowed
+        super().__init__(
+            f"Artifact {artifact_id} imports disallowed modules: {disallowed}"
+        )
 
 ALLOWED_MODULE_PREFIXES: tuple[str, ...] = (
     "fund.primitives.",

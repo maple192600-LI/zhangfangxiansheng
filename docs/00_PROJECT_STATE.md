@@ -37,10 +37,9 @@
 
 | 阻断点          | 位置                                     | 影响                         |
 | ------------ | -------------------------------------- | -------------------------- |
-| `run_parser` | `backend/core/artifact_runtime.py:109` | ParserArtifact 驱动的解析执行路径阻断 |
-| `run_rule`   | `backend/core/artifact_runtime.py:153` | RuleArtifact 驱动的规则执行路径阻断   |
+| `run_rule`   | `backend/core/artifact_runtime.py` | RuleArtifact 驱动的规则执行路径阻断   |
 
-ParserArtifact 和 RuleArtifact 可以创建和审核，但无法被 artifact runtime 执行。
+`run_parser` 已实现 ParserArtifact deterministic runtime。`run_rule` 仍为 NotImplementedError。
 
 ## Placeholder / 待清理能力
 

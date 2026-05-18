@@ -136,8 +136,8 @@ def preview(
                 {"batch_code": batch_code},
             )
         )
-    except NotImplementedError:
-        raise ValueError("解析器运行时未实现，无法预览解析结果")
+    except artifact_runtime.ArtifactRuntimeError as e:
+        raise ValueError(str(e))
     result = _preview_from_canonical_rows(batch_code, rows)
     batch.status = "previewed"
     db.commit()

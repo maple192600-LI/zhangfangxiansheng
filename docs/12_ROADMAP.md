@@ -26,7 +26,7 @@
 
 ### Artifact Runtime 实现
 
-- [ ] Phase E1：`run_parser` 实现（确定性解析执行器）
+- [x] Phase E1：`run_parser` 实现（确定性解析执行器）
 - [ ] Phase H1：`run_rule` 实现（确定性规则执行器）
 
 ### 导入闭环

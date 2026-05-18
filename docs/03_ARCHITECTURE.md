@@ -46,7 +46,7 @@ graph TD
 | Vue 前端 | 已完成 |
 | SQLite + Alembic 迁移 | 已完成 |
 | Agent Runtime | 已完成（通用 Agent、工具、记忆、技能） |
-| Artifact Runtime | **未完成** — `run_parser` 和 `run_rule` 为 NotImplementedError |
+| Artifact Runtime | **部分完成** — `run_parser` 已实现；`run_rule` 为 NotImplementedError (Phase H1) |
 | Workflow Executor | 代码已存在，执行器和节点注册机制可用，但不等于 production-ready |
 
 ---
