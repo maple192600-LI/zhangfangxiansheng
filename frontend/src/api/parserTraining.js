@@ -25,3 +25,15 @@ export const getParserContext = () =>
 
 export const listParsers = (params) =>
   http.get('/parser-training/parsers', { params })
+
+export const getParserDetail = (id) =>
+  http.get(`/parser-training/parsers/${id}`)
+
+export const activateParser = (id) =>
+  http.post(`/parser-training/parsers/${id}/activate`)
+
+export const retireParser = (id) =>
+  http.post(`/parser-training/parsers/${id}/retire`)
+
+export const deleteParser = (id) =>
+  http.delete(`/parser-training/parsers/${id}`)

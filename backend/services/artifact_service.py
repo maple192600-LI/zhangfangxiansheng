@@ -309,6 +309,61 @@ def job_to_dict(job: TemplateInferenceJob) -> dict[str, Any]:
 
 # ── Private helpers ──
 
+def activate_parser_artifact(
+    db: Session, artifact_id: int, operator: str = "rule_center"
+) -> dict[str, Any]:
+    row = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
+    if row is None:
+        raise ValueError(f"Parser artifact {artifact_id} 不存在")
+    if row.status == "active":
+        return parser_to_dict(row, include_code=False)
+
+    # Retire same bank+format active parsers for bank kind
+    if row.kind == "bank" and row.bank_id is not None:
+        retire_q = db.query(ParserArtifact).filter(
+            ParserArtifact.kind == "bank",
+            ParserArtifact.bank_id == row.bank_id,
+            ParserArtifact.status == "active",
+            ParserArtifact.id != artifact_id,
+        )
+        if row.format_key is not None:
+            retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
+        else:
+            retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
+        retire_q.update({"status": "retired"})
+
+    row.status = "active"
+    row.approved_by = operator
+    row.approved_at = datetime.now()
+    db.commit()
+    db.refresh(row)
+    return parser_to_dict(row, include_code=False)
+
+
+def retire_parser_artifact(
+    db: Session, artifact_id: int, operator: str = "rule_center"
+) -> dict[str, Any]:
+    row = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
+    if row is None:
+        raise ValueError(f"Parser artifact {artifact_id} 不存在")
+    if row.status == "retired":
+        return parser_to_dict(row, include_code=False)
+    row.status = "retired"
+    db.commit()
+    db.refresh(row)
+    return parser_to_dict(row, include_code=False)
+
+
+def delete_parser_artifact(db: Session, artifact_id: int) -> None:
+    row = db.query(ParserArtifact).filter(ParserArtifact.id == artifact_id).first()
+    if row is None:
+        raise ValueError(f"Parser artifact {artifact_id} 不存在")
+    if row.status == "active":
+        raise ValueError("active parser 不能直接删除，请先停用后删除")
+    db.delete(row)
+    db.commit()
+
+
 def _next_parser_version(db: Session, name: str) -> int:
     latest = (
         db.query(ParserArtifact)

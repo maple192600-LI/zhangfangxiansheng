@@ -9,7 +9,7 @@ import pytest
 
 from conftest import make_xlsx, seed_chart_of_accounts
 from db.tables import ImportBatch, ParserArtifact, ParserTrainingJob
-from services import parser_training_service
+from services import parser_training_service, artifact_service
 from core.artifact_runtime import run_parser_trial
 
 
@@ -576,3 +576,65 @@ def test_disabled_parser_training_toolset_removes_tool():
     tools = get_tools_for_llm(perm)
     tool_names = [t["function"]["name"] for t in tools]
     assert "parser_training_update_candidate" not in tool_names
+
+
+# ── 12G: parser lifecycle (activate/retire/delete) ──
+
+
+def test_activate_parser_sets_active(db_session):
+    artifact_service.activate_parser_artifact(db_session, _make_retired_parser(db_session).id)
+    row = db_session.query(ParserArtifact).first()
+    assert row.status == "active"
+    assert row.approved_by == "rule_center"
+
+
+def test_activate_retires_same_bank_format(db_session):
+    old = _add_parser_artifact(db_session, name="old", bank_id=1, format_key="fmt_a", status="active")
+    new = _add_parser_artifact(db_session, name="new", bank_id=1, format_key="fmt_a", status="retired")
+    artifact_service.activate_parser_artifact(db_session, new.id)
+
+    db_session.refresh(old)
+    db_session.refresh(new)
+    assert old.status == "retired"
+    assert new.status == "active"
+
+
+def test_retire_parser_sets_retired(db_session):
+    p = _add_parser_artifact(db_session, name="active_p", status="active")
+    artifact_service.retire_parser_artifact(db_session, p.id)
+    db_session.refresh(p)
+    assert p.status == "retired"
+
+
+def test_delete_active_parser_raises(db_session):
+    p = _add_parser_artifact(db_session, name="active_p", status="active")
+    with pytest.raises(ValueError, match="请先停用"):
+        artifact_service.delete_parser_artifact(db_session, p.id)
+
+
+def test_delete_retired_parser(db_session):
+    p = _add_parser_artifact(db_session, name="retired_p", status="retired")
+    pid = p.id
+    artifact_service.delete_parser_artifact(db_session, p.id)
+    assert db_session.query(ParserArtifact).filter(ParserArtifact.id == pid).first() is None
+
+
+def test_delete_draft_parser(db_session):
+    p = _add_parser_artifact(db_session, name="draft_p", status="draft")
+    pid = p.id
+    artifact_service.delete_parser_artifact(db_session, p.id)
+    assert db_session.query(ParserArtifact).filter(ParserArtifact.id == pid).first() is None
+
+
+def _make_retired_parser(db):
+    p = ParserArtifact(
+        name="test_retired", kind="bank", account_code=None,
+        bank_id=None, format_key=None, match_rules={}, version=1,
+        status="retired", code="def parse(wb, ctx): return []",
+        primitives_imports=[], sample_check_log={},
+        confidence=0.9, created_by="test", created_at=datetime.now(),
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p

@@ -124,6 +124,42 @@ def list_parsers(kind: str = "bank", db: Session = Depends(get_db)):
     return success(data)
 
 
+@router.get("/parsers/{artifact_id}")
+def get_parser_detail(artifact_id: int, db: Session = Depends(get_db)):
+    """Get parser artifact detail (includes code)."""
+    result = artifact_service.get_parser_artifact(db, artifact_id)
+    if not result:
+        return error(1001, f"Parser {artifact_id} 不存在")
+    return success(result)
+
+
+@router.post("/parsers/{artifact_id}/activate")
+def activate_parser(artifact_id: int, db: Session = Depends(get_db)):
+    try:
+        result = artifact_service.activate_parser_artifact(db, artifact_id)
+        return success(result)
+    except ValueError as exc:
+        return error(2001, str(exc))
+
+
+@router.post("/parsers/{artifact_id}/retire")
+def retire_parser(artifact_id: int, db: Session = Depends(get_db)):
+    try:
+        result = artifact_service.retire_parser_artifact(db, artifact_id)
+        return success(result)
+    except ValueError as exc:
+        return error(2001, str(exc))
+
+
+@router.delete("/parsers/{artifact_id}")
+def delete_parser(artifact_id: int, db: Session = Depends(get_db)):
+    try:
+        artifact_service.delete_parser_artifact(db, artifact_id)
+        return success({"deleted": artifact_id})
+    except ValueError as exc:
+        return error(2001, str(exc))
+
+
 def _build_starter_prompt(job: dict) -> str:
     headers = job.get("headers", [])
     sample_rows = job.get("sample_rows", [])
