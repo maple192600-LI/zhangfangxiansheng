@@ -178,18 +178,24 @@ def _build_starter_prompt(job: dict) -> str:
     filename = job.get("filename", "")
     row_count = job.get("row_count", 0)
     context = job.get("context", {})
+    identity_hints = job.get("identity_hints", {})
     job_code = job.get("job_code", "")
+    detected_header_row = identity_hints.get("detected_header_row", "未知")
+    sample_row_count = identity_hints.get("sample_row_count", len(sample_rows))
 
     prompt = f"""你是用户选中的现有智能体，被邀请协助为银行流水生成解析规则。你不是专用解析引擎，只是当前任务需要你帮忙。
 
 ## 样本信息
 - 文件名: {filename}
-- 总行数: {row_count}
-- 表头: {', '.join(headers)}
+- 系统自动检测到的表头行: 第 {detected_header_row} 行
+- 检测到的正文流水行数: {row_count}
+- 本次提供给你的代表性正文样本行数: {sample_row_count}
+- 表头字段: {', '.join(headers)}
 
-## 前5行样本
+## 代表性正文样本
+下面这些行是系统在自动检测表头后，从正文流水中跨全文件抽取的代表样本，不是固定前几行，也不是完整文件。你必须生成能处理完整文件的规则，不能只针对这些样本行写特殊逻辑。
 """
-    for i, row in enumerate(sample_rows[:5], 1):
+    for i, row in enumerate(sample_rows, 1):
         prompt += f"第{i}行: {' | '.join(row)}\n"
 
     entities = context.get("entities", [])
@@ -219,7 +225,16 @@ def _build_starter_prompt(job: dict) -> str:
 
     prompt += f"""
 ## 你的任务
-根据样本文件结构和系统提供的主数据上下文，生成一个候选 parser。
+根据样本文件结构、代表性正文样本和系统提供的主数据上下文，生成一个候选 parser。
+
+## 用户要审核的结果
+用户不审核代码。用户审核的是系统运行你的识别方案后生成的“识别结果表”，也就是基础数据预览表。识别结果表至少要让用户能核对：
+- 日期是否正确
+- 摘要是否符合财务习惯
+- 收入/支出方向和金额是否正确
+- 余额是否正确
+- 对方信息是否正确
+- 单位和账户是否能根据文件线索和系统主数据正确匹配；不能确定时不要硬编码猜测
 
 ## 输出要求
 定义 parse(wb, ctx) 函数，返回 CANONICAL_12 字段列表:

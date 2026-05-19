@@ -15,6 +15,7 @@ from services import artifact_service
 from services.parser_context_service import build_bank_parser_context
 
 _UPLOAD_DIR_NAME = "parser_training_samples"
+_MAX_CONTEXT_SAMPLE_ROWS = 80
 
 _BLOCKED_CODE_PATTERNS = [
     "DEFAULT_ACCOUNT_CODE",
@@ -53,13 +54,7 @@ def create_training_job(db: Session, file_data: bytes, filename: str) -> Dict[st
     if len(rows) < 2:
         raise ValueError("文件内容为空或行数不足")
 
-    header_idx = detect_header_row(rows)
-    headers = [h.strip() for h in rows[header_idx] if h and h.strip()]
-    sample_rows = [
-        [str(c).strip() if c else "" for c in row[:len(headers)]]
-        for row in rows[header_idx + 1:header_idx + 6]
-        if any(c and str(c).strip() for c in row)
-    ]
+    file_summary = _build_training_file_summary(rows, filename)
 
     job_code = f"pt_{uuid.uuid4().hex[:8]}"
     file_path = os.path.join(_upload_dir(), f"{job_code}_{filename}")
@@ -67,10 +62,6 @@ def create_training_job(db: Session, file_data: bytes, filename: str) -> Dict[st
         f.write(file_data)
 
     file_hash = hashlib.sha256(file_data).hexdigest()
-
-    from services.bank_statement_identity_service import extract_identity_hints_from_rows
-    identity_hints = extract_identity_hints_from_rows(rows, filename)
-    format_fingerprint = identity_hints.get("format_fingerprint", "unknown")
 
     context = build_bank_parser_context(db)
 
@@ -80,12 +71,12 @@ def create_training_job(db: Session, file_data: bytes, filename: str) -> Dict[st
         sample_file_path=file_path,
         file_hash=file_hash,
         format=fmt,
-        format_fingerprint=format_fingerprint,
-        identity_hints_json=json.dumps(identity_hints, ensure_ascii=False),
+        format_fingerprint=file_summary["format_fingerprint"],
+        identity_hints_json=json.dumps(file_summary["identity_hints"], ensure_ascii=False),
         context_snapshot_json=json.dumps(context, ensure_ascii=False),
-        headers_json=json.dumps(headers, ensure_ascii=False),
-        sample_rows_json=json.dumps(sample_rows, ensure_ascii=False),
-        row_count=len(rows) - header_idx - 1,
+        headers_json=json.dumps(file_summary["headers"], ensure_ascii=False),
+        sample_rows_json=json.dumps(file_summary["sample_rows"], ensure_ascii=False),
+        row_count=file_summary["row_count"],
         candidate_code=None,
         candidate_notes=None,
         trial_result_json=None,
@@ -97,6 +88,66 @@ def create_training_job(db: Session, file_data: bytes, filename: str) -> Dict[st
     db.refresh(job)
 
     return _job_to_response(job)
+
+
+def _build_training_file_summary(rows: list[list[Any]], filename: str) -> Dict[str, Any]:
+    """Build the file context used by both the UI and the agent starter prompt.
+
+    The context is based on the detected header row plus representative data rows
+    distributed across the whole file. This avoids teaching the agent from only
+    the first few transactions while keeping the prompt bounded.
+    """
+    header_idx = detect_header_row(rows)
+    headers = [str(h).strip() for h in rows[header_idx] if h and str(h).strip()]
+    width = len(headers)
+    data_rows = [
+        row
+        for row in rows[header_idx + 1:]
+        if any(c and str(c).strip() for c in row)
+    ]
+    sample_rows = [
+        _format_sample_row(data_rows[i], width)
+        for i in _distributed_sample_indices(len(data_rows), _MAX_CONTEXT_SAMPLE_ROWS)
+    ]
+
+    from services.bank_statement_identity_service import extract_identity_hints_from_rows
+    identity_hints = extract_identity_hints_from_rows(rows, filename)
+    identity_hints.update({
+        "detected_header_row": header_idx + 1,
+        "data_row_count": len(data_rows),
+        "sample_row_count": len(sample_rows),
+        "sample_strategy": "distributed_across_detected_body",
+    })
+
+    return {
+        "headers": headers,
+        "sample_rows": sample_rows,
+        "row_count": len(data_rows),
+        "identity_hints": identity_hints,
+        "format_fingerprint": identity_hints.get("format_fingerprint", "unknown"),
+    }
+
+
+def _distributed_sample_indices(total: int, limit: int) -> list[int]:
+    if total <= 0:
+        return []
+    if total <= limit:
+        return list(range(total))
+    if limit <= 1:
+        return [0]
+
+    indices = {
+        round(i * (total - 1) / (limit - 1))
+        for i in range(limit)
+    }
+    return sorted(indices)
+
+
+def _format_sample_row(row: list[Any], width: int) -> list[str]:
+    cells = [str(c).strip() if c is not None else "" for c in row[:width]]
+    if len(cells) < width:
+        cells.extend([""] * (width - len(cells)))
+    return cells
 
 
 def get_job(db: Session, job_code: str) -> Optional[Dict[str, Any]]:
@@ -292,6 +343,18 @@ def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
     trial_result = _normalize_trial_result_for_response(job.trial_result_json)
     status = job.status
     trial_status = job.trial_status
+    headers = json.loads(job.headers_json) if job.headers_json else []
+    sample_rows = json.loads(job.sample_rows_json) if job.sample_rows_json else []
+    identity_hints = json.loads(job.identity_hints_json) if job.identity_hints_json else {}
+    row_count = job.row_count
+
+    refreshed_summary = _try_build_summary_from_sample_file(job)
+    if refreshed_summary:
+        headers = refreshed_summary["headers"]
+        sample_rows = refreshed_summary["sample_rows"]
+        identity_hints = refreshed_summary["identity_hints"]
+        row_count = refreshed_summary["row_count"]
+
     if trial_result and trial_result.get("status") == "trial_failed":
         if status == "trial_success":
             status = "trial_failed"
@@ -301,10 +364,10 @@ def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
         "job_code": job.job_code,
         "filename": job.original_filename,
         "format": job.format,
-        "row_count": job.row_count,
-        "headers": json.loads(job.headers_json) if job.headers_json else [],
-        "sample_rows": json.loads(job.sample_rows_json) if job.sample_rows_json else [],
-        "identity_hints": json.loads(job.identity_hints_json) if job.identity_hints_json else {},
+        "row_count": row_count,
+        "headers": headers,
+        "sample_rows": sample_rows,
+        "identity_hints": identity_hints,
         "format_fingerprint": job.format_fingerprint,
         "context": json.loads(job.context_snapshot_json) if job.context_snapshot_json else {},
         "status": status,
@@ -315,6 +378,20 @@ def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
         "agent_id": job.agent_id,
         "agent_session_id": job.agent_session_id,
     }
+
+
+def _try_build_summary_from_sample_file(job: ParserTrainingJob) -> Optional[Dict[str, Any]]:
+    """Refresh sample context for old jobs that stored only a tiny row slice."""
+    if not job.sample_file_path or not os.path.exists(job.sample_file_path):
+        return None
+    try:
+        with open(job.sample_file_path, "rb") as f:
+            file_data = f.read()
+        fmt = job.format or detect_format(job.original_filename)
+        rows = read_file_from_bytes(file_data, job.original_filename, fmt)
+        return _build_training_file_summary(rows, job.original_filename)
+    except Exception:
+        return None
 
 
 def _normalize_trial_result_for_response(raw_json: Optional[str]) -> Optional[Dict[str, Any]]:

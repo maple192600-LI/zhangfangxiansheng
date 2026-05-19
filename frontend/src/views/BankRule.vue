@@ -29,6 +29,9 @@
               {{ job.filename }} · {{ job.format }} · {{ job.row_count }} 行
               <span :class="'tag tag-' + statusTagClass(job.status)">{{ statusLabel(job.status) }}</span>
             </div>
+            <div style="font-size:12px;color:#777;margin-top:4px;">
+              下方是系统自动识别表头后，从正文中抽取的代表样本；生成规则时会面向完整文件，不是只看前几行。
+            </div>
             <div v-if="job.headers && job.headers.length" style="margin-top:8px;">
               <div style="overflow-x:auto;">
                 <table class="preview-table">

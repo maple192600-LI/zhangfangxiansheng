@@ -37,6 +37,23 @@ def _make_sample_xlsx():
     ])
 
 
+def _make_large_sample_xlsx(row_count=100):
+    rows = [
+        ["银行导出文件", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["日期", "摘要", "收入", "支出", "余额"],
+    ]
+    for i in range(1, row_count + 1):
+        rows.append([
+            f"2026-04-{(i % 28) + 1:02d}",
+            f"交易{i:03d}",
+            str(i * 10 if i % 2 else ""),
+            str(i * 5 if not i % 2 else ""),
+            str(10000 + i),
+        ])
+    return make_xlsx(rows)
+
+
 _WORKING_PARSE_CODE = '''
 def parse(wb, ctx):
     ws = wb.active
@@ -101,6 +118,24 @@ def test_create_training_job_persists(db_session, tmp_path, monkeypatch):
     assert job is not None
     assert job.status == "sample_uploaded"
     assert job.trial_status == "pending"
+
+
+def test_create_training_job_uses_representative_rows_not_first_five(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_large_sample_xlsx(100)
+    result = parser_training_service.create_training_job(db_session, file_data, "large.xlsx")
+
+    assert result["row_count"] == 100
+    assert result["identity_hints"]["detected_header_row"] == 3
+    assert result["identity_hints"]["sample_strategy"] == "distributed_across_detected_body"
+    assert len(result["sample_rows"]) == 80
+    summaries = [row[1] for row in result["sample_rows"]]
+    assert "交易001" in summaries
+    assert "交易100" in summaries
+    assert len(summaries) > 5
 
 
 def test_create_training_job_rejects_unknown_format(db_session, tmp_path, monkeypatch):
@@ -534,6 +569,25 @@ def test_starter_prompt_contains_required_terms(db_session, tmp_path, monkeypatc
     assert "用户选中的现有智能体" in prompt
 
 
+def test_starter_prompt_uses_detected_header_and_representative_samples(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_large_sample_xlsx(100)
+    created = parser_training_service.create_training_job(db_session, file_data, "large.xlsx")
+    job = parser_training_service.get_job(db_session, created["job_code"])
+
+    from api.parser_training import _build_starter_prompt
+    prompt = _build_starter_prompt(job)
+
+    assert "前5行样本" not in prompt
+    assert "代表性正文样本" in prompt
+    assert "不是固定前几行" in prompt
+    assert "系统自动检测到的表头行: 第 3 行" in prompt
+    assert "第80行:" in prompt
+
+
 def test_starter_prompt_no_rule_agent(db_session, tmp_path, monkeypatch):
     """Starter prompt must NOT contain '规则智能体'."""
     import config as _cfg
@@ -548,7 +602,7 @@ def test_starter_prompt_no_rule_agent(db_session, tmp_path, monkeypatch):
     prompt = _build_starter_prompt(job)
 
     assert "规则智能体" not in prompt
-    assert "用户最终审核的是解析结果表格，不是代码" in prompt
+    assert "用户不审核代码" in prompt
 
 
 # ── 12D: agent permission + toolset ──
