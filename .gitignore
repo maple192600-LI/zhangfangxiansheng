@@ -38,6 +38,7 @@ htmlcov/
 # Upload temp files
 backend/data/uploads/
 backend/data/template_uploads/
+backend/data/parser_training_samples/
 backend/tmp_skill_content.txt
 
 # Backups & exports (runtime data)
