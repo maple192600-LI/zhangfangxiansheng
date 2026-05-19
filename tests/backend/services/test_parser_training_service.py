@@ -1135,29 +1135,43 @@ def test_get_job_cleans_old_raw_traceback(db_session, tmp_path, monkeypatch):
     assert "openpyxl" in trial["technical_error"]
 
 
-def test_run_candidate_empty_rows_is_failure(db_session, tmp_path, monkeypatch):
-    """Parser returning [] must be trial_failed, not trial_success."""
-    import config as _cfg
-    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
-    _seed_db(db_session)
+def test_get_job_cleans_stale_zero_row_success(db_session):
+    """trial_success + 0 rows (pre-13E false success) must be converted to trial_failed."""
+    # Directly create a job record without seed data (not needed for get_job)
+    job = ParserTrainingJob(
+        job_code="pt_stale_test",
+        original_filename="test.xlsx",
+        sample_file_path="/tmp/fake.xlsx",
+        file_hash="abc123",
+        format="xlsx",
+        format_fingerprint="unknown",
+        identity_hints_json="{}",
+        context_snapshot_json="{}",
+        headers_json="[]",
+        sample_rows_json="[]",
+        row_count=0,
+        candidate_code=None,
+        candidate_notes=None,
+        trial_result_json=json.dumps({
+            "status": "trial_success",
+            "error": None,
+            "rows": [],
+            "row_count": 0,
+        }, ensure_ascii=False),
+        trial_status="success",
+        status="trial_success",
+    )
+    db_session.add(job)
+    db_session.commit()
 
-    file_data = _make_sample_xlsx()
-    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
-    job_code = created["job_code"]
-
-    code = "def parse(wb, ctx): return []"
-    parser_training_service.update_candidate_code(db_session, job_code, code)
-    result = parser_training_service.run_candidate(db_session, job_code)
-
+    result = parser_training_service.get_job(db_session, "pt_stale_test")
+    trial = result["trial_result"]
+    assert trial["status"] == "trial_failed"
+    assert "识别" in trial["error"] or "流水" in trial["error"]
+    assert trial["row_count"] == 0
+    # Top-level status must also be corrected
     assert result["status"] == "trial_failed"
-    assert result["row_count"] == 0
-    assert "识别" in result["error"] or "流水" in result["error"]
-
-    job = db_session.query(ParserTrainingJob).filter(
-        ParserTrainingJob.job_code == job_code
-    ).first()
-    assert job.trial_status == "failed"
-    assert job.status == "trial_failed"
+    assert result["trial_status"] == "failed"
 
 
 def test_run_parser_trial_syntax_error_returns_error(tmp_path):

@@ -276,6 +276,14 @@ def update_candidate_code(db: Session, job_code: str, code: str, notes: Optional
 
 
 def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
+    trial_result = _normalize_trial_result_for_response(job.trial_result_json)
+    status = job.status
+    trial_status = job.trial_status
+    if trial_result and trial_result.get("status") == "trial_failed":
+        if status == "trial_success":
+            status = "trial_failed"
+        if trial_status == "success":
+            trial_status = "failed"
     return {
         "job_code": job.job_code,
         "filename": job.original_filename,
@@ -286,10 +294,10 @@ def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
         "identity_hints": json.loads(job.identity_hints_json) if job.identity_hints_json else {},
         "format_fingerprint": job.format_fingerprint,
         "context": json.loads(job.context_snapshot_json) if job.context_snapshot_json else {},
-        "status": job.status,
-        "trial_status": job.trial_status,
+        "status": status,
+        "trial_status": trial_status,
         "candidate_code": job.candidate_code,
-        "trial_result": _normalize_trial_result_for_response(job.trial_result_json),
+        "trial_result": trial_result,
         "parser_artifact_id": job.parser_artifact_id,
         "agent_id": job.agent_id,
         "agent_session_id": job.agent_session_id,
@@ -314,6 +322,13 @@ def _normalize_trial_result_for_response(raw_json: Optional[str]) -> Optional[Di
             "rows": [],
             "row_count": 0,
         }
+
+    # Fix stale trial_success with 0 rows (pre-13E false success)
+    rows = result.get("rows") or []
+    if result.get("status") == "trial_success" and len(rows) == 0:
+        result["status"] = "trial_failed"
+        result["error"] = "这版识别方案没有识别出任何流水，请继续告诉智能体样本哪里识别错了。"
+        result["technical_error"] = result.get("technical_error") or "parser returned zero rows"
 
     err = result.get("error")
     if isinstance(err, str) and err:

@@ -305,7 +305,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton, NTag, NUpload, NCollapse, NCollapseItem,
@@ -398,7 +398,7 @@ function resetCurrentJob() {
   uploadError.value = ''
   fileList.value = []
   stopPolling()
-  // Clear URL query
+  sessionStorage.removeItem('bankRule_jobCode')
   router.replace({ query: {} })
 }
 
@@ -425,8 +425,8 @@ async function handleFileChange({ file, fileList: newFileList }) {
       saveSuccess.value = false
       parserName.value = ''
       uploadStatus.value = 'success'
-      // Save job_code to URL for state recovery
       router.replace({ query: { job_code: data.job_code } })
+      sessionStorage.setItem('bankRule_jobCode', data.job_code)
     }
   } catch (e) {
     console.error('上传失败', e)
@@ -443,6 +443,10 @@ async function refreshJob() {
       job.value = data
       if (data.trial_result && !trialResult.value) {
         trialResult.value = normalizeTrialForDisplay(data.trial_result)
+        if (trialResult.value && trialResult.value.status === 'trial_failed' && data.status === 'trial_success') {
+          data.status = 'trial_failed'
+          data.trial_status = 'failed'
+        }
       }
       // Restore agent session if present
       if (data.agent_id && data.agent_session_id && !agentSession.value.session_id) {
@@ -569,9 +573,11 @@ function stopPolling() {
   }
 }
 
-// URL-based state recovery
-async function restoreFromUrl() {
-  const jobCode = route.query.job_code
+// State recovery: URL query > sessionStorage
+async function restoreJobState() {
+  if (uploadStatus.value === 'success') return
+
+  const jobCode = route.query.job_code || sessionStorage.getItem('bankRule_jobCode')
   if (!jobCode) return
 
   try {
@@ -580,12 +586,16 @@ async function restoreFromUrl() {
       job.value = data
       uploadStatus.value = 'success'
 
-      if (data.trial_result) {
-        trialResult.value = normalizeTrialForDisplay(data.trial_result)      }
+      if (!route.query.job_code) {
+        router.replace({ query: { job_code: jobCode } })
+      }
+      sessionStorage.setItem('bankRule_jobCode', jobCode)
 
-      // Restore agent session if saved in job
+      if (data.trial_result) {
+        trialResult.value = normalizeTrialForDisplay(data.trial_result)
+      }
+
       if (data.agent_id && data.agent_session_id) {
-        // Agents may not be loaded yet, wait for them
         await loadAgents()
         const agent = agents.value.find(a => a.id === data.agent_id)
         if (agent) {
@@ -599,6 +609,8 @@ async function restoreFromUrl() {
           startPolling()
         }
       }
+    } else {
+      sessionStorage.removeItem('bankRule_jobCode')
     }
   } catch (e) {
     console.error('恢复任务状态失败', e)
@@ -696,17 +708,20 @@ import { h } from 'vue'
 
 onMounted(() => {
   loadParsers()
-  loadAgents().then(() => restoreFromUrl())
+  loadAgents().then(() => restoreJobState())
+})
+
+onActivated(() => {
+  restoreJobState()
 })
 
 onUnmounted(() => {
   stopPolling()
 })
 
-// Watch for route query changes (back/forward navigation)
 watch(() => route.query.job_code, (newCode) => {
   if (newCode && (!job.value.job_code || job.value.job_code !== newCode)) {
-    restoreFromUrl()
+    restoreJobState()
   }
 })
 </script>
