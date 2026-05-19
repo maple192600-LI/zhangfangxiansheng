@@ -1192,3 +1192,76 @@ def test_run_parser_trial_no_rows_no_error_is_failure(tmp_path):
     assert err is not None
     assert len(rows) == 0
 
+
+def test_run_parser_trial_accepts_rows_errors_tuple_when_no_errors(tmp_path):
+    """Agent-generated parsers sometimes return (rows, errors); accept it when errors is empty."""
+    file_data = _make_sample_xlsx()
+    fp = tmp_path / "t.xlsx"
+    fp.write_bytes(file_data)
+
+    code = '''
+def parse(wb, ctx):
+    return ([{
+        "business_date": "2026-01-01",
+        "summary": "tuple ok",
+        "amount_in": 1,
+        "amount_out": 0,
+        "rolling_balance": 1,
+        "entity_code": "",
+        "entity_name": "",
+        "account_code": "",
+        "account_name": "",
+        "counterparty": "",
+        "state": "正常",
+        "source": "网银导入",
+    }], [])
+'''
+    rows, err = run_parser_trial(code, str(fp))
+    assert err is None
+    assert len(rows) == 1
+    assert rows[0]["summary"] == "tuple ok"
+
+
+def test_run_parser_trial_tuple_errors_is_user_repairable_failure(tmp_path):
+    """(rows, errors) with parser errors must fail without the misleading got-list error."""
+    file_data = _make_sample_xlsx()
+    fp = tmp_path / "t.xlsx"
+    fp.write_bytes(file_data)
+
+    code = "def parse(wb, ctx): return [], ['未找到表头行']"
+    rows, err = run_parser_trial(code, str(fp))
+    assert rows == []
+    assert err is not None
+    assert "parser returned validation errors" in err
+    assert "expected dict" not in err
+
+
+def test_run_candidate_list_row_error_is_cleaned_for_user(db_session, tmp_path, monkeypatch):
+    """A parser returning list rows must not leak row 0/got list as the main UI error."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    code = "def parse(wb, ctx): return [[1, 2, 3]]"
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    result = parser_training_service.run_candidate(db_session, job_code)
+
+    assert result["status"] == "trial_failed"
+    assert result["rows"] == []
+    assert "expected dict" not in result["error"]
+    assert "got list" not in result["error"]
+    assert "识别方案" in result["error"]
+    assert "standard result object" in result["technical_error"]
+
+
+def test_runtime_exit_error_is_cleaned_for_user():
+    """Worker process failures must not become the main user-facing message."""
+    user_msg, technical = parser_training_service._clean_error_for_user("识别方案运行进程异常退出，退出码 1")
+
+    assert "退出码" not in user_msg
+    assert "识别方案运行失败" in user_msg
+    assert "退出码 1" in technical

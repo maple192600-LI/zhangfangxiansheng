@@ -96,6 +96,11 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
                     conn.close()
                     return
                 gen = parse_fn(wb, ctx)
+                gen, parser_return_error = _normalize_parser_return(gen)
+                if parser_return_error:
+                    conn.send(("error", parser_return_error))
+                    conn.close()
+                    return
                 iterator = iter(gen)
                 count = 0
                 while count < max_output_rows:
@@ -104,7 +109,7 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
                     except StopIteration:
                         break
                     if not isinstance(row, dict):
-                        conn.send(("error", f"row {count}: expected dict, got {type(row).__name__}"))
+                        conn.send(("error", f"parser row {count} must be a standard result object, got {type(row).__name__}"))
                         conn.close()
                         return
                     conn.send(("row", _serialize_row(row)))
@@ -118,6 +123,28 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
     except Exception as e:
         conn.send(("error", f"worker setup error: {type(e).__name__}: {e}\n{traceback.format_exc()}"))
     conn.close()
+
+
+def _normalize_parser_return(result: Any) -> tuple[Any, Optional[str]]:
+    """Accept the parser contract plus one common agent-generated variant.
+
+    Official contract: parse(wb, ctx) returns an iterable of row dicts.
+    During rule training, agents sometimes return (rows, errors). Accept it
+    when errors is empty so the user can review rows instead of seeing a
+    contract error. If errors are present, surface them as a trial failure.
+    """
+    if isinstance(result, tuple) and len(result) == 2:
+        rows, errors = result
+        if errors:
+            return [], f"parser returned validation errors: {_format_parser_errors(errors)}"
+        return rows, None
+    return result, None
+
+
+def _format_parser_errors(errors: Any) -> str:
+    if isinstance(errors, (list, tuple)):
+        return "; ".join(str(e) for e in errors if e is not None)
+    return str(errors)
 
 
 def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:

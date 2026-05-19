@@ -117,13 +117,26 @@ def _clean_error_for_user(raw_error: str) -> tuple[str, str]:
                             "worker setup error", "File \"", "SyntaxError",
                             "IndentationError", "NameError", "TypeError",
                             "ValueError", "AttributeError", "KeyError",
-                            "IndexError", "ZeroDivisionError", "ImportError")
+                            "IndexError", "ZeroDivisionError", "ImportError",
+                            "expected dict", "got list",
+                            "must be a standard result object",
+                            "parser returned validation errors",
+                            "artifact code must define",
+                            "运行进程异常退出", "退出码",
+                            "worker process exited", "exit code")
 
     is_technical = any(indicator in raw_error for indicator in technical_indicators)
 
     if is_technical:
         if "worker setup error" in raw_error or "openpyxl" in raw_error:
             user_msg = "样本文件读取失败，无法生成识别结果。请重新上传样本，或继续让智能体调整识别方案。"
+        elif ("expected dict" in raw_error or "got list" in raw_error
+              or "standard result object" in raw_error
+              or "parser returned validation errors" in raw_error):
+            user_msg = "这版识别方案还没有生成可审核的流水结果表，请继续告诉智能体识别结果哪里不对，让它重新调整。"
+        elif ("运行进程异常退出" in raw_error or "退出码" in raw_error
+              or "worker process exited" in raw_error or "exit code" in raw_error):
+            user_msg = "这版识别方案运行失败，请继续告诉智能体识别结果哪里不对，让它重新调整。"
         else:
             user_msg = "这版识别方案还没有成功生成结果，请继续告诉智能体样本哪里识别错了。"
         return user_msg, raw_error

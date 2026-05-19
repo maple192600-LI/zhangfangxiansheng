@@ -366,11 +366,11 @@ const canSave = computed(() => {
 function normalizeTrialForDisplay(result) {
   if (!result) return null
   const raw = result.error || ''
-  const technicalSigns = ['Traceback', 'openpyxl', 'InvalidFileException', 'worker setup error', 'File "', 'SyntaxError', 'NameError', 'TypeError']
+  const technicalSigns = ['Traceback', 'openpyxl', 'InvalidFileException', 'worker setup error', 'File "', 'SyntaxError', 'NameError', 'TypeError', 'expected dict', 'got list', 'standard result object', 'parser returned validation errors', '运行进程异常退出', '退出码', 'worker process exited', 'exit code']
   if (technicalSigns.some(s => raw.includes(s))) {
     return {
       ...result,
-      error: '这版识别方案还没有成功生成结果，请继续告诉智能体样本哪里识别错了。',
+      error: '这版识别方案还没有生成可审核的流水结果表，请继续告诉智能体识别结果哪里不对，让它重新调整。',
       technical_error: result.technical_error || raw,
     }
   }
