@@ -538,6 +538,7 @@ function fmtJson(j) {
 function fmtContent(t) {
   if (!t) return ''
   return t
+    .replace(/<think[\s\S]*?<\/think>/gi, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

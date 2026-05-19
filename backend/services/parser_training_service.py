@@ -107,6 +107,30 @@ def get_job(db: Session, job_code: str) -> Optional[Dict[str, Any]]:
     return _job_to_response(job)
 
 
+def _clean_error_for_user(raw_error: str) -> tuple[str, str]:
+    """Split a raw error into (user_message, technical_detail).
+
+    User message is always a short Chinese business prompt.
+    Technical detail preserves the original error for debugging.
+    """
+    technical_indicators = ("Traceback", "openpyxl", "InvalidFileException",
+                            "worker setup error", "File \"", "SyntaxError",
+                            "IndentationError", "NameError", "TypeError",
+                            "ValueError", "AttributeError", "KeyError",
+                            "IndexError", "ZeroDivisionError", "ImportError")
+
+    is_technical = any(indicator in raw_error for indicator in technical_indicators)
+
+    if is_technical:
+        if "worker setup error" in raw_error or "openpyxl" in raw_error:
+            user_msg = "样本文件读取失败，无法生成识别结果。请重新上传样本，或继续让智能体调整识别方案。"
+        else:
+            user_msg = "这版识别方案还没有成功生成结果，请继续告诉智能体样本哪里识别错了。"
+        return user_msg, raw_error
+
+    return raw_error, ""
+
+
 def run_candidate(db: Session, job_code: str) -> Dict[str, Any]:
     """Trial-run candidate parser code from the job's saved candidate_code."""
     job = db.query(ParserTrainingJob).filter(ParserTrainingJob.job_code == job_code).first()
@@ -124,26 +148,36 @@ def run_candidate(db: Session, job_code: str) -> Dict[str, Any]:
     try:
         rows, error_msg = run_parser_trial(job.candidate_code, job.sample_file_path)
     except Exception as exc:
+        raw_error = str(exc)
+        user_msg, tech_detail = _clean_error_for_user(raw_error)
         job.trial_status = "failed"
         job.trial_result_json = json.dumps(
-            {"status": "trial_failed", "error": str(exc), "rows": [], "row_count": 0},
+            {"status": "trial_failed", "error": user_msg,
+             "technical_error": tech_detail or raw_error,
+             "rows": [], "row_count": 0},
             ensure_ascii=False,
         )
         job.status = "trial_failed"
         db.commit()
-        return {"status": "trial_failed", "rows": [], "row_count": 0, "error": str(exc)}
+        return {"status": "trial_failed", "rows": [], "row_count": 0,
+                "error": user_msg, "technical_error": tech_detail or raw_error}
 
     if error_msg:
+        user_msg, tech_detail = _clean_error_for_user(error_msg)
         job.trial_status = "failed"
         job.trial_result_json = json.dumps(
-            {"status": "trial_failed", "error": error_msg, "rows": [], "row_count": 0},
+            {"status": "trial_failed", "error": user_msg,
+             "technical_error": tech_detail or error_msg,
+             "rows": [], "row_count": 0},
             ensure_ascii=False,
         )
         job.status = "trial_failed"
         db.commit()
-        return {"status": "trial_failed", "rows": [], "row_count": 0, "error": error_msg}
+        return {"status": "trial_failed", "rows": [], "row_count": 0,
+                "error": user_msg, "technical_error": tech_detail or error_msg}
 
-    result = {"status": "trial_success", "rows": rows, "row_count": len(rows), "error": None}
+    result = {"status": "trial_success", "rows": rows, "row_count": len(rows),
+              "error": None, "technical_error": None}
     job.trial_status = "success"
     job.trial_result_json = json.dumps(result, ensure_ascii=False, default=str)
     job.status = "trial_success"

@@ -954,3 +954,122 @@ def test_agent_session_response_no_starter_prompt(db_session, tmp_path, monkeypa
     body = AgentSessionBody(agent_id=agent.id)
     result = create_agent_session(created["job_code"], body, db=db_session)
     assert "starter_prompt" not in result["data"]
+
+
+# ── 13D: .xls run_candidate end-to-end ──
+
+
+def test_run_candidate_xls_success(db_session, tmp_path, monkeypatch):
+    """run_candidate works with .xls sample files, returning parsed rows."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = make_xls([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+    created = parser_training_service.create_training_job(db_session, file_data, "中行银行流水.xls")
+    job_code = created["job_code"]
+
+    code = '''
+def parse(wb, ctx):
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            rows.append({
+                "business_date": str(row[0]),
+                "summary": str(row[1] or ""),
+                "amount_in": float(row[2] or 0),
+                "amount_out": float(row[3] or 0),
+                "rolling_balance": float(row[4] or 0),
+                "entity_code": "",
+                "entity_name": "",
+                "account_code": "",
+                "account_name": "",
+                "counterparty": "",
+                "state": "正常",
+                "source": "网银导入",
+            })
+    return rows
+'''
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    result = parser_training_service.run_candidate(db_session, job_code)
+
+    assert result["status"] == "trial_success"
+    assert result["row_count"] == 2
+    assert result["rows"][0]["summary"] == "测试收入"
+
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    assert job.trial_status == "success"
+
+
+def test_run_parser_trial_xls_direct(tmp_path):
+    """run_parser_trial directly works with .xls files."""
+    file_data = make_xls([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+    fp = tmp_path / "t.xls"
+    fp.write_bytes(file_data)
+
+    code = '''
+def parse(wb, ctx):
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            rows.append({
+                "business_date": str(row[0]),
+                "summary": str(row[1] or ""),
+                "amount_in": float(row[2] or 0),
+                "amount_out": float(row[3] or 0),
+                "rolling_balance": float(row[4] or 0),
+                "entity_code": "", "entity_name": "",
+                "account_code": "", "account_name": "",
+                "counterparty": "", "state": "正常", "source": "网银导入",
+            })
+    return rows
+'''
+    rows, err = run_parser_trial(code, str(fp))
+    assert err is None
+    assert len(rows) == 2
+    assert rows[0]["summary"] == "测试收入"
+    assert float(rows[0]["amount_in"]) == 1000.0
+
+
+def test_run_candidate_error_no_technical_leak(db_session, tmp_path, monkeypatch):
+    """run_candidate error field must not contain Traceback/openpyxl/worker setup."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    # Bypass guard to write bad code directly
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    job.candidate_code = "def broken("
+    job.status = "candidate_ready"
+    db_session.commit()
+
+    result = parser_training_service.run_candidate(db_session, job_code)
+    assert result["status"] == "trial_failed"
+
+    # Main error must be user-friendly Chinese
+    assert "Traceback" not in result["error"]
+    assert "openpyxl" not in result["error"]
+    assert "InvalidFileException" not in result["error"]
+    assert "worker setup error" not in result["error"]
+    assert 'File "' not in result["error"]
+
+    # Technical error should preserve original
+    assert result.get("technical_error") is not None

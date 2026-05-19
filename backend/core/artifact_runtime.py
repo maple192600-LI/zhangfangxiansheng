@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
+import tempfile
 import time
 import traceback
 from datetime import date, datetime
@@ -131,6 +133,35 @@ def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
     elif isinstance(bd, date) and not isinstance(bd, datetime):
         out["business_date"] = bd.isoformat()
     return out
+
+
+def _normalize_trial_file(file_path: str) -> str:
+    """Convert .xls/.csv to a temporary .xlsx so the openpyxl-based worker can read it.
+
+    Returns the path to use for the worker. Caller is responsible for
+    cleaning up the temporary file when done (if different from input).
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".xlsx":
+        return file_path
+
+    from core.parser_engine import detect_format, read_file
+
+    fmt = detect_format(file_path)
+    if fmt == "xlsx":
+        return file_path
+
+    rows = read_file(file_path, fmt)
+    wb = Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".xlsx")
+    os.close(fd)
+    wb.save(tmp_path)
+    wb.close()
+    return tmp_path
 
 
 def run_parser(
@@ -323,6 +354,9 @@ def run_parser_trial(
 
     Returns (rows, error_message). On success error_message is None.
     Does not touch the database or modify any ParserArtifact.
+
+    For .xls/.csv files, automatically converts to a temporary .xlsx so the
+    openpyxl-based worker can read them. The temporary file is cleaned up after.
     """
     if ctx is None:
         ctx = {}
@@ -332,13 +366,16 @@ def run_parser_trial(
 
     validate_artifact_code(code, artifact_id=0)
 
+    worker_path = _normalize_trial_file(file_path)
+    cleanup_tmp = worker_path != file_path
+
     sandbox = get_default_sandbox_config()
     ctx_json = json.dumps(ctx)
 
     parent_conn, child_conn = multiprocessing.Pipe()
     proc = multiprocessing.Process(
         target=_worker_main,
-        args=(child_conn, code, file_path, ctx_json, sandbox.max_output_rows),
+        args=(child_conn, code, worker_path, ctx_json, sandbox.max_output_rows),
     )
     proc.start()
     child_conn.close()
@@ -397,6 +434,11 @@ def run_parser_trial(
             proc.terminate()
             proc.join(timeout=5)
         parent_conn.close()
+        if cleanup_tmp:
+            try:
+                os.unlink(worker_path)
+            except OSError:
+                pass
 
     if error_msg:
         return [], error_msg

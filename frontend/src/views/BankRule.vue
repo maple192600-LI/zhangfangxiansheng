@@ -69,8 +69,17 @@
             </template>
 
             <template v-if="trialResult">
-              <div v-if="trialResult.error" style="color:#d03050;font-size:13px;margin-bottom:10px;">
-                {{ trialResult.error }}
+              <div v-if="trialResult.error" style="margin-bottom:10px;">
+                <div style="color:#d03050;font-size:13px;padding:10px 14px;background:#fff5f5;border:1px solid #f0d0d0;border-radius:6px;">
+                  {{ trialResult.error }}
+                </div>
+                <div v-if="trialResult.technical_error" style="margin-top:8px;opacity:0.7;">
+                  <NCollapse>
+                    <NCollapseItem title="技术详情（一般不用看）" name="tech">
+                      <pre class="code-preview" style="max-height:200px;font-size:11px;">{{ trialResult.technical_error }}</pre>
+                    </NCollapseItem>
+                  </NCollapse>
+                </div>
               </div>
               <div v-else-if="trialResult.rows && trialResult.rows.length">
                 <div style="margin-bottom:8px;font-size:13px;color:#666;">
