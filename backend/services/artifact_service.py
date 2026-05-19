@@ -341,8 +341,9 @@ def _retire_conflicting_active_parsers(db: Session, row: ParserArtifact) -> None
     Must cover all bank parser identity levels:
       1. bank + bank_id + format_key
       2. bank + bank_id IS NULL + format_key
-      3. bank + bank_id IS NULL + format_key IS NULL + account_code IS NULL (global default)
-      4. non-bank: kind + account_code
+      3. bank + bank_id IS NULL + format_key IS NULL + account_code IS NOT NULL
+      4. bank + bank_id IS NULL + format_key IS NULL + account_code IS NULL (global default)
+      5. non-bank: kind + account_code
     """
     if row.kind == "bank":
         retire_q = db.query(ParserArtifact).filter(
@@ -361,8 +362,13 @@ def _retire_conflicting_active_parsers(db: Session, row: ParserArtifact) -> None
             # Level 2: format-only default (bank_id IS NULL)
             retire_q = retire_q.filter(ParserArtifact.bank_id.is_(None))
             retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
+        elif row.account_code is not None:
+            # Level 3: account-bound (bank_id IS NULL, format_key IS NULL)
+            retire_q = retire_q.filter(ParserArtifact.bank_id.is_(None))
+            retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
+            retire_q = retire_q.filter(ParserArtifact.account_code == row.account_code)
         else:
-            # Level 3: global default (bank_id IS NULL, format_key IS NULL)
+            # Level 4: global default (bank_id IS NULL, format_key IS NULL, account_code IS NULL)
             retire_q = retire_q.filter(ParserArtifact.bank_id.is_(None))
             retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
             retire_q = retire_q.filter(ParserArtifact.account_code.is_(None))

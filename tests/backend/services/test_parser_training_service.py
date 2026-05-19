@@ -11,11 +11,12 @@ from conftest import make_xlsx, seed_chart_of_accounts
 from db.tables import ImportBatch, ParserArtifact, ParserTrainingJob
 from services import parser_training_service, artifact_service
 from core.artifact_runtime import run_parser_trial
+from api import parser_training as parser_training_api
 
 
-def _add_parser_artifact(db, name="Test Bank Parser", bank_id=None, format_key=None, status="active"):
+def _add_parser_artifact(db, name="Test Bank Parser", bank_id=None, format_key=None, account_code=None, status="active"):
     artifact = ParserArtifact(
-        name=name, kind="bank", account_code=None,
+        name=name, kind="bank", account_code=account_code,
         bank_id=bank_id, format_key=format_key,
         match_rules={}, version=1, status=status,
         code="def parse(wb, ctx): return []",
@@ -733,3 +734,66 @@ def test_api_delete_active_returns_error(db_session):
     p = _add_parser_artifact(db_session, name="api_no_delete", status="active")
     with pytest.raises(ValueError, match="请先停用"):
         artifact_service.delete_parser_artifact(db_session, p.id)
+
+
+# ── 12I: account-bound parser regression + API wrapper tests ──
+
+
+def test_activate_retires_account_bound_bank_parser(db_session):
+    old = _add_parser_artifact(db_session, name="old_account", bank_id=None, format_key=None, account_code="A001", status="active")
+    new = _add_parser_artifact(db_session, name="new_account", bank_id=None, format_key=None, account_code="A001", status="retired")
+    artifact_service.activate_parser_artifact(db_session, new.id)
+    db_session.refresh(old)
+    db_session.refresh(new)
+    assert old.status == "retired"
+    assert new.status == "active"
+
+
+def test_approve_retires_account_bound_bank_parser(db_session):
+    old = _add_parser_artifact(db_session, name="old_account", bank_id=None, format_key=None, account_code="A002", status="active")
+    new = _add_parser_artifact(db_session, name="new_account", bank_id=None, format_key=None, account_code="A002", status="draft")
+    artifact_service.approve_parser_artifact(db_session, new.id, "tester")
+    db_session.refresh(old)
+    db_session.refresh(new)
+    assert old.status == "retired"
+    assert new.status == "active"
+
+
+# ── 12I: real API wrapper tests ──
+
+
+def test_api_wrapper_get_parser_detail(db_session):
+    p = _add_parser_artifact(db_session, name="wrapper_detail", status="active")
+    result = parser_training_api.get_parser_detail(p.id, db=db_session)
+    assert result["code"] == 0
+    assert result["data"]["status"] == "active"
+    assert "code" in result["data"]
+
+
+def test_api_wrapper_activate_parser(db_session):
+    p = _add_parser_artifact(db_session, name="wrapper_activate", status="retired")
+    result = parser_training_api.activate_parser(p.id, db=db_session)
+    assert result["code"] == 0
+    assert result["data"]["status"] == "active"
+
+
+def test_api_wrapper_retire_parser(db_session):
+    p = _add_parser_artifact(db_session, name="wrapper_retire", status="active")
+    result = parser_training_api.retire_parser(p.id, db=db_session)
+    assert result["code"] == 0
+    assert result["data"]["status"] == "retired"
+
+
+def test_api_wrapper_delete_retired_parser(db_session):
+    p = _add_parser_artifact(db_session, name="wrapper_delete", status="retired")
+    pid = p.id
+    result = parser_training_api.delete_parser(pid, db=db_session)
+    assert result["code"] == 0
+    assert result["data"]["deleted"] == pid
+
+
+def test_api_wrapper_delete_active_parser_returns_error(db_session):
+    p = _add_parser_artifact(db_session, name="wrapper_no_delete", status="active")
+    result = parser_training_api.delete_parser(p.id, db=db_session)
+    assert result["code"] != 0
+    assert "停用" in result["message"]
