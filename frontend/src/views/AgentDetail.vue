@@ -94,6 +94,7 @@ const tabs = [
 
 onMounted(() => loadAgent())
 watch(() => route.params.id, () => { if (route.name === 'agent-detail') loadAgent() })
+watch(() => route.query.session_id, () => { if (route.name === 'agent-detail') loadAgent() })
 
 async function loadAgent() {
   const rawId = route.params.id
@@ -102,12 +103,20 @@ async function loadAgent() {
     agent.value = await agentsStore.getAgent(rawId)
     const id = agent.value.id
     const sessions = await agentsStore.listSessions(id)
-    if (sessions.length > 0) {
+    const requestedSessionId = Number(route.query.session_id || 0)
+    const matched = requestedSessionId
+      ? sessions.find(s => Number(s.id) === requestedSessionId)
+      : null
+
+    if (matched) {
+      currentSessionId.value = matched.id
+    } else if (sessions.length > 0) {
       currentSessionId.value = sessions[0].id
     } else {
       const s = await agentsStore.createSession(id, '新会话')
       currentSessionId.value = s.id
     }
+    activeTab.value = 'chat'
   } catch (e) { console.error('加载 agent 失败:', e) }
 }
 

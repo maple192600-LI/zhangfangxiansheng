@@ -9,6 +9,7 @@
 - **状态流转：** `draft` → `active` → `retired`
 - **当前能力：** 创建、编辑、审核（approve/reject）、激活 — **全部可用**
 - **已实现：** `backend/core/artifact_runtime.py::run_parser` 已实现 ParserArtifact deterministic runtime（底层执行器）
+- **已实现：** `run_parser_trial()` 候选代码安全试运行（不需要 active artifact，共享 AST guard + sandbox + subprocess 基础设施）
 - **未实现：** 银行格式识别（Bank Format Identification）、身份线索提取（Identity Hints Extraction）、主数据匹配（Master Data Matching）、账户归属（Account Attribution）— 这些是独立于 Parser Runtime 的能力，详见 [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md)
 
 ### RuleArtifact
@@ -32,10 +33,28 @@
 | AST 白名单 | `backend/core/artifact_ast_guard.py` | 已实现 |
 | 沙箱配置 | `backend/core/artifact_sandbox.py` | 已定义（超时 60s，权限策略） |
 | 运行时守卫 | `backend/core/runtime_guard.py` | 已实现（`no_ai_runtime()`） |
+| Parser 硬编码 guard | `tools/guards/check_parser_hardcoding.py` | 已实现（拦截 DEFAULT_ACCOUNT_CODE / DEFAULT_ENTITY_CODE / 固定账户编码） |
 
 AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`datetime`、`decimal`、`typing`、`re`、`collections` 等。
 
 沙箱配置已定义。`run_parser` 已实现执行器；`run_rule` 执行器尚未实现（Phase H1 待交付）。
+
+### Parser 规则中心
+
+- **用途：** 用户上传银行样本 → 选择现有 Agent 协作 → Agent 生成候选规则 → 试运行展示结果 → 用户审核结果并保存
+- **表：** `parser_training_jobs`（持久化训练任务，记录样本、候选代码、试运行结果、状态）
+- **API：** `backend/api/parser_training.py`（8 个端点，全部 job_code 驱动）
+- **Service：** `backend/services/parser_training_service.py`（训练任务 CRUD、候选试运行、保存并启用 ParserArtifact）
+- **上下文：** `backend/services/parser_context_service.py`（银行/法人/账户主数据摘要供规则生成参考）
+- **Agent 工具：** `parser_training_update_candidate`（toolset: `parser_training`，写入候选代码到训练任务，拒绝硬编码账户/单位。已加入默认 Agent allowed_tools，任意现有智能体均可调用）
+- **设计要点：**
+  - 没有"规则智能体"概念，用户选择任意现有 Agent 协作
+  - 规则中心不负责创建智能体，无 Agent 时只显示中性提示和刷新按钮
+  - Agent 只生成候选规则并写入训练任务，不参与日常导入，不能 approve artifact
+  - 前端不暴露 file_path，所有操作通过 job_code
+  - 用户审核的是解析结果表格，不是代码
+  - 保存时自动退役同 bank + format 的旧 active parser
+  - 保存前必须试运行成功 + hardcoding guard 通过 + AST guard 通过
 
 ## Workflow 系统
 
@@ -67,4 +86,4 @@ AST guard 允许的模块前缀：`fund.primitives.`、`fund.artifacts.`、`date
 
 ---
 **校准来源：** `backend/core/artifact_runtime.py`、`backend/core/artifact_ast_guard.py`、`backend/core/artifact_sandbox.py`、`backend/services/artifact_service.py`、`backend/services/workflow_executor.py`、`backend/services/workflow_nodes.py`、`backend/services/workflow_service.py`
-**最后校准：** 2026-05-17
+**最后校准：** 2026-05-19（12D Agent 权限修复 + 加载态修复）

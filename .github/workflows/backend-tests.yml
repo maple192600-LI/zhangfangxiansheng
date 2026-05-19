@@ -31,3 +31,5 @@ jobs:
           python tools/guards/check_placeholder_binding.py
       - name: Run API inventory guard
         run: python tools/guards/check_api_inventory.py
+      - name: Run parser hardcoding guard
+        run: python tools/guards/check_parser_hardcoding.py

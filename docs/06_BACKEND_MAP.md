@@ -26,21 +26,22 @@
 | `artifacts.py` | `artifact_service`, `template_analysis` | ParserArtifact, RuleArtifact, TemplateInferenceJob |
 | `reset.py` | `reset_service` | 数据库重置 |
 | `workflow.py` | `workflow_service`, `workflow_executor` | Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep |
+| `parser_training.py` | `parser_training_service`, `parser_context_service` | ParserTrainingJob（训练任务、候选试运行、保存规则、Agent 会话、主数据上下文） |
 
 ## 关键数字
 
 | 维度 | 数量 |
 |------|------|
-| API 模块（`.py`，含 `__init__.py`） | 23 |
-| 业务 API 模块（扣除 `__init__.py`） | 22 |
-| Service 模块（`.py`，含 `__init__.py`） | 26 |
-| 业务 Service 模块 | 25 |
-| ORM 表 | 31 |
-| API inventory（effective path） | 165 endpoints, 0 duplicate |
+| API 模块（`.py`，含 `__init__.py`） | 24 |
+| 业务 API 模块（扣除 `__init__.py`） | 23 |
+| Service 模块（`.py`，含 `__init__.py`） | 28 |
+| 业务 Service 模块 | 27 |
+| ORM 表 | 32 |
+| API inventory（effective path） | 173 endpoints, 0 duplicate |
 
-## ORM 表清单（31 张）
+## ORM 表清单（32 张）
 
-Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateScheme, ImportBatch, FundEvent, SourceFile, AccountResolutionAttempt, AccountResolutionEvidence, ParserArtifact, RuleArtifact, TemplateInferenceJob, DailyReportRun, AIConfig, AICallLog, OperationLog, User, ReportTemplate, Agent, Skill, AgentSession, AgentMessage, AgentRun, AgentMemory, Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep
+Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateScheme, ImportBatch, FundEvent, SourceFile, AccountResolutionAttempt, AccountResolutionEvidence, ParserArtifact, RuleArtifact, TemplateInferenceJob, DailyReportRun, AIConfig, AICallLog, OperationLog, User, ReportTemplate, Agent, Skill, AgentSession, AgentMessage, AgentRun, AgentMemory, Workflow, WorkflowVersion, WorkflowRun, WorkflowRunStep, ParserTrainingJob
 
 ## FundEvent 状态边界
 
@@ -60,4 +61,4 @@ Division, Entity, Bank, Account, AccountAlias, ManualFieldPool, ManualTemplateSc
 
 ---
 **校准来源：** `backend/main.py`、`backend/api/`、`backend/services/`、`backend/db/tables.py`、`tools/guards/check_api_inventory.py --list`
-**最后校准：** 2026-05-19
+**最后校准：** 2026-05-19（12B 返工：job_code 驱动 + ParserTrainingJob 表）

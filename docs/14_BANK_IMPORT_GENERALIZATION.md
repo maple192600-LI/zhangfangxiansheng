@@ -108,7 +108,6 @@
 | 09D | ParserArtifact bank/format 级匹配策略（替代 account_code 匹配） |
 | 09E | 主数据账户/单位归属匹配服务 |
 | 09F | parser 硬编码 guard |
-| 09G | 前端展示银行识别和账户归属匹配结果 |
 | 09H | 多银行/多账户/多线索场景端到端验收 |
 
 ## 已实现服务（已接入导入流程）
@@ -130,7 +129,7 @@
 ### 尚未完成
 
 - 批量上传 UI 未完成
-- 规则中心训练页面未完成
+- 规则中心已完成（12B 返工：ParserTrainingJob 持久化、job_code 驱动、用户选 Agent）
 - 结果预览证据抽屉未完成（evidence 数据已存但前端未展示）
 - 用户确认后沉淀 account_resolution_rules 未完成
 
@@ -151,4 +150,4 @@
 
 ---
 **校准来源：** `ai_coordination/parser-runtime/09_bank_parser_generalization_revised_plan_v2.md`、`backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
-**最后校准：** 2026-05-19
+**最后校准：** 2026-05-19（09F parser 硬编码 guard 已实现，规则中心 MVP 已完成）

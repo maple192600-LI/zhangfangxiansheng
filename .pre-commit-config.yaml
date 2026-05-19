@@ -37,3 +37,10 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: guard-parser-hardcoding
+        name: "§C9 · parser 硬编码 guard（check_parser_hardcoding）"
+        entry: python tools/guards/check_parser_hardcoding.py
+        language: system
+        pass_filenames: false
+        always_run: true

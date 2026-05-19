@@ -31,6 +31,7 @@ TOOLSETS: dict[str, list[str]] = {
     "parse": ["file_parse"],
     "shell": ["python_exec"],
     "database": ["db_query_business", "db_insert_fund_event"],
+    "parser_training": ["parser_training_update_candidate"],
     "excel": ["openpyxl_read", "openpyxl_write", "openpyxl_edit"],
     "skill": ["skill_list", "skill_run", "skill_test", "skill_create", "skill_install", "skill_check_deps"],
     "memory": ["memory_save", "memory_search"],

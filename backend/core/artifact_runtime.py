@@ -310,3 +310,96 @@ def run_rule(
         "RuleArtifact runtime 尚未实现。"
         "完整执行器将在后续 Phase H1 中交付。"
     )
+
+
+def run_parser_trial(
+    code: str,
+    file_path: str,
+    ctx: Optional[dict[str, Any]] = None,
+    *,
+    label: str = "trial",
+) -> tuple[list[dict[str, Any]], Optional[str]]:
+    """Trial-run candidate parser code without requiring a stored artifact.
+
+    Returns (rows, error_message). On success error_message is None.
+    Does not touch the database or modify any ParserArtifact.
+    """
+    if ctx is None:
+        ctx = {}
+
+    from core.artifact_ast_guard import validate_artifact_code
+    from core.artifact_sandbox import get_default_sandbox_config
+
+    validate_artifact_code(code, artifact_id=0)
+
+    sandbox = get_default_sandbox_config()
+    ctx_json = json.dumps(ctx)
+
+    parent_conn, child_conn = multiprocessing.Pipe()
+    proc = multiprocessing.Process(
+        target=_worker_main,
+        args=(child_conn, code, file_path, ctx_json, sandbox.max_output_rows),
+    )
+    proc.start()
+    child_conn.close()
+
+    rows: list[dict[str, Any]] = []
+    error_msg: Optional[str] = None
+    timed_out = False
+    try:
+        deadline = time.monotonic() + sandbox.timeout_seconds
+        while True:
+            while True:
+                try:
+                    if not parent_conn.poll(_POLL_INTERVAL):
+                        break
+                    msg_type, payload = parent_conn.recv()
+                except (EOFError, BrokenPipeError, OSError):
+                    break
+                if msg_type == "row":
+                    rows.append(payload)
+                elif msg_type == "error":
+                    _join_worker(proc)
+                    error_msg = payload
+                    break
+                elif msg_type == "runtime_error":
+                    _join_worker(proc)
+                    error_msg = payload.get("msg", str(payload))
+                    break
+
+            if error_msg:
+                break
+            if not proc.is_alive():
+                proc.join(timeout=0)
+                while True:
+                    try:
+                        if not parent_conn.poll(0.01):
+                            break
+                        msg_type, payload = parent_conn.recv()
+                    except (EOFError, BrokenPipeError, OSError):
+                        break
+                    if msg_type == "row":
+                        rows.append(payload)
+                    elif msg_type == "error":
+                        error_msg = payload
+                    elif msg_type == "runtime_error":
+                        error_msg = payload.get("msg", str(payload))
+                break
+
+            if time.monotonic() >= deadline:
+                timed_out = True
+                proc.terminate()
+                proc.join(timeout=5)
+                error_msg = f"候选规则试运行超时（{sandbox.timeout_seconds}s）"
+                break
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=5)
+        parent_conn.close()
+
+    if error_msg:
+        return [], error_msg
+
+    coerced = [_coerce_row(0, row, i) for i, row in enumerate(rows)]
+    return coerced, None
