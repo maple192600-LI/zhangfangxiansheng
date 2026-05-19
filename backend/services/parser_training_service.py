@@ -288,8 +288,8 @@ def save_parser(db: Session, job_code: str, name: str) -> Dict[str, Any]:
     from db.schemas import ParserArtifactDraftCreate
 
     identity_hints = json.loads(job.identity_hints_json) if job.identity_hints_json else {}
-    bank_id = identity_hints.get("bank_id")
-    format_key = job.format_fingerprint
+    bank_id = _resolve_parser_bank_id(db, identity_hints)
+    format_key = _normalize_parser_format_key(job.format_fingerprint)
 
     draft_data = ParserArtifactDraftCreate(
         name=name,
@@ -311,6 +311,22 @@ def save_parser(db: Session, job_code: str, name: str) -> Dict[str, Any]:
     db.commit()
 
     return result
+
+
+def _resolve_parser_bank_id(db: Session, identity_hints: dict[str, Any]) -> Optional[int]:
+    """Resolve parser ownership to a bank when the sample contains a unique bank hint."""
+    from services.bank_account_match_service import resolve_bank_from_hints
+
+    bank_resolution = resolve_bank_from_hints(db, identity_hints)
+    if bank_resolution.get("status") == "matched":
+        return bank_resolution.get("bank_id")
+    return None
+
+
+def _normalize_parser_format_key(format_key: Optional[str]) -> Optional[str]:
+    if not format_key or format_key == "unknown":
+        return None
+    return format_key
 
 
 def update_candidate_code(db: Session, job_code: str, code: str, notes: Optional[str] = None) -> Dict[str, Any]:

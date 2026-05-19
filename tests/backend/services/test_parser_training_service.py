@@ -54,6 +54,15 @@ def _make_large_sample_xlsx(row_count=100):
     return make_xlsx(rows)
 
 
+def _make_bank_hint_sample_xlsx():
+    return make_xlsx([
+        ["文件来源", "Bank 001 对账单", "", "", ""],
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+
+
 _WORKING_PARSE_CODE = '''
 def parse(wb, ctx):
     ws = wb.active
@@ -336,6 +345,28 @@ def test_save_parser_creates_active(db_session, tmp_path, monkeypatch):
     result = parser_training_service.save_parser(db_session, job_code, "test_save_parser")
     assert result["status"] == "active"
     assert result["name"] == "test_save_parser"
+
+
+def test_save_parser_resolves_bank_and_normalizes_unknown_format(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_bank_hint_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "Bank 001样本.xlsx")
+    job_code = created["job_code"]
+
+    code = _WORKING_PARSE_CODE.replace("min_row=2", "min_row=3")
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    parser_training_service.run_candidate(db_session, job_code)
+    job = db_session.query(ParserTrainingJob).filter(ParserTrainingJob.job_code == job_code).first()
+    job.format_fingerprint = "unknown"
+    db_session.commit()
+    result = parser_training_service.save_parser(db_session, job_code, "boc_parser")
+
+    artifact = db_session.query(ParserArtifact).filter(ParserArtifact.id == result["id"]).first()
+    assert artifact.bank_id is not None
+    assert artifact.format_key is None
 
 
 def test_save_parser_rejects_no_candidate(db_session, tmp_path, monkeypatch):
