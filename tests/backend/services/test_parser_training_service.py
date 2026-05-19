@@ -638,3 +638,98 @@ def _make_retired_parser(db):
     db.commit()
     db.refresh(p)
     return p
+
+
+# ── 12H: retire identity levels + API layer tests ──
+
+
+def test_activate_retires_format_only_default(db_session):
+    """activate bank_id=None + format_key='fmt_x' retires old active with same."""
+    old = _add_parser_artifact(db_session, name="old", bank_id=None, format_key="fmt_x", status="active")
+    new = _add_parser_artifact(db_session, name="new", bank_id=None, format_key="fmt_x", status="retired")
+    artifact_service.activate_parser_artifact(db_session, new.id)
+
+    db_session.refresh(old)
+    db_session.refresh(new)
+    assert old.status == "retired"
+    assert new.status == "active"
+
+
+def test_activate_retires_global_default(db_session):
+    """activate bank_id=None + format_key=None + account_code=None retires old global active."""
+    old = _add_parser_artifact(db_session, name="old_global", bank_id=None, format_key=None, status="active")
+    new = _add_parser_artifact(db_session, name="new_global", bank_id=None, format_key=None, status="retired")
+    artifact_service.activate_parser_artifact(db_session, new.id)
+
+    db_session.refresh(old)
+    db_session.refresh(new)
+    assert old.status == "retired"
+    assert new.status == "active"
+
+
+def test_approve_retires_format_only_default(db_session):
+    """approve bank_id=None + format_key='fmt_x' uses same retire logic."""
+    old = _add_parser_artifact(db_session, name="old", bank_id=None, format_key="fmt_x", status="active")
+    new = _add_parser_artifact(db_session, name="new", bank_id=None, format_key="fmt_x", status="draft")
+    artifact_service.approve_parser_artifact(db_session, new.id, "tester")
+
+    db_session.refresh(old)
+    db_session.refresh(new)
+    assert old.status == "retired"
+    assert new.status == "active"
+
+
+def test_approve_does_not_retire_different_format_key(db_session):
+    """approve format_key='a' should not retire active with format_key='b'."""
+    other = _add_parser_artifact(db_session, name="other", bank_id=None, format_key="fmt_b", status="active")
+    new = _add_parser_artifact(db_session, name="new", bank_id=None, format_key="fmt_a", status="draft")
+    artifact_service.approve_parser_artifact(db_session, new.id, "tester")
+
+    db_session.refresh(other)
+    assert other.status == "active"
+
+
+def test_approve_does_not_retire_different_bank_id(db_session):
+    """approve bank_id=1 should not retire active with bank_id=2."""
+    other = _add_parser_artifact(db_session, name="other", bank_id=2, format_key="fmt_a", status="active")
+    new = _add_parser_artifact(db_session, name="new", bank_id=1, format_key="fmt_a", status="draft")
+    artifact_service.approve_parser_artifact(db_session, new.id, "tester")
+
+    db_session.refresh(other)
+    assert other.status == "active"
+
+
+# ── 12H: API layer tests ──
+
+
+def test_api_get_parser_detail_returns_code(db_session):
+    p = _add_parser_artifact(db_session, name="api_test", status="active")
+    result = artifact_service.get_parser_artifact(db_session, p.id)
+    assert result is not None
+    assert result["status"] == "active"
+    assert "code" in result
+
+
+def test_api_activate_returns_active(db_session):
+    p = _add_parser_artifact(db_session, name="api_activate", status="retired")
+    result = artifact_service.activate_parser_artifact(db_session, p.id)
+    assert result["status"] == "active"
+
+
+def test_api_retire_returns_retired(db_session):
+    p = _add_parser_artifact(db_session, name="api_retire", status="active")
+    result = artifact_service.retire_parser_artifact(db_session, p.id)
+    assert result["status"] == "retired"
+
+
+def test_api_delete_retired_succeeds(db_session):
+    p = _add_parser_artifact(db_session, name="api_delete", status="retired")
+    pid = p.id
+    artifact_service.delete_parser_artifact(db_session, p.id)
+    assert db_session.query(ParserArtifact).filter(ParserArtifact.id == pid).first() is None
+
+
+def test_api_delete_active_returns_error(db_session):
+    p = _add_parser_artifact(db_session, name="api_no_delete", status="active")
+    with pytest.raises(ValueError, match="请先停用"):
+        artifact_service.delete_parser_artifact(db_session, p.id)

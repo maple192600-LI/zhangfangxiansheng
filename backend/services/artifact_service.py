@@ -69,24 +69,7 @@ def approve_parser_artifact(db: Session, artifact_id: int, approver: str) -> dic
     if row.status != "draft":
         raise ValueError(f"Parser artifact {artifact_id} 状态为 {row.status}，只有 draft 可审批")
 
-    # Retire current active parsers using bank/format for bank kind, account_code otherwise
-    if row.kind == "bank" and row.bank_id is not None:
-        retire_q = db.query(ParserArtifact).filter(
-            ParserArtifact.kind == "bank",
-            ParserArtifact.bank_id == row.bank_id,
-            ParserArtifact.status == "active",
-        )
-        if row.format_key is not None:
-            retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
-        else:
-            retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
-        retire_q.update({"status": "retired"})
-    else:
-        db.query(ParserArtifact).filter(
-            ParserArtifact.account_code == row.account_code,
-            ParserArtifact.kind == row.kind,
-            ParserArtifact.status == "active",
-        ).update({"status": "retired"})
+    _retire_conflicting_active_parsers(db, row)
 
     row.status = "active"
     row.approved_by = approver
@@ -318,19 +301,7 @@ def activate_parser_artifact(
     if row.status == "active":
         return parser_to_dict(row, include_code=False)
 
-    # Retire same bank+format active parsers for bank kind
-    if row.kind == "bank" and row.bank_id is not None:
-        retire_q = db.query(ParserArtifact).filter(
-            ParserArtifact.kind == "bank",
-            ParserArtifact.bank_id == row.bank_id,
-            ParserArtifact.status == "active",
-            ParserArtifact.id != artifact_id,
-        )
-        if row.format_key is not None:
-            retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
-        else:
-            retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
-        retire_q.update({"status": "retired"})
+    _retire_conflicting_active_parsers(db, row)
 
     row.status = "active"
     row.approved_by = operator
@@ -362,6 +333,48 @@ def delete_parser_artifact(db: Session, artifact_id: int) -> None:
         raise ValueError("active parser 不能直接删除，请先停用后删除")
     db.delete(row)
     db.commit()
+
+
+def _retire_conflicting_active_parsers(db: Session, row: ParserArtifact) -> None:
+    """Retire active parsers that conflict with *row* becoming active.
+
+    Must cover all bank parser identity levels:
+      1. bank + bank_id + format_key
+      2. bank + bank_id IS NULL + format_key
+      3. bank + bank_id IS NULL + format_key IS NULL + account_code IS NULL (global default)
+      4. non-bank: kind + account_code
+    """
+    if row.kind == "bank":
+        retire_q = db.query(ParserArtifact).filter(
+            ParserArtifact.kind == "bank",
+            ParserArtifact.status == "active",
+            ParserArtifact.id != row.id,
+        )
+        if row.bank_id is not None:
+            # Level 1: specific bank
+            retire_q = retire_q.filter(ParserArtifact.bank_id == row.bank_id)
+            if row.format_key is not None:
+                retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
+            else:
+                retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
+        elif row.format_key is not None:
+            # Level 2: format-only default (bank_id IS NULL)
+            retire_q = retire_q.filter(ParserArtifact.bank_id.is_(None))
+            retire_q = retire_q.filter(ParserArtifact.format_key == row.format_key)
+        else:
+            # Level 3: global default (bank_id IS NULL, format_key IS NULL)
+            retire_q = retire_q.filter(ParserArtifact.bank_id.is_(None))
+            retire_q = retire_q.filter(ParserArtifact.format_key.is_(None))
+            retire_q = retire_q.filter(ParserArtifact.account_code.is_(None))
+        retire_q.update({"status": "retired"})
+    else:
+        # Non-bank: kind + account_code
+        db.query(ParserArtifact).filter(
+            ParserArtifact.kind == row.kind,
+            ParserArtifact.account_code == row.account_code,
+            ParserArtifact.status == "active",
+            ParserArtifact.id != row.id,
+        ).update({"status": "retired"})
 
 
 def _next_parser_version(db: Session, name: str) -> int:

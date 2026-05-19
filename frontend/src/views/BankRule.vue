@@ -118,7 +118,7 @@
             <div v-if="selectedAgentId" style="margin-top:10px;font-size:13px;color:#2f4330;">
               当前选择：<strong>{{ selectedAgentName }}</strong>
             </div>
-            <div style="margin-top:10px;" class="btn-row">
+            <div v-if="!agentSession.session_id" style="margin-top:10px;" class="btn-row">
               <NButton
                 type="primary"
                 @click="openAgentSession"
@@ -128,7 +128,7 @@
                 创建协作会话
               </NButton>
             </div>
-            <div v-if="!job.job_code" style="font-size:12px;color:#999;margin-top:6px;">
+            <div v-if="!job.job_code && !agentSession.session_id" style="font-size:12px;color:#999;margin-top:6px;">
               请先上传样本文件
             </div>
           </template>
