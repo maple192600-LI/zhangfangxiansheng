@@ -83,7 +83,7 @@ def list_active_agents(db: Session = Depends(get_db)):
 @router.post("/jobs/{job_code}/agent-session")
 def create_agent_session(job_code: str, body: AgentSessionBody, db: Session = Depends(get_db)):
     """Create a new agent session for the training job. Requires explicit agent_id."""
-    from db.tables import Agent
+    from db.tables import Agent, ParserTrainingJob
     from agents import session_store
 
     agent = db.query(Agent).filter(Agent.id == body.agent_id, Agent.status == "active").first()
@@ -105,12 +105,20 @@ def create_agent_session(job_code: str, body: AgentSessionBody, db: Session = De
         content=starter_prompt,
     )
 
+    # Save session relation to job for state recovery
+    job_record = db.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    if job_record:
+        job_record.agent_id = agent.id
+        job_record.agent_session_id = session_data["id"]
+        db.commit()
+
     return success({
         "agent_id": agent.id,
         "agent_code": agent.agent_code,
         "agent_name": agent.display_name,
         "session_id": session_data["id"],
-        "starter_prompt": starter_prompt,
     })
 
 

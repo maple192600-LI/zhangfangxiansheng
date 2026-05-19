@@ -793,6 +793,8 @@ class ParserTrainingJob(Base):
     trial_status = Column(String(20), nullable=False, default="pending", server_default="pending")
     status = Column(String(30), nullable=False, default="sample_uploaded", server_default="sample_uploaded")
     parser_artifact_id = Column(Integer, ForeignKey("parser_artifacts.id", ondelete="SET NULL"), nullable=True)
+    agent_id = Column(Integer, nullable=True)
+    agent_session_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now, server_default="CURRENT_TIMESTAMP")
     updated_at = Column(DateTime, nullable=True, onupdate=datetime.now)
 

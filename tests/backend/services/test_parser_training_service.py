@@ -865,3 +865,92 @@ def test_extract_identity_hints_from_rows():
     assert "银行" in result["bank_hint"]
     assert result["identity_hints"]["account_number"] != "" or result["identity_hints"]["bank_name"] != ""
     assert "format_fingerprint" in result
+
+
+# ── 13C: agent session saved to job + get_job returns session info ──
+
+
+def test_agent_session_saves_relation_to_job(db_session, tmp_path, monkeypatch):
+    """Creating agent session saves agent_id and agent_session_id to the job."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    agent = Agent(
+        agent_code="A_13C", display_name="13C测试智能体",
+        status="active", ai_config_id=None, workspace_path="/tmp/a13c",
+    )
+    db_session.add(agent)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=agent.id)
+    result = create_agent_session(created["job_code"], body, db=db_session)
+    assert result["code"] == 0
+
+    # Verify job has agent_id and agent_session_id
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == created["job_code"]
+    ).first()
+    assert job.agent_id == agent.id
+    assert job.agent_session_id is not None
+
+
+def test_get_job_returns_session_info(db_session, tmp_path, monkeypatch):
+    """get_job returns agent_id and agent_session_id in response."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    agent = Agent(
+        agent_code="A_INFO", display_name="Info测试智能体",
+        status="active", ai_config_id=None, workspace_path="/tmp/ainfo",
+    )
+    db_session.add(agent)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    # Before session: null
+    job_data = parser_training_service.get_job(db_session, created["job_code"])
+    assert job_data["agent_id"] is None
+    assert job_data["agent_session_id"] is None
+
+    # Create session
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=agent.id)
+    create_agent_session(created["job_code"], body, db=db_session)
+
+    # After session: populated
+    job_data = parser_training_service.get_job(db_session, created["job_code"])
+    assert job_data["agent_id"] == agent.id
+    assert job_data["agent_session_id"] is not None
+
+
+def test_agent_session_response_no_starter_prompt(db_session, tmp_path, monkeypatch):
+    """create_agent_session response does NOT include starter_prompt."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    agent = Agent(
+        agent_code="A_NOPROMPT", display_name="NoPrompt智能体",
+        status="active", ai_config_id=None, workspace_path="/tmp/anp",
+    )
+    db_session.add(agent)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=agent.id)
+    result = create_agent_session(created["job_code"], body, db=db_session)
+    assert "starter_prompt" not in result["data"]

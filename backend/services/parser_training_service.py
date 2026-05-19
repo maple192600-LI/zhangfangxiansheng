@@ -243,4 +243,6 @@ def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
         "candidate_code": job.candidate_code,
         "trial_result": json.loads(job.trial_result_json) if job.trial_result_json else None,
         "parser_artifact_id": job.parser_artifact_id,
+        "agent_id": job.agent_id,
+        "agent_session_id": job.agent_session_id,
     }
