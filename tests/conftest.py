@@ -97,6 +97,18 @@ def make_xlsx(rows):
     return buf.getvalue()
 
 
+def make_xls(rows):
+    import xlwt
+    wb = xlwt.Workbook()
+    ws = wb.add_sheet("Sheet1")
+    for r, row in enumerate(rows):
+        for c, val in enumerate(row):
+            ws.write(r, c, str(val))
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def add_import_batch(db, batch_code="BATCH001", source_type="bank", source_name="bank.xlsx", status="uploaded"):
     batch = ImportBatch(
         batch_code=batch_code,

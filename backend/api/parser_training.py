@@ -30,6 +30,10 @@ async def create_job(file: UploadFile = File(...), db: Session = Depends(get_db)
         return success(result)
     except ValueError as exc:
         return error(1001, str(exc))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("样本文件解析失败: %s", filename)
+        return error(1001, "样本文件读取失败，请确认文件未损坏或另存为 xlsx 后重试")
 
 
 @router.get("/jobs/{job_code}")

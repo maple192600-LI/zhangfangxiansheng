@@ -24,10 +24,25 @@
             :max="1"
             accept=".xlsx,.xls,.csv"
             :default-upload="false"
+            :disabled="uploadStatus === 'uploading'"
             @change="handleFileChange"
           >
-            <NButton>选择文件</NButton>
+            <NButton :loading="uploadStatus === 'uploading'">
+              {{ uploadStatus === 'uploading' ? '正在读取样本...' : (uploadStatus === 'error' ? '重新选择文件' : '选择文件') }}
+            </NButton>
           </NUpload>
+          <div v-if="uploadStatus === 'uploading'" class="upload-hint" style="color: #999;">
+            正在读取样本文件，请稍候...
+          </div>
+          <div v-else-if="uploadStatus === 'error'" class="upload-hint" style="color: #d03050;">
+            样本读取失败：{{ uploadError }}
+            <div style="margin-top:4px;font-size:12px;color:#999;">
+              请确认文件未损坏，或另存为 .xlsx 后重试。
+            </div>
+          </div>
+          <div v-if="uploadStatus === 'success'" class="upload-hint" style="color: #18a058;">
+            样本已读取
+          </div>
           <div v-if="job.job_code" class="step-info">
             任务 {{ job.job_code }} · {{ job.filename }} · {{ job.format }} · {{ job.row_count }} 行
             <span :class="'tag tag-' + statusTagClass(job.status)">{{ statusLabel(job.status) }}</span>
@@ -128,8 +143,14 @@
                 创建协作会话
               </NButton>
             </div>
-            <div v-if="!job.job_code && !agentSession.session_id" style="font-size:12px;color:#999;margin-top:6px;">
+            <div v-if="uploadStatus === 'error' && !agentSession.session_id" style="font-size:12px;color:#d03050;margin-top:6px;">
+              样本读取失败，不能创建协作会话。请重新上传样本文件。
+            </div>
+            <div v-else-if="uploadStatus !== 'success' && uploadStatus !== 'idle' && !job.job_code && !agentSession.session_id" style="font-size:12px;color:#999;margin-top:6px;">
               请先上传样本文件
+            </div>
+            <div v-else-if="uploadStatus === 'success' && job.job_code && !selectedAgentId && !agentSession.session_id" style="font-size:12px;color:#999;margin-top:6px;">
+              请选择协作智能体
             </div>
           </template>
 
@@ -321,6 +342,9 @@ const selectedAgentId = ref(null)
 const showDetail = ref(false)
 const detailParser = ref(null)
 
+const uploadStatus = ref('idle') // idle | uploading | success | error
+const uploadError = ref('')
+
 const selectedAgentName = computed(() => {
   if (!selectedAgentId.value) return ''
   const a = agents.value.find(a => a.id === selectedAgentId.value)
@@ -383,6 +407,8 @@ function statusLabel(status) {
 
 async function handleFileChange({ file }) {
   if (!file?.file) return
+  uploadStatus.value = 'uploading'
+  uploadError.value = ''
   const fd = new FormData()
   fd.append('file', file.file)
   try {
@@ -392,9 +418,12 @@ async function handleFileChange({ file }) {
       trialResult.value = null
       saveSuccess.value = false
       parserName.value = ''
+      uploadStatus.value = 'success'
     }
   } catch (e) {
     console.error('上传失败', e)
+    uploadError.value = e.message || '样本文件读取失败'
+    uploadStatus.value = 'error'
   }
 }
 
@@ -591,6 +620,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.upload-hint {
+  margin-top: 8px;
+  font-size: 13px;
 }
 
 /* Tab 栏 */

@@ -35,15 +35,43 @@ def _add_candidate(candidates: list, text: str):
 
 
 def extract_identity_hints(file_path: str, filename: Optional[str] = None) -> dict:
-    wb = load_workbook(file_path, read_only=True, data_only=True)
+    """Extract identity hints from a bank statement file (xlsx/xls/csv)."""
+    from core.parser_engine import detect_format, read_file
+    fmt = detect_format(filename or file_path)
+    if fmt == "unknown":
+        return _empty_hints(filename)
     try:
-        return extract_identity_hints_from_workbook(wb, filename)
-    finally:
-        wb.close()
+        rows = read_file(file_path, fmt)
+        return extract_identity_hints_from_rows(rows, filename)
+    except Exception:
+        return _empty_hints(filename)
+
+
+def extract_identity_hints_from_rows(
+    rows: list[list[str]], filename: Optional[str] = None,
+) -> dict:
+    """Extract identity hints from pre-parsed string rows."""
+    hints = _init_hints()
+    evidence = {"cells": [], "headers": [], "filename": filename or ""}
+    candidates = []
+    _scan_filename(filename, hints, candidates)
+    _scan_rows(rows, hints, evidence, candidates)
+    _finalize_hints(hints, candidates)
+    return _build_result(hints, evidence, candidates, filename)
 
 
 def extract_identity_hints_from_workbook(wb, filename: Optional[str] = None) -> dict:
-    hints = {
+    """Backward-compatible entry: workbook → rows → extract_identity_hints_from_rows."""
+    rows = []
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows(values_only=True):
+            rows.append([str(c) if c is not None else "" for c in row])
+        break
+    return extract_identity_hints_from_rows(rows, filename)
+
+
+def _init_hints() -> dict:
+    return {
         "account_number": "",
         "account_last_four": "",
         "account_name": "",
@@ -52,57 +80,46 @@ def extract_identity_hints_from_workbook(wb, filename: Optional[str] = None) -> 
         "branch_name": "",
         "filename_hint": "",
     }
+
+
+def _empty_hints(filename: Optional[str] = None) -> dict:
+    hints = _init_hints()
     evidence = {"cells": [], "headers": [], "filename": filename or ""}
-    candidates = []
-
-    if filename:
-        _add_candidate(candidates, filename)
-        fn_base = filename.rsplit(".", 1)[0] if "." in filename else filename
-        if fn_base != filename:
-            _add_candidate(candidates, fn_base)
-        fn_bank = _extract_bank_text(filename)
-        if fn_bank:
-            hints["bank_name"] = fn_bank
-        fn_last4 = _extract_last_four_from_filename(filename)
-        if fn_last4:
-            hints["filename_hint"] = fn_last4
-
-    for sheet in wb.worksheets:
-        _scan_sheet(sheet, hints, evidence, candidates)
-        break
-
-    _add_candidate(candidates, hints["bank_name"])
-    _add_candidate(candidates, hints["branch_name"])
-
-    if hints["account_number"] and not hints["account_last_four"]:
-        digits = re.sub(r"\D", "", hints["account_number"])
-        if len(digits) >= 4:
-            hints["account_last_four"] = digits[-4:]
-
     return {
-        "bank_hint": hints["bank_name"],
-        "format_fingerprint": _fingerprint(evidence),
+        "bank_hint": "",
+        "format_fingerprint": "unknown",
         "identity_hints": hints,
         "evidence": evidence,
-        "confidence": _confidence(hints),
-        "bank_text_candidates": candidates[:_MAX_CANDIDATES],
+        "confidence": 0.0,
+        "bank_text_candidates": [],
     }
 
 
-def _scan_sheet(sheet, hints: dict, evidence: dict, candidates: list):
-    max_row = min(_MAX_SCAN_ROWS, sheet.max_row or _MAX_SCAN_ROWS)
-    max_col = min(_MAX_SCAN_COLS, sheet.max_column or _MAX_SCAN_COLS)
+def _scan_filename(filename: Optional[str], hints: dict, candidates: list):
+    if not filename:
+        return
+    _add_candidate(candidates, filename)
+    fn_base = filename.rsplit(".", 1)[0] if "." in filename else filename
+    if fn_base != filename:
+        _add_candidate(candidates, fn_base)
+    fn_bank = _extract_bank_text(filename)
+    if fn_bank:
+        hints["bank_name"] = fn_bank
+    fn_last4 = _extract_last_four_from_filename(filename)
+    if fn_last4:
+        hints["filename_hint"] = fn_last4
+
+
+def _scan_rows(rows: list[list[str]], hints: dict, evidence: dict, candidates: list):
+    scan_rows = rows[:_MAX_SCAN_ROWS]
+    max_col = _MAX_SCAN_COLS
 
     cells_text = []
-    for row_idx in range(1, max_row + 1):
+    for row in scan_rows:
         row_vals = []
         prev_text = ""
-        for col_idx in range(1, max_col + 1):
-            val = sheet.cell(row=row_idx, column=col_idx).value
-            if val is None:
-                prev_text = ""
-                continue
-            text = str(val).strip()
+        for col_idx in range(min(len(row), max_col)):
+            text = str(row[col_idx]).strip() if col_idx < len(row) else ""
             if not text:
                 prev_text = ""
                 continue
@@ -117,17 +134,37 @@ def _scan_sheet(sheet, hints: dict, evidence: dict, candidates: list):
 
     evidence["cells"] = cells_text[:10]
 
-    for row_idx in range(1, min(6, max_row + 1)):
+    for row in scan_rows[:5]:
         headers = []
-        for col_idx in range(1, max_col + 1):
-            v = sheet.cell(row=row_idx, column=col_idx).value
-            if v and str(v).strip():
-                headers.append(str(v).strip())
+        for col_idx in range(min(len(row), max_col)):
+            v = str(row[col_idx]).strip() if col_idx < len(row) else ""
+            if v:
+                headers.append(v)
         if len(headers) >= 3:
             evidence["headers"] = headers
             for h in headers:
                 _add_candidate(candidates, h)
             break
+
+
+def _finalize_hints(hints: dict, candidates: list):
+    _add_candidate(candidates, hints["bank_name"])
+    _add_candidate(candidates, hints["branch_name"])
+    if hints["account_number"] and not hints["account_last_four"]:
+        digits = re.sub(r"\D", "", hints["account_number"])
+        if len(digits) >= 4:
+            hints["account_last_four"] = digits[-4:]
+
+
+def _build_result(hints: dict, evidence: dict, candidates: list, filename: Optional[str]) -> dict:
+    return {
+        "bank_hint": hints["bank_name"],
+        "format_fingerprint": _fingerprint(evidence),
+        "identity_hints": hints,
+        "evidence": evidence,
+        "confidence": _confidence(hints),
+        "bank_text_candidates": candidates[:_MAX_CANDIDATES],
+    }
 
 
 def _extract_from_cell(text: str, hints: dict):

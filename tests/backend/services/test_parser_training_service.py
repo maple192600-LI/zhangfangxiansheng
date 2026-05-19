@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from conftest import make_xlsx, seed_chart_of_accounts
+from conftest import make_xlsx, make_xls, seed_chart_of_accounts
 from db.tables import ImportBatch, ParserArtifact, ParserTrainingJob
 from services import parser_training_service, artifact_service
 from core.artifact_runtime import run_parser_trial
@@ -797,3 +797,71 @@ def test_api_wrapper_delete_active_parser_returns_error(db_session):
     result = parser_training_api.delete_parser(p.id, db=db_session)
     assert result["code"] != 0
     assert "停用" in result["message"]
+
+
+# ── 13A: .xls upload + error handling ──
+
+
+def test_create_training_job_xls_success(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = make_xls([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+    result = parser_training_service.create_training_job(db_session, file_data, "中行银行流水.xls")
+
+    assert result["job_code"].startswith("pt_")
+    assert result["filename"] == "中行银行流水.xls"
+    assert result["format"] == "xls"
+    assert result["row_count"] == 2
+    assert len(result["headers"]) == 5
+    assert "identity_hints" in result
+
+
+def test_create_training_job_xlsx_still_works(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    result = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    assert result["job_code"].startswith("pt_")
+    assert result["format"] == "xlsx"
+    assert result["row_count"] == 2
+
+
+def test_corrupted_file_returns_business_error(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    with pytest.raises(ValueError, match="样本文件读取失败"):
+        parser_training_service.create_training_job(db_session, b"not a real file", "bad.xlsx")
+
+
+def test_api_create_job_corrupted_file_returns_error(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    with pytest.raises(ValueError, match="样本文件读取失败"):
+        parser_training_service.create_training_job(db_session, b"corrupted junk data", "corrupt.xlsx")
+
+
+def test_extract_identity_hints_from_rows():
+    from services.bank_statement_identity_service import extract_identity_hints_from_rows
+    rows = [
+        ["中国银行流水明细", "", "", "", ""],
+        ["账号：1234567890123456", "", "", "", ""],
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试", "1000", "", "10000"],
+    ]
+    result = extract_identity_hints_from_rows(rows, "中行银行流水.xls")
+    assert "银行" in result["bank_hint"]
+    assert result["identity_hints"]["account_number"] != "" or result["identity_hints"]["bank_name"] != ""
+    assert "format_fingerprint" in result

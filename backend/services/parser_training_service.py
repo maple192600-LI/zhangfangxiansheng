@@ -46,7 +46,10 @@ def create_training_job(db: Session, file_data: bytes, filename: str) -> Dict[st
     if fmt == "unknown":
         raise ValueError("不支持的文件格式，仅支持 xls/xlsx/csv")
 
-    rows = read_file_from_bytes(file_data, filename, fmt)
+    try:
+        rows = read_file_from_bytes(file_data, filename, fmt)
+    except Exception as exc:
+        raise ValueError(f"样本文件读取失败，请确认文件未损坏或另存为 xlsx 后重试") from exc
     if len(rows) < 2:
         raise ValueError("文件内容为空或行数不足")
 
@@ -65,8 +68,8 @@ def create_training_job(db: Session, file_data: bytes, filename: str) -> Dict[st
 
     file_hash = hashlib.sha256(file_data).hexdigest()
 
-    from services.bank_statement_identity_service import extract_identity_hints
-    identity_hints = extract_identity_hints(file_path, filename)
+    from services.bank_statement_identity_service import extract_identity_hints_from_rows
+    identity_hints = extract_identity_hints_from_rows(rows, filename)
     format_fingerprint = identity_hints.get("format_fingerprint", "unknown")
 
     context = build_bank_parser_context(db)
