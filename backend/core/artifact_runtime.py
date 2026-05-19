@@ -443,5 +443,12 @@ def run_parser_trial(
     if error_msg:
         return [], error_msg
 
+    if proc.exitcode != 0 and proc.exitcode is not None and not timed_out:
+        if not rows:
+            return [], f"识别方案运行进程异常退出，退出码 {proc.exitcode}"
+
+    if not rows:
+        return [], "识别方案未返回任何结果行"
+
     coerced = [_coerce_row(0, row, i) for i, row in enumerate(rows)]
     return coerced, None

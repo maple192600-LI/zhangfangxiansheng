@@ -539,6 +539,7 @@ function fmtContent(t) {
   if (!t) return ''
   return t
     .replace(/<think[\s\S]*?<\/think>/gi, '')
+    .replace(/<think[\s\S]*$/gi, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

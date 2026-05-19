@@ -363,6 +363,20 @@ const canSave = computed(() => {
     && !saveSuccess.value
 })
 
+function normalizeTrialForDisplay(result) {
+  if (!result) return null
+  const raw = result.error || ''
+  const technicalSigns = ['Traceback', 'openpyxl', 'InvalidFileException', 'worker setup error', 'File "', 'SyntaxError', 'NameError', 'TypeError']
+  if (technicalSigns.some(s => raw.includes(s))) {
+    return {
+      ...result,
+      error: '这版识别方案还没有成功生成结果，请继续告诉智能体样本哪里识别错了。',
+      technical_error: result.technical_error || raw,
+    }
+  }
+  return result
+}
+
 function statusTagClass(status) {
   const map = { active: 'green', draft: 'warn', retired: 'gray', sample_uploaded: 'blue', candidate_ready: 'warn', trial_success: 'green', trial_failed: 'warn', active_parser_saved: 'green' }
   return map[status] || 'gray'
@@ -428,7 +442,7 @@ async function refreshJob() {
     if (data) {
       job.value = data
       if (data.trial_result && !trialResult.value) {
-        trialResult.value = data.trial_result
+        trialResult.value = normalizeTrialForDisplay(data.trial_result)
       }
       // Restore agent session if present
       if (data.agent_id && data.agent_session_id && !agentSession.value.session_id) {
@@ -456,11 +470,11 @@ async function runTrial() {
   try {
     const data = await runCandidate(job.value.job_code)
     if (data) {
-      trialResult.value = data
+      trialResult.value = normalizeTrialForDisplay(data)
       await refreshJob()
     }
   } catch (e) {
-    trialResult.value = { error: e.message, rows: [] }
+    trialResult.value = normalizeTrialForDisplay({ error: e.message, rows: [] })
   } finally {
     trialLoading.value = false
   }
@@ -567,8 +581,7 @@ async function restoreFromUrl() {
       uploadStatus.value = 'success'
 
       if (data.trial_result) {
-        trialResult.value = data.trial_result
-      }
+        trialResult.value = normalizeTrialForDisplay(data.trial_result)      }
 
       // Restore agent session if saved in job
       if (data.agent_id && data.agent_session_id) {

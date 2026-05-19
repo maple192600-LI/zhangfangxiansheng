@@ -176,6 +176,20 @@ def run_candidate(db: Session, job_code: str) -> Dict[str, Any]:
         return {"status": "trial_failed", "rows": [], "row_count": 0,
                 "error": user_msg, "technical_error": tech_detail or error_msg}
 
+    if not rows:
+        result = {
+            "status": "trial_failed",
+            "rows": [],
+            "row_count": 0,
+            "error": "这版识别方案没有识别出任何流水，请继续告诉智能体样本哪里识别错了。",
+            "technical_error": "parser returned zero rows",
+        }
+        job.trial_status = "failed"
+        job.trial_result_json = json.dumps(result, ensure_ascii=False)
+        job.status = "trial_failed"
+        db.commit()
+        return result
+
     result = {"status": "trial_success", "rows": rows, "row_count": len(rows),
               "error": None, "technical_error": None}
     job.trial_status = "success"
@@ -275,8 +289,37 @@ def _job_to_response(job: ParserTrainingJob) -> Dict[str, Any]:
         "status": job.status,
         "trial_status": job.trial_status,
         "candidate_code": job.candidate_code,
-        "trial_result": json.loads(job.trial_result_json) if job.trial_result_json else None,
+        "trial_result": _normalize_trial_result_for_response(job.trial_result_json),
         "parser_artifact_id": job.parser_artifact_id,
         "agent_id": job.agent_id,
         "agent_session_id": job.agent_session_id,
     }
+
+
+def _normalize_trial_result_for_response(raw_json: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Clean trial_result_json before returning to frontend.
+
+    Ensures old raw Traceback/error messages are converted to user-friendly
+    Chinese prompts, with technical details moved to technical_error field.
+    """
+    if not raw_json:
+        return None
+    try:
+        result = json.loads(raw_json)
+    except Exception:
+        return {
+            "status": "trial_failed",
+            "error": "历史识别结果读取失败，请重新生成识别结果。",
+            "technical_error": raw_json,
+            "rows": [],
+            "row_count": 0,
+        }
+
+    err = result.get("error")
+    if isinstance(err, str) and err:
+        user_msg, technical = _clean_error_for_user(err)
+        result["error"] = user_msg
+        if technical and not result.get("technical_error"):
+            result["technical_error"] = technical
+
+    return result
