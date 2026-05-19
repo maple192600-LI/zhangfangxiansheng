@@ -72,6 +72,18 @@
             </template>
 
             <template v-if="trialResult">
+              <div class="btn-row" style="margin-bottom:10px;">
+                <NButton size="small" @click="refreshJob">刷新智能体提交状态</NButton>
+                <NButton
+                  size="small"
+                  type="primary"
+                  @click="runTrial"
+                  :loading="trialLoading"
+                  :disabled="!job.candidate_code"
+                >
+                  重新生成识别结果
+                </NButton>
+              </div>
               <div v-if="trialResult.error" style="margin-bottom:10px;">
                 <div style="color:#d03050;font-size:13px;padding:10px 14px;background:#fff5f5;border:1px solid #f0d0d0;border-radius:6px;">
                   {{ trialResult.error }}
@@ -114,7 +126,7 @@
                 <!-- 结果不满意反馈 -->
                 <div style="margin-top:12px;padding:10px 14px;background:#faf8f3;border:1px solid #e7e0d5;border-radius:6px;">
                   <div style="font-size:13px;color:#666;margin-bottom:8px;">
-                    如果识别结果不正确，请在右侧继续告诉智能体哪里识别错了，它会修改后重新提交。
+                    如果识别结果不正确，请在右侧继续告诉智能体哪里识别错了。智能体重新提交后，点击上方“刷新智能体提交状态”，再点击“重新生成识别结果”查看新版结果。
                   </div>
                 </div>
               </div>
@@ -441,10 +453,15 @@ async function handleFileChange({ file, fileList: newFileList }) {
 async function refreshJob() {
   if (!job.value.job_code) return
   try {
+    const previousCandidateCode = job.value.candidate_code || ''
     const data = await getJob(job.value.job_code)
     if (data) {
       job.value = data
-      if (data.trial_result && !trialResult.value) {
+      const candidateChanged = previousCandidateCode && data.candidate_code && data.candidate_code !== previousCandidateCode
+      if (candidateChanged || (!data.trial_result && data.status === 'candidate_ready')) {
+        trialResult.value = null
+        saveSuccess.value = false
+      } else if (data.trial_result) {
         trialResult.value = normalizeTrialForDisplay(data.trial_result)
         if (trialResult.value && trialResult.value.status === 'trial_failed' && data.status === 'trial_success') {
           data.status = 'trial_failed'
