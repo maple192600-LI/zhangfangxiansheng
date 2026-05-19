@@ -27,6 +27,7 @@ from core.artifact_runtime import (
     PrimitivesViolationError,
     SandboxTimeoutError,
     run_parser,
+    run_parser_trial,
     run_rule,
 )
 from db.tables import Base, ParserArtifact
@@ -376,7 +377,7 @@ def test_generator_crash_wrapped_as_execution_error(db_session, xlsx_file):
 def test_generator_non_dict_row_wrapped_as_execution_error(db_session, xlsx_file):
     """Generator yields a non-dict value — wrapped as ArtifactExecutionError."""
     art = _make_artifact(db_session, code=GENERATOR_NON_DICT_CODE)
-    with pytest.raises(ArtifactExecutionError, match="expected dict, got str"):
+    with pytest.raises(ArtifactExecutionError, match="standard result object, got str"):
         list(run_parser(db_session, art.id, xlsx_file))
 
 
@@ -533,3 +534,109 @@ def test_datetime_business_date_normalized_to_date(db_session, xlsx_file):
     # Row 2: ISO datetime string → date
     assert rows[2]["business_date"] == date(2026, 5, 3)
     assert isinstance(rows[2]["business_date"], date)
+
+
+# ═══════════════════════════════════════════════════════
+# 14A: Multi-format runtime tests
+# ═══════════════════════════════════════════════════════
+
+def _make_csv_file() -> str:
+    """Create a temp .csv file with test data."""
+    import csv as _csv
+    fd, path = tempfile.mkstemp(suffix=".csv")
+    with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
+        writer = _csv.writer(f)
+        writer.writerow(["日期", "摘要", "收入", "支出", "余额"])
+        writer.writerow(["2026-05-01", "test", "100", "0", "100"])
+    return path
+
+
+def _make_xls_file() -> str:
+    """Create a temp .xls file with test data using xlrd-compatible format."""
+    import xlwt
+    fd, path = tempfile.mkstemp(suffix=".xls")
+    os.close(fd)
+    wb = xlwt.Workbook()
+    ws = wb.add_sheet("Sheet1")
+    headers = ["日期", "摘要", "收入", "支出", "余额"]
+    data = ["2026-05-01", "test", "100", "0", "100"]
+    for c, h in enumerate(headers):
+        ws.write(0, c, h)
+    for c, v in enumerate(data):
+        ws.write(1, c, v)
+    wb.save(path)
+    return path
+
+
+# ── run_parser: .csv file works ──
+
+def test_run_parser_csv_file(db_session):
+    csv_path = _make_csv_file()
+    try:
+        art = _make_artifact(db_session)
+        rows = list(run_parser(db_session, art.id, csv_path))
+        assert len(rows) >= 1
+        assert rows[0]["entity_code"] == "E001"
+    finally:
+        if os.path.exists(csv_path):
+            os.unlink(csv_path)
+
+
+# ── run_parser: .xls file works ──
+
+def test_run_parser_xls_file(db_session):
+    xls_path = _make_xls_file()
+    try:
+        art = _make_artifact(db_session)
+        rows = list(run_parser(db_session, art.id, xls_path))
+        assert len(rows) >= 1
+        assert rows[0]["entity_code"] == "E001"
+    finally:
+        if os.path.exists(xls_path):
+            os.unlink(xls_path)
+
+
+# ── run_parser: .xlsx file still works ──
+
+def test_run_parser_xlsx_file_unchanged(db_session, xlsx_file):
+    art = _make_artifact(db_session)
+    rows = list(run_parser(db_session, art.id, xlsx_file))
+    assert len(rows) >= 1
+    assert rows[0]["entity_code"] == "E001"
+
+
+# ── run_parser_trial: .csv file works ──
+
+def test_run_parser_trial_csv_file():
+    csv_path = _make_csv_file()
+    try:
+        rows, err = run_parser_trial(SIMPLE_PARSER_CODE, csv_path)
+        assert err is None, f"trial csv error: {err}"
+        assert len(rows) >= 1
+        assert rows[0]["entity_code"] == "E001"
+    finally:
+        if os.path.exists(csv_path):
+            os.unlink(csv_path)
+
+
+# ── run_parser_trial: .xls file works ──
+
+def test_run_parser_trial_xls_file():
+    xls_path = _make_xls_file()
+    try:
+        rows, err = run_parser_trial(SIMPLE_PARSER_CODE, xls_path)
+        assert err is None, f"trial xls error: {err}"
+        assert len(rows) >= 1
+        assert rows[0]["entity_code"] == "E001"
+    finally:
+        if os.path.exists(xls_path):
+            os.unlink(xls_path)
+
+
+# ── run_parser_trial: .xlsx file still works ──
+
+def test_run_parser_trial_xlsx_file(xlsx_file):
+    rows, err = run_parser_trial(SIMPLE_PARSER_CODE, xlsx_file)
+    assert err is None, f"trial xlsx error: {err}"
+    assert len(rows) >= 1
+    assert rows[0]["entity_code"] == "E001"

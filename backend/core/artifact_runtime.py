@@ -162,7 +162,7 @@ def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _normalize_trial_file(file_path: str) -> str:
+def _normalize_parser_input_file(file_path: str) -> str:
     """Convert .xls/.csv to a temporary .xlsx so the openpyxl-based worker can read it.
 
     Returns the path to use for the worker. Caller is responsible for
@@ -232,12 +232,15 @@ def run_parser(
 
     sandbox = artifact_sandbox.get_default_sandbox_config()
 
+    worker_path = _normalize_parser_input_file(file_path)
+    cleanup_tmp = worker_path != file_path
+
     ctx_json = json.dumps(ctx)
 
     parent_conn, child_conn = multiprocessing.Pipe()
     proc = multiprocessing.Process(
         target=_worker_main,
-        args=(child_conn, artifact.code, file_path, ctx_json, sandbox.max_output_rows),
+        args=(child_conn, artifact.code, worker_path, ctx_json, sandbox.max_output_rows),
     )
     proc.start()
     child_conn.close()
@@ -296,6 +299,11 @@ def run_parser(
             proc.terminate()
             proc.join(timeout=5)
         parent_conn.close()
+        if cleanup_tmp:
+            try:
+                os.unlink(worker_path)
+            except OSError:
+                pass
 
     if proc.exitcode != 0 and proc.exitcode is not None and not timed_out:
         if not rows:
@@ -393,7 +401,7 @@ def run_parser_trial(
 
     validate_artifact_code(code, artifact_id=0)
 
-    worker_path = _normalize_trial_file(file_path)
+    worker_path = _normalize_parser_input_file(file_path)
     cleanup_tmp = worker_path != file_path
 
     sandbox = get_default_sandbox_config()

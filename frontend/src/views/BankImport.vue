@@ -118,6 +118,16 @@ const previewing = ref(false)
 const noRuleHint = ref(false)
 const runtimeError = ref('')
 
+const _TECHNICAL_INDICATORS = [
+  'Traceback', 'openpyxl', 'InvalidFileException', 'worker setup error',
+  'File "', 'SyntaxError', 'IndentationError', 'NameError', 'TypeError',
+  'ValueError', 'AttributeError', 'KeyError', 'IndexError',
+]
+
+function _isTechnicalError(msg) {
+  return _TECHNICAL_INDICATORS.some(ind => msg.includes(ind))
+}
+
 const previewColumns = [
   { field: 'business_date', title: '日期', width: 110 },
   { field: 'summary_text', title: '摘要', minWidth: 140 },
@@ -198,6 +208,8 @@ async function doPreview() {
     const msg = e.response?.data?.message || e.message || ''
     if (msg.includes('未实现') || msg.includes('NotImplemented') || msg.includes('运行时')) {
       runtimeError.value = '解析器运行时不可用/未实现，无法预览解析结果'
+    } else if (_isTechnicalError(msg)) {
+      hint.value = '解析器运行失败，请回到规则中心调整识别方案后重试。'
     } else {
       hint.value = msg || '预览失败'
     }
