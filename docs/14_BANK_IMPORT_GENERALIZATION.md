@@ -1,4 +1,4 @@
-﻿# 银行导入通用识别与主数据归属匹配
+# 银行导入通用识别与主数据归属匹配
 
 ## 总原则
 
@@ -149,5 +149,5 @@
 这两个服务已通过测试验证，并已接入 `bank_import_service` 的上传流程（09D）和 `import_preview_service` 的预览/提交流程（09D2）。前端展示将在 09G 中完成。
 
 ---
-**校准来源：** `ai_coordination/parser-runtime/09_bank_parser_generalization_revised_plan_current.md`、`backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
+**校准来源：** `backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
 **最后校准：** 2026-05-19（09F parser 硬编码 guard 已实现，规则中心 MVP 已完成）

@@ -1,8 +1,0 @@
-
-name: parse_boc
-version: "2.0"
-description: 中国银行流水智能解析——自动识别 .xls 和 .xlsx 格式，提取日期、方向、对方、收入、支出、余额，生成可读摘要，输出结构化预览数据。
-params:
-  file_path:
-    type: string
-    required: true

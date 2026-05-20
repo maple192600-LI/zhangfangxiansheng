@@ -1,8 +1,0 @@
-
-name: parse_boc_xls
-version: "1.0"
-description: 解析中行银行流水XLS文件
-params:
-  file_path:
-    type: string
-    required: true
