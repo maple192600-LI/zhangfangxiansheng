@@ -199,7 +199,7 @@ def account_field(account_code: str, field: str) -> Any:
             return getattr(acc, field)
         if field in _ACCOUNT_VIRTUAL_FIELDS:
             if field == "account_name":
-                # 兼容：account_name 在 v3 canonical 中不同于 account_alias
+                # 兼容：account_name 在 current canonical schema 中不同于 account_alias
                 return acc.account_alias
             ent = s.query(Entity).filter(Entity.id == acc.entity_id).first()
             if ent is None:

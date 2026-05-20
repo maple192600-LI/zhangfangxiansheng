@@ -2,9 +2,9 @@ import { computed } from 'vue'
 import { currentSkin } from './skins'
 
 export const themeOverrides = computed(() => {
-  const isV5 = currentSkin.value === 'v5'
+  const isFresh = currentSkin.value === 'fresh'
 
-  if (isV5) {
+  if (isFresh) {
     return {
       common: {
         primaryColor: '#3f8b5b',

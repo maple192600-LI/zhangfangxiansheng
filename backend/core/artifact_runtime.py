@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
+import tempfile
 import time
 import traceback
 from datetime import date, datetime
@@ -94,6 +96,11 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
                     conn.close()
                     return
                 gen = parse_fn(wb, ctx)
+                gen, parser_return_error = _normalize_parser_return(gen)
+                if parser_return_error:
+                    conn.send(("error", parser_return_error))
+                    conn.close()
+                    return
                 iterator = iter(gen)
                 count = 0
                 while count < max_output_rows:
@@ -102,7 +109,7 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
                     except StopIteration:
                         break
                     if not isinstance(row, dict):
-                        conn.send(("error", f"row {count}: expected dict, got {type(row).__name__}"))
+                        conn.send(("error", f"parser row {count} must be a standard result object, got {type(row).__name__}"))
                         conn.close()
                         return
                     conn.send(("row", _serialize_row(row)))
@@ -118,6 +125,28 @@ def _worker_main(conn, code_str, file_path, ctx_json, max_output_rows):
     conn.close()
 
 
+def _normalize_parser_return(result: Any) -> tuple[Any, Optional[str]]:
+    """Accept the parser contract plus one common agent-generated variant.
+
+    Official contract: parse(wb, ctx) returns an iterable of row dicts.
+    During rule training, agents sometimes return (rows, errors). Accept it
+    when errors is empty so the user can review rows instead of seeing a
+    contract error. If errors are present, surface them as a trial failure.
+    """
+    if isinstance(result, tuple) and len(result) == 2:
+        rows, errors = result
+        if errors:
+            return [], f"parser returned validation errors: {_format_parser_errors(errors)}"
+        return rows, None
+    return result, None
+
+
+def _format_parser_errors(errors: Any) -> str:
+    if isinstance(errors, (list, tuple)):
+        return "; ".join(str(e) for e in errors if e is not None)
+    return str(errors)
+
+
 def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
     """Make row JSON-serializable for cross-process transfer."""
     out = dict(row)
@@ -131,6 +160,35 @@ def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
     elif isinstance(bd, date) and not isinstance(bd, datetime):
         out["business_date"] = bd.isoformat()
     return out
+
+
+def _normalize_parser_input_file(file_path: str) -> str:
+    """Convert .xls/.csv to a temporary .xlsx so the openpyxl-based worker can read it.
+
+    Returns the path to use for the worker. Caller is responsible for
+    cleaning up the temporary file when done (if different from input).
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".xlsx":
+        return file_path
+
+    from core.parser_engine import detect_format, read_file
+
+    fmt = detect_format(file_path)
+    if fmt == "xlsx":
+        return file_path
+
+    rows = read_file(file_path, fmt)
+    wb = Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".xlsx")
+    os.close(fd)
+    wb.save(tmp_path)
+    wb.close()
+    return tmp_path
 
 
 def run_parser(
@@ -174,12 +232,15 @@ def run_parser(
 
     sandbox = artifact_sandbox.get_default_sandbox_config()
 
+    worker_path = _normalize_parser_input_file(file_path)
+    cleanup_tmp = worker_path != file_path
+
     ctx_json = json.dumps(ctx)
 
     parent_conn, child_conn = multiprocessing.Pipe()
     proc = multiprocessing.Process(
         target=_worker_main,
-        args=(child_conn, artifact.code, file_path, ctx_json, sandbox.max_output_rows),
+        args=(child_conn, artifact.code, worker_path, ctx_json, sandbox.max_output_rows),
     )
     proc.start()
     child_conn.close()
@@ -238,6 +299,11 @@ def run_parser(
             proc.terminate()
             proc.join(timeout=5)
         parent_conn.close()
+        if cleanup_tmp:
+            try:
+                os.unlink(worker_path)
+            except OSError:
+                pass
 
     if proc.exitcode != 0 and proc.exitcode is not None and not timed_out:
         if not rows:
@@ -323,6 +389,9 @@ def run_parser_trial(
 
     Returns (rows, error_message). On success error_message is None.
     Does not touch the database or modify any ParserArtifact.
+
+    For .xls/.csv files, automatically converts to a temporary .xlsx so the
+    openpyxl-based worker can read them. The temporary file is cleaned up after.
     """
     if ctx is None:
         ctx = {}
@@ -332,13 +401,16 @@ def run_parser_trial(
 
     validate_artifact_code(code, artifact_id=0)
 
+    worker_path = _normalize_parser_input_file(file_path)
+    cleanup_tmp = worker_path != file_path
+
     sandbox = get_default_sandbox_config()
     ctx_json = json.dumps(ctx)
 
     parent_conn, child_conn = multiprocessing.Pipe()
     proc = multiprocessing.Process(
         target=_worker_main,
-        args=(child_conn, code, file_path, ctx_json, sandbox.max_output_rows),
+        args=(child_conn, code, worker_path, ctx_json, sandbox.max_output_rows),
     )
     proc.start()
     child_conn.close()
@@ -397,9 +469,21 @@ def run_parser_trial(
             proc.terminate()
             proc.join(timeout=5)
         parent_conn.close()
+        if cleanup_tmp:
+            try:
+                os.unlink(worker_path)
+            except OSError:
+                pass
 
     if error_msg:
         return [], error_msg
+
+    if proc.exitcode != 0 and proc.exitcode is not None and not timed_out:
+        if not rows:
+            return [], f"识别方案运行进程异常退出，退出码 {proc.exitcode}"
+
+    if not rows:
+        return [], "识别方案未返回任何结果行"
 
     coerced = [_coerce_row(0, row, i) for i, row in enumerate(rows)]
     return coerced, None

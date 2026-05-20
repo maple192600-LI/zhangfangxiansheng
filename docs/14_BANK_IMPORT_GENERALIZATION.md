@@ -14,7 +14,7 @@
 |------|------|----------|
 | Parser Runtime | 底层确定性执行器，执行 active ParserArtifact 的 Python code | 已实现（`run_parser`） |
 | Bank Format Parser | 银行格式级解析器。一个 parser 服务同银行同格式的所有账户 | 未实现（无真实 bank parser） |
-| Bank Format Identification | 识别银行和导出格式（如"中国银行标准对账单 v1"） | 未实现 |
+| Bank Format Identification | 识别银行和导出格式（如"中国银行标准对账单"） | 未实现 |
 | Identity Hints Extraction | 从文件中提取账号、户名、单位名、银行名、开户行等线索 | 未实现 |
 | Master Data Matching | 读取主数据进行匹配，确定流水归属 | 未实现 |
 | Account Attribution | 确定流水归属哪个法人单位和银行账户 | 未实现 |
@@ -149,5 +149,5 @@
 这两个服务已通过测试验证，并已接入 `bank_import_service` 的上传流程（09D）和 `import_preview_service` 的预览/提交流程（09D2）。前端展示将在 09G 中完成。
 
 ---
-**校准来源：** `ai_coordination/parser-runtime/09_bank_parser_generalization_revised_plan_v2.md`、`backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
+**校准来源：** `backend/services/bank_import_service.py`、`backend/services/import_preview_service.py`、`backend/services/manual_flow_service.py`、`backend/fund/primitives/master_match.py`、`backend/db/tables.py`
 **最后校准：** 2026-05-19（09F parser 硬编码 guard 已实现，规则中心 MVP 已完成）

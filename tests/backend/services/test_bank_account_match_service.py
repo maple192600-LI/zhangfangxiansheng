@@ -13,7 +13,7 @@ def test_data(db_session):
 
 def _seed(db):
     now = datetime.now()
-    div = Division(division_code="DV1", name="Division 1",
+    div = Division(division_code="D001", name="Division 1",
                    status="enabled", created_at=now, updated_at=now)
     db.add(div)
     db.flush()

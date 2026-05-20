@@ -1,5 +1,5 @@
 {
-  "sample_name": "manual_multi_subject_v1",
+  "sample_name": "manual_multi_subject_standard",
   "expected_summary": {
     "total_rows": 12,
     "parsed_rows": 12,

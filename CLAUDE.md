@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 Claude Code 项目专用规则。每次会话开始时自动加载。
 
@@ -63,7 +63,7 @@ tests/         ← pytest 测试
 
 `run_parser` 已实现，ParserArtifact 可真实解析 xlsx 并返回 CANONICAL_12 rows。注意：这是底层确定性执行器，不等于银行通用识别（银行格式识别、身份线索提取、主数据匹配、账户归属均尚未实现，详见 `docs/14_BANK_IMPORT_GENERALIZATION.md`）。`run_rule` 仍为阻断。
 
-## V1 范围
+## 当前交付范围
 
 **包含：** 主数据中心、银行导入、手工流水双轨、日报生成、导出打印、基础看板、备份回滚、日志、Agent 系统
 

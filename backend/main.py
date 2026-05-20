@@ -1,4 +1,4 @@
-"""账房先生 V1 — FastAPI 入口
+﻿"""账房先生 — FastAPI 入口
 
 启动方式：
   Windows: 双击 start.bat 或 venv\Scripts\python.exe main.py

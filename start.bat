@@ -1,7 +1,7 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul 2>nul
 echo ========================================
-echo   ZhangFang V1 Starting...
+echo   ZhangFang Starting...
 echo ========================================
 echo.
 

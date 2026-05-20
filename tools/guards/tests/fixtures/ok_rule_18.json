@@ -1,5 +1,5 @@
-{
-  "name": "现金日记账_月账_v1",
+﻿{
+  "name": "现金日记账_月账_标准",
   "template_file": "templates/cash_journal_blank.xlsx",
   "placeholder_bindings": {
     "报表标题":   { "primitive": "const",            "value": "现金日记账" },

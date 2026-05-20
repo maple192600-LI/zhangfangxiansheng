@@ -26,7 +26,17 @@
       <div v-for="msg in messages" :key="msg.id" class="chat-msg" :class="'msg-' + msg.role">
         <div class="msg-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
         <div class="msg-body">
-          <div v-if="msg.content" class="msg-bubble" v-html="fmtContent(msg.content)"></div>
+          <!-- Folded first user message (system context) -->
+          <template v-if="foldFirstUserMsg && msg.role === 'user' && isFirstUserMsg(msg) && !forceUnfoldedMsgIds[msg.id]">
+            <div class="msg-bubble msg-folded" @click="unfoldMsg(msg.id)">
+              <span class="fold-label">{{ foldLabel }}</span>
+              <span class="fold-hint">（点击展开）</span>
+            </div>
+          </template>
+          <!-- Normal message bubble -->
+          <template v-else>
+            <div v-if="msg.content" class="msg-bubble" v-html="fmtContent(msg.content)"></div>
+          </template>
 
           <!-- 消息操作按钮 -->
           <div v-if="msg.content && !streaming" class="msg-actions" :class="'actions-' + msg.role">
@@ -159,7 +169,13 @@ import { NButton } from 'naive-ui'
 import { sendMessageStream, toolConfirm } from '@/api/agent'
 import { useAgentsStore } from '@/stores/agents'
 
-const props = defineProps({ agent: Object, sessionId: Number })
+const props = defineProps({
+  agent: Object,
+  sessionId: Number,
+  compact: { type: Boolean, default: false },
+  foldFirstUserMsg: { type: Boolean, default: false },
+  foldLabel: { type: String, default: '系统已提供上下文' },
+})
 const emit = defineEmits(['session-created'])
 const store = useAgentsStore()
 
@@ -178,8 +194,24 @@ const workspaceRefs = ref([])
 const dragOver = ref(false)
 const confirmData = ref(null)
 const askUserReply = ref('')
+const forceUnfoldedMsgIds = ref({})
 let streamAbort = null
 let dragTimer = null
+let _firstUserMsgId = null
+
+function isFirstUserMsg(msg) {
+  return msg.id === _firstUserMsgId
+}
+
+function unfoldMsg(id) {
+  forceUnfoldedMsgIds.value = { ...forceUnfoldedMsgIds.value, [id]: true }
+}
+
+function _detectFirstUserMsg() {
+  if (!props.foldFirstUserMsg) return
+  const first = messages.value.find(m => m.role === 'user' && m.content)
+  _firstUserMsgId = first ? first.id : null
+}
 
 function sendExternal(text) {
   inputText.value = text
@@ -207,6 +239,7 @@ async function loadMsgs() {
       linked.push(m)
     }
     messages.value = linked
+    _detectFirstUserMsg()
     scrollEnd()
   } catch (e) { console.error(e) }
 }
@@ -505,6 +538,8 @@ function fmtJson(j) {
 function fmtContent(t) {
   if (!t) return ''
   return t
+    .replace(/<think[\s\S]*?<\/think>/gi, '')
+    .replace(/<think[\s\S]*$/gi, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -524,6 +559,32 @@ function fmtContent(t) {
   position: relative;
   transition: border-color .2s, box-shadow .2s;
 }
+.chat-panel.compact {
+  border-radius: 10px;
+}
+.chat-panel.compact .chat-messages {
+  padding: 12px 16px;
+}
+.chat-panel.compact .chat-input-bar {
+  padding: 10px 14px 8px;
+}
+.chat-panel.compact .chat-textarea {
+  min-height: 48px;
+  max-height: 80px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.chat-panel.compact .btn-send,
+.chat-panel.compact .btn-stop {
+  height: 38px;
+  min-width: 70px;
+  font-size: 13px;
+}
+.chat-panel.compact .chat-empty {
+  padding: 30px 14px;
+}
+.chat-panel.compact .empty-icon { font-size: 28px; }
+.chat-panel.compact .empty-title { font-size: 14px; }
 .chat-panel.chat-drag-over {
   border-color: #7f9b7a;
   box-shadow: 0 0 0 3px rgba(127,155,122,.15);
@@ -597,6 +658,22 @@ function fmtContent(t) {
   border-bottom-left-radius: 4px;
   color: #333;
 }
+
+/* Folded system context message */
+.msg-folded {
+  background: #f5f3ee !important;
+  border: 1px dashed #d7d0c5 !important;
+  cursor: pointer;
+  font-size: 12px;
+  color: #8c8680;
+  max-width: 280px;
+}
+.msg-folded:hover {
+  border-color: #b8ccb5 !important;
+  color: #555;
+}
+.fold-label { font-weight: 500; }
+.fold-hint { font-size: 11px; margin-left: 4px; opacity: 0.7; }
 
 /* 消息操作按钮 */
 .msg-actions {

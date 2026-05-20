@@ -187,7 +187,17 @@ def preview(
             artifact_runtime.run_parser(db, parser_artifact_id, file_path, ctx),
         )
     except artifact_runtime.ArtifactRuntimeError as e:
-        raise ValueError(str(e))
+        raw_msg = str(e)
+        technical_indicators = (
+            "Traceback", "openpyxl", "InvalidFileException",
+            "worker setup error", "File \"", "SyntaxError",
+            "IndentationError", "NameError", "TypeError",
+            "ValueError", "AttributeError", "KeyError",
+            "IndexError", "ZeroDivisionError", "ImportError",
+        )
+        if any(ind in raw_msg for ind in technical_indicators):
+            raise ValueError("解析器运行失败，请回到规则中心调整识别方案后重试。")
+        raise ValueError(raw_msg)
     result = _preview_from_canonical_rows(batch_code, rows)
     batch.status = "previewed"
     db.commit()

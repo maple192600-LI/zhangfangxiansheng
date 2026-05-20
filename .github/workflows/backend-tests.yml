@@ -17,7 +17,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
           pip install pytest pytest-cov
-      - name: Run v3 backend core tests
+      - name: Run backend core tests
         run: pytest tests/backend/core tests/db tests/scripts -q
       - name: Run Fund Agent regression tests
         run: pytest tests/fund -q

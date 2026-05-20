@@ -154,7 +154,7 @@ def test_w6_patch_replace_graph(client):
             ],
             "edges": [{"from": "a", "to": "b"}],
         }}],
-        "change_summary": "v2",
+        "change_summary": "second edit",
     })
     body = resp.json()
     assert body["code"] == 0
@@ -263,7 +263,7 @@ def test_w12_list_versions_grows_after_patch(client):
     created = _create_workflow(client, code="wf_ver_grow")
     client.patch(f"/api/workflow/workflows/{created['id']}/graph", json={
         "patches": [{"op": "replace_graph", "graph": _graph()}],
-        "change_summary": "v2",
+        "change_summary": "second edit",
     })
     resp = client.get(f"/api/workflow/workflows/{created['id']}/versions")
     body = resp.json()

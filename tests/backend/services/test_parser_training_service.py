@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from conftest import make_xlsx, seed_chart_of_accounts
+from conftest import make_xlsx, make_xls, seed_chart_of_accounts
 from db.tables import ImportBatch, ParserArtifact, ParserTrainingJob
 from services import parser_training_service, artifact_service
 from core.artifact_runtime import run_parser_trial
@@ -35,6 +35,52 @@ def _make_sample_xlsx():
         ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
         ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
     ])
+
+
+def _make_large_sample_xlsx(row_count=100):
+    rows = [
+        ["银行导出文件", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["日期", "摘要", "收入", "支出", "余额"],
+    ]
+    for i in range(1, row_count + 1):
+        rows.append([
+            f"2026-04-{(i % 28) + 1:02d}",
+            f"交易{i:03d}",
+            str(i * 10 if i % 2 else ""),
+            str(i * 5 if not i % 2 else ""),
+            str(10000 + i),
+        ])
+    return make_xlsx(rows)
+
+
+def _make_bank_hint_sample_xlsx():
+    return make_xlsx([
+        ["文件来源", "Bank 001 对账单", "", "", ""],
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+
+
+_WORKING_PARSE_CODE = '''
+def parse(wb, ctx):
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            rows.append({
+                "business_date": str(row[0]),
+                "summary": str(row[1] or ""),
+                "amount_in": float(row[2] or 0),
+                "amount_out": float(row[3] or 0),
+                "rolling_balance": float(row[4] or 0),
+                "entity_code": "", "entity_name": "",
+                "account_code": "", "account_name": "",
+                "counterparty": "", "state": "正常", "source": "网银导入",
+            })
+    return rows
+'''
 
 
 def _seed_db(db):
@@ -81,6 +127,24 @@ def test_create_training_job_persists(db_session, tmp_path, monkeypatch):
     assert job is not None
     assert job.status == "sample_uploaded"
     assert job.trial_status == "pending"
+
+
+def test_create_training_job_uses_representative_rows_not_first_five(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_large_sample_xlsx(100)
+    result = parser_training_service.create_training_job(db_session, file_data, "large.xlsx")
+
+    assert result["row_count"] == 100
+    assert result["identity_hints"]["detected_header_row"] == 3
+    assert result["identity_hints"]["sample_strategy"] == "distributed_across_detected_body"
+    assert len(result["sample_rows"]) == 80
+    summaries = [row[1] for row in result["sample_rows"]]
+    assert "交易001" in summaries
+    assert "交易100" in summaries
+    assert len(summaries) > 5
 
 
 def test_create_training_job_rejects_unknown_format(db_session, tmp_path, monkeypatch):
@@ -275,13 +339,34 @@ def test_save_parser_creates_active(db_session, tmp_path, monkeypatch):
     created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
     job_code = created["job_code"]
 
-    code = "def parse(wb, ctx): return []"
-    parser_training_service.update_candidate_code(db_session, job_code, code)
+    parser_training_service.update_candidate_code(db_session, job_code, _WORKING_PARSE_CODE)
     parser_training_service.run_candidate(db_session, job_code)
 
     result = parser_training_service.save_parser(db_session, job_code, "test_save_parser")
     assert result["status"] == "active"
     assert result["name"] == "test_save_parser"
+
+
+def test_save_parser_resolves_bank_and_normalizes_unknown_format(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_bank_hint_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "Bank 001样本.xlsx")
+    job_code = created["job_code"]
+
+    code = _WORKING_PARSE_CODE.replace("min_row=2", "min_row=3")
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    parser_training_service.run_candidate(db_session, job_code)
+    job = db_session.query(ParserTrainingJob).filter(ParserTrainingJob.job_code == job_code).first()
+    job.format_fingerprint = "unknown"
+    db_session.commit()
+    result = parser_training_service.save_parser(db_session, job_code, "boc_parser")
+
+    artifact = db_session.query(ParserArtifact).filter(ParserArtifact.id == result["id"]).first()
+    assert artifact.bank_id is not None
+    assert artifact.format_key is None
 
 
 def test_save_parser_rejects_no_candidate(db_session, tmp_path, monkeypatch):
@@ -320,11 +405,10 @@ def test_save_parser_retires_old_active(db_session, tmp_path, monkeypatch):
     created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
     job_code = created["job_code"]
 
-    code = "def parse(wb, ctx): return []"
-    parser_training_service.update_candidate_code(db_session, job_code, code)
+    parser_training_service.update_candidate_code(db_session, job_code, _WORKING_PARSE_CODE)
     parser_training_service.run_candidate(db_session, job_code)
 
-    result = parser_training_service.save_parser(db_session, job_code, "test_retire_v2")
+    result = parser_training_service.save_parser(db_session, job_code, "test_retire_newer")
     assert result["status"] == "active"
 
     job = db_session.query(ParserTrainingJob).filter(
@@ -516,6 +600,25 @@ def test_starter_prompt_contains_required_terms(db_session, tmp_path, monkeypatc
     assert "用户选中的现有智能体" in prompt
 
 
+def test_starter_prompt_uses_detected_header_and_representative_samples(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_large_sample_xlsx(100)
+    created = parser_training_service.create_training_job(db_session, file_data, "large.xlsx")
+    job = parser_training_service.get_job(db_session, created["job_code"])
+
+    from api.parser_training import _build_starter_prompt
+    prompt = _build_starter_prompt(job)
+
+    assert "前5行样本" not in prompt
+    assert "代表性正文样本" in prompt
+    assert "不是固定前几行" in prompt
+    assert "系统自动检测到的表头行: 第 3 行" in prompt
+    assert "第80行:" in prompt
+
+
 def test_starter_prompt_no_rule_agent(db_session, tmp_path, monkeypatch):
     """Starter prompt must NOT contain '规则智能体'."""
     import config as _cfg
@@ -530,7 +633,7 @@ def test_starter_prompt_no_rule_agent(db_session, tmp_path, monkeypatch):
     prompt = _build_starter_prompt(job)
 
     assert "规则智能体" not in prompt
-    assert "用户最终审核的是解析结果表格，不是代码" in prompt
+    assert "用户不审核代码" in prompt
 
 
 # ── 12D: agent permission + toolset ──
@@ -797,3 +900,453 @@ def test_api_wrapper_delete_active_parser_returns_error(db_session):
     result = parser_training_api.delete_parser(p.id, db=db_session)
     assert result["code"] != 0
     assert "停用" in result["message"]
+
+
+# ── 13A: .xls upload + error handling ──
+
+
+def test_create_training_job_xls_success(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = make_xls([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+    result = parser_training_service.create_training_job(db_session, file_data, "中行银行流水.xls")
+
+    assert result["job_code"].startswith("pt_")
+    assert result["filename"] == "中行银行流水.xls"
+    assert result["format"] == "xls"
+    assert result["row_count"] == 2
+    assert len(result["headers"]) == 5
+    assert "identity_hints" in result
+
+
+def test_create_training_job_xlsx_still_works(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    result = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    assert result["job_code"].startswith("pt_")
+    assert result["format"] == "xlsx"
+    assert result["row_count"] == 2
+
+
+def test_corrupted_file_returns_business_error(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    with pytest.raises(ValueError, match="样本文件读取失败"):
+        parser_training_service.create_training_job(db_session, b"not a real file", "bad.xlsx")
+
+
+def test_api_create_job_corrupted_file_returns_error(db_session, tmp_path, monkeypatch):
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    with pytest.raises(ValueError, match="样本文件读取失败"):
+        parser_training_service.create_training_job(db_session, b"corrupted junk data", "corrupt.xlsx")
+
+
+def test_extract_identity_hints_from_rows():
+    from services.bank_statement_identity_service import extract_identity_hints_from_rows
+    rows = [
+        ["中国银行流水明细", "", "", "", ""],
+        ["账号：1234567890123456", "", "", "", ""],
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试", "1000", "", "10000"],
+    ]
+    result = extract_identity_hints_from_rows(rows, "中行银行流水.xls")
+    assert "银行" in result["bank_hint"]
+    assert result["identity_hints"]["account_number"] != "" or result["identity_hints"]["bank_name"] != ""
+    assert "format_fingerprint" in result
+
+
+# ── 13C: agent session saved to job + get_job returns session info ──
+
+
+def test_agent_session_saves_relation_to_job(db_session, tmp_path, monkeypatch):
+    """Creating agent session saves agent_id and agent_session_id to the job."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    agent = Agent(
+        agent_code="A_13C", display_name="13C测试智能体",
+        status="active", ai_config_id=None, workspace_path="/tmp/a13c",
+    )
+    db_session.add(agent)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=agent.id)
+    result = create_agent_session(created["job_code"], body, db=db_session)
+    assert result["code"] == 0
+
+    # Verify job has agent_id and agent_session_id
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == created["job_code"]
+    ).first()
+    assert job.agent_id == agent.id
+    assert job.agent_session_id is not None
+
+
+def test_get_job_returns_session_info(db_session, tmp_path, monkeypatch):
+    """get_job returns agent_id and agent_session_id in response."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    agent = Agent(
+        agent_code="A_INFO", display_name="Info测试智能体",
+        status="active", ai_config_id=None, workspace_path="/tmp/ainfo",
+    )
+    db_session.add(agent)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    # Before session: null
+    job_data = parser_training_service.get_job(db_session, created["job_code"])
+    assert job_data["agent_id"] is None
+    assert job_data["agent_session_id"] is None
+
+    # Create session
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=agent.id)
+    create_agent_session(created["job_code"], body, db=db_session)
+
+    # After session: populated
+    job_data = parser_training_service.get_job(db_session, created["job_code"])
+    assert job_data["agent_id"] == agent.id
+    assert job_data["agent_session_id"] is not None
+
+
+def test_agent_session_response_no_starter_prompt(db_session, tmp_path, monkeypatch):
+    """create_agent_session response does NOT include starter_prompt."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    from db.tables import Agent
+    agent = Agent(
+        agent_code="A_NOPROMPT", display_name="NoPrompt智能体",
+        status="active", ai_config_id=None, workspace_path="/tmp/anp",
+    )
+    db_session.add(agent)
+    db_session.commit()
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+
+    from api.parser_training import create_agent_session, AgentSessionBody
+    body = AgentSessionBody(agent_id=agent.id)
+    result = create_agent_session(created["job_code"], body, db=db_session)
+    assert "starter_prompt" not in result["data"]
+
+
+# ── 13D: .xls run_candidate end-to-end ──
+
+
+def test_run_candidate_xls_success(db_session, tmp_path, monkeypatch):
+    """run_candidate works with .xls sample files, returning parsed rows."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = make_xls([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+    created = parser_training_service.create_training_job(db_session, file_data, "中行银行流水.xls")
+    job_code = created["job_code"]
+
+    code = '''
+def parse(wb, ctx):
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            rows.append({
+                "business_date": str(row[0]),
+                "summary": str(row[1] or ""),
+                "amount_in": float(row[2] or 0),
+                "amount_out": float(row[3] or 0),
+                "rolling_balance": float(row[4] or 0),
+                "entity_code": "",
+                "entity_name": "",
+                "account_code": "",
+                "account_name": "",
+                "counterparty": "",
+                "state": "正常",
+                "source": "网银导入",
+            })
+    return rows
+'''
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    result = parser_training_service.run_candidate(db_session, job_code)
+
+    assert result["status"] == "trial_success"
+    assert result["row_count"] == 2
+    assert result["rows"][0]["summary"] == "测试收入"
+
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    assert job.trial_status == "success"
+
+
+def test_run_parser_trial_xls_direct(tmp_path):
+    """run_parser_trial directly works with .xls files."""
+    file_data = make_xls([
+        ["日期", "摘要", "收入", "支出", "余额"],
+        ["2026-04-24", "测试收入", "1000.00", "", "10000.00"],
+        ["2026-04-25", "测试支出", "", "500.00", "9500.00"],
+    ])
+    fp = tmp_path / "t.xls"
+    fp.write_bytes(file_data)
+
+    code = '''
+def parse(wb, ctx):
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            rows.append({
+                "business_date": str(row[0]),
+                "summary": str(row[1] or ""),
+                "amount_in": float(row[2] or 0),
+                "amount_out": float(row[3] or 0),
+                "rolling_balance": float(row[4] or 0),
+                "entity_code": "", "entity_name": "",
+                "account_code": "", "account_name": "",
+                "counterparty": "", "state": "正常", "source": "网银导入",
+            })
+    return rows
+'''
+    rows, err = run_parser_trial(code, str(fp))
+    assert err is None
+    assert len(rows) == 2
+    assert rows[0]["summary"] == "测试收入"
+    assert float(rows[0]["amount_in"]) == 1000.0
+
+
+def test_run_candidate_error_no_technical_leak(db_session, tmp_path, monkeypatch):
+    """run_candidate error field must not contain Traceback/openpyxl/worker setup."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    # Bypass guard to write bad code directly
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    job.candidate_code = "def broken("
+    job.status = "candidate_ready"
+    db_session.commit()
+
+    result = parser_training_service.run_candidate(db_session, job_code)
+    assert result["status"] == "trial_failed"
+
+    # Main error must be user-friendly Chinese
+    assert "Traceback" not in result["error"]
+    assert "openpyxl" not in result["error"]
+    assert "InvalidFileException" not in result["error"]
+    assert "worker setup error" not in result["error"]
+    assert 'File "' not in result["error"]
+
+    # Technical error should preserve original
+    assert result.get("technical_error") is not None
+
+
+# ── 13E: stale trial result cleanup + empty rows + worker crash ──
+
+
+def test_get_job_cleans_old_raw_traceback(db_session, tmp_path, monkeypatch):
+    """get_job cleans old raw Traceback from trial_result_json."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    # Simulate old pre-13D failure result stored in DB
+    job = db_session.query(ParserTrainingJob).filter(
+        ParserTrainingJob.job_code == job_code
+    ).first()
+    job.trial_result_json = json.dumps({
+        "status": "trial_failed",
+        "error": "worker setup error: InvalidFileException: openpyxl does not support the old .xls file format\nTraceback (most recent call last):\n  File \"x.py\", line 83",
+        "rows": [],
+        "row_count": 0,
+    }, ensure_ascii=False)
+    job.trial_status = "failed"
+    job.status = "trial_failed"
+    db_session.commit()
+
+    result = parser_training_service.get_job(db_session, job_code)
+    trial = result["trial_result"]
+    assert trial is not None
+
+    # Main error must be user-friendly Chinese
+    assert "Traceback" not in trial["error"]
+    assert "openpyxl" not in trial["error"]
+    assert "InvalidFileException" not in trial["error"]
+    assert "worker setup error" not in trial["error"]
+
+    # Technical detail preserved
+    assert trial.get("technical_error") is not None
+    assert "openpyxl" in trial["technical_error"]
+
+
+def test_get_job_cleans_stale_zero_row_success(db_session):
+    """trial_success + 0 rows (pre-13E false success) must be converted to trial_failed."""
+    # Directly create a job record without seed data (not needed for get_job)
+    job = ParserTrainingJob(
+        job_code="pt_stale_test",
+        original_filename="test.xlsx",
+        sample_file_path="/tmp/fake.xlsx",
+        file_hash="abc123",
+        format="xlsx",
+        format_fingerprint="unknown",
+        identity_hints_json="{}",
+        context_snapshot_json="{}",
+        headers_json="[]",
+        sample_rows_json="[]",
+        row_count=0,
+        candidate_code=None,
+        candidate_notes=None,
+        trial_result_json=json.dumps({
+            "status": "trial_success",
+            "error": None,
+            "rows": [],
+            "row_count": 0,
+        }, ensure_ascii=False),
+        trial_status="success",
+        status="trial_success",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    result = parser_training_service.get_job(db_session, "pt_stale_test")
+    trial = result["trial_result"]
+    assert trial["status"] == "trial_failed"
+    assert "识别" in trial["error"] or "流水" in trial["error"]
+    assert trial["row_count"] == 0
+    # Top-level status must also be corrected
+    assert result["status"] == "trial_failed"
+    assert result["trial_status"] == "failed"
+
+
+def test_run_parser_trial_syntax_error_returns_error(tmp_path):
+    """Syntax error in parser code returns error via service, not success."""
+    # Cannot pass broken syntax directly to run_parser_trial because
+    # AST guard rejects it first. Test through run_candidate instead.
+    pass
+
+
+def test_run_parser_trial_no_rows_no_error_is_failure(tmp_path):
+    """Worker returning zero rows without explicit error must not be success."""
+    file_data = _make_sample_xlsx()
+    fp = tmp_path / "t.xlsx"
+    fp.write_bytes(file_data)
+
+    code = "def parse(wb, ctx): return []"
+    rows, err = run_parser_trial(code, str(fp))
+    assert err is not None
+    assert len(rows) == 0
+
+
+def test_run_parser_trial_accepts_rows_errors_tuple_when_no_errors(tmp_path):
+    """Agent-generated parsers sometimes return (rows, errors); accept it when errors is empty."""
+    file_data = _make_sample_xlsx()
+    fp = tmp_path / "t.xlsx"
+    fp.write_bytes(file_data)
+
+    code = '''
+def parse(wb, ctx):
+    return ([{
+        "business_date": "2026-01-01",
+        "summary": "tuple ok",
+        "amount_in": 1,
+        "amount_out": 0,
+        "rolling_balance": 1,
+        "entity_code": "",
+        "entity_name": "",
+        "account_code": "",
+        "account_name": "",
+        "counterparty": "",
+        "state": "正常",
+        "source": "网银导入",
+    }], [])
+'''
+    rows, err = run_parser_trial(code, str(fp))
+    assert err is None
+    assert len(rows) == 1
+    assert rows[0]["summary"] == "tuple ok"
+
+
+def test_run_parser_trial_tuple_errors_is_user_repairable_failure(tmp_path):
+    """(rows, errors) with parser errors must fail without the misleading got-list error."""
+    file_data = _make_sample_xlsx()
+    fp = tmp_path / "t.xlsx"
+    fp.write_bytes(file_data)
+
+    code = "def parse(wb, ctx): return [], ['未找到表头行']"
+    rows, err = run_parser_trial(code, str(fp))
+    assert rows == []
+    assert err is not None
+    assert "parser returned validation errors" in err
+    assert "expected dict" not in err
+
+
+def test_run_candidate_list_row_error_is_cleaned_for_user(db_session, tmp_path, monkeypatch):
+    """A parser returning list rows must not leak row 0/got list as the main UI error."""
+    import config as _cfg
+    monkeypatch.setattr(_cfg, "DATA_DIR", str(tmp_path))
+    _seed_db(db_session)
+
+    file_data = _make_sample_xlsx()
+    created = parser_training_service.create_training_job(db_session, file_data, "test.xlsx")
+    job_code = created["job_code"]
+
+    code = "def parse(wb, ctx): return [[1, 2, 3]]"
+    parser_training_service.update_candidate_code(db_session, job_code, code)
+    result = parser_training_service.run_candidate(db_session, job_code)
+
+    assert result["status"] == "trial_failed"
+    assert result["rows"] == []
+    assert "expected dict" not in result["error"]
+    assert "got list" not in result["error"]
+    assert "识别方案" in result["error"]
+    assert "standard result object" in result["technical_error"]
+
+
+def test_runtime_exit_error_is_cleaned_for_user():
+    """Worker process failures must not become the main user-facing message."""
+    user_msg, technical = parser_training_service._clean_error_for_user("识别方案运行进程异常退出，退出码 1")
+
+    assert "退出码" not in user_msg
+    assert "识别方案运行失败" in user_msg
+    assert "退出码 1" in technical

@@ -1,4 +1,4 @@
-"""fund 包 · §C5 基元库与 Agent 引擎 (v3)
+"""fund 包 · §C5 基元库与 Agent 引擎 (current)
 
 禁止在本包内放 artifacts 代码（artifacts 由 Agent 产出，位于 backend/fund/artifacts/）。
 本包仅提供：
