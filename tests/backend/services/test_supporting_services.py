@@ -30,6 +30,7 @@ from services import (
     home_service,
     manual_flow_service,
     manual_scheme_service,
+    master_data_batch,
     master_data_service,
     report_template_service,
     reset_service,
@@ -218,10 +219,15 @@ def test_dashboard_and_home_services_return_workbench_state(db_session, chart_of
 
 
 def test_auth_service_default_user_login_token_and_password_change(db_session):
-    user = auth_service.get_or_create_default_user(db_session)
-    logged_in = auth_service.authenticate(db_session, "admin", "admin123")
+    original_password = "known-admin-password"
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(auth_service, "_generate_random_password", lambda: original_password)
+        user = auth_service.get_or_create_default_user(db_session)
+
+    logged_in = auth_service.authenticate(db_session, "admin", original_password)
     payload = auth_service.decode_token(logged_in["token"])
-    changed, message = auth_service.change_password(db_session, user.id, "admin123", "new-password")
+    changed, message = auth_service.change_password(db_session, user.id, original_password, "new-password")
 
     assert logged_in["user"]["username"] == "admin"
     assert payload["username"] == "admin"
@@ -326,9 +332,36 @@ def test_backup_service_lists_and_rejects_unsafe_paths(tmp_path, monkeypatch):
             backup_service._safe_extract(zf, str(tmp_path / "restore"))
 
 
-def test_master_data_batch_import_accounts_creates_master_records(db_session):
+def test_master_data_batch_import_accounts_creates_master_records(db_session, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        master_data_batch,
+        "_column_meta_path",
+        lambda: str(tmp_path / "column_meta.json"),
+    )
+
     file_data = make_xlsx([
-        [f"h{i}" for i in range(20)],
+        [
+            "核算组织",
+            "单位名称",
+            "单位简称",
+            "单位编码",
+            "开户银行",
+            "银行账号",
+            "银行账户",
+            "账户编号",
+            "账户后四位",
+            "账户类型",
+            "资金类型",
+            "是否网银",
+            "录入方式",
+            "币种",
+            "期初余额",
+            "余额日期",
+            "是否纳入日报",
+            "是否允许手工录入",
+            "状态",
+            "备注",
+        ],
         [
             "Batch Division",
             "Batch Entity Ltd",
