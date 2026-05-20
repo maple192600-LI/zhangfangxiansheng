@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent 定位与银行导入后续开发计划</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18202b;
+      --muted: #667085;
+      --line: #d9e1ea;
+      --band: #f4f7fb;
+      --accent: #176c72;
+      --accent-soft: #e3f3f1;
+      --warn: #8a4b12;
+      --warn-soft: #fff4df;
+      --ok: #276749;
+      --ok-soft: #e9f7ef;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      color: var(--ink);
+      background: #ffffff;
+      line-height: 1.75;
+    }
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 24px 72px;
+    }
+    header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 28px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    .lead {
+      margin: 0;
+      max-width: 880px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+    h2 {
+      margin: 36px 0 14px;
+      padding-top: 8px;
+      font-size: 24px;
+      border-top: 1px solid var(--line);
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 26px 0 10px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    p { margin: 10px 0; }
+    .callout {
+      margin: 18px 0;
+      padding: 16px 18px;
+      background: var(--accent-soft);
+      border-left: 5px solid var(--accent);
+    }
+    .warning {
+      background: var(--warn-soft);
+      border-left-color: var(--warn);
+    }
+    .ok {
+      background: var(--ok-soft);
+      border-left-color: var(--ok);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 22px;
+      font-size: 15px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: var(--band); }
+    ol, ul { padding-left: 24px; }
+    li { margin: 4px 0; }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f0f3f6;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .step {
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      min-height: 88px;
+    }
+    .step strong { display: block; color: var(--accent); }
+    .section {
+      padding: 8px 0;
+    }
+    @media (max-width: 640px) {
+      .page { padding: 28px 16px 56px; }
+      h1 { font-size: 27px; }
+      h2 { font-size: 21px; }
+      table { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Agent 定位与银行导入后续开发计划</h1>
+      <p class="lead">给非开发者看的项目治理说明：Agent 是副驾驶，解析器负责读文件，规则负责填报表。当前最重要的是把上传、预览、确认、入账、报表这条闭环做稳。</p>
+    </header>
+
+    <section class="callout">
+      <strong>一句话结论：</strong>继续推动 Agent，但只让它起草方案，不让它替你做财务决定。任何数据进入正式账之前，都必须经过预览、校验和用户确认。
+    </section>
+
+    <section class="section">
+      <h2>Agent 的定位</h2>
+      <p>Agent 的位置是“副驾驶”，不是“老板”。它可以看样本、起草读取方案、解释处理理由、把候选方案交给系统试跑。</p>
+      <p>它不能绕过确认入账，不能猜单位和账户，不能自己批准自己生成的方案，也不能变成很多个专用助手来绕开现有架构。</p>
+      <div class="callout ok">
+        判断 Agent 是否够用，只看三件事：能不能减少重复规则编写，结果能不能试跑和退回，能不能守住用户确认。
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>解析器和规则的分工</h2>
+      <table>
+        <thead>
+          <tr><th>名称</th><th>大白话解释</th><th>发生时间</th><th>保存位置</th><th>确认方式</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>解析器</td>
+            <td>读懂上传文件的说明书，把银行流水或手工 Excel 的行列读成系统认识的数据。</td>
+            <td>上传文件之后，进入预览之前。</td>
+            <td>银行流水规则页对应的后端保存表。</td>
+            <td>用户看试跑结果后保存启用。</td>
+          </tr>
+          <tr>
+            <td>规则</td>
+            <td>填报表的说明书，把已经确认的数据填进指定报表模板。</td>
+            <td>数据确认之后，生成报表时。</td>
+            <td>报表模板相关的后端保存表。</td>
+            <td>用户看模板填写结果后保存启用。</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>解析器只读文件，不决定最终账户归属。账户归属要靠账号、户名、银行名、开户行、单位名和主数据共同判断。规则只填报表，不重新解析原始银行文件。</p>
+    </section>
+
+    <section class="section">
+      <h2>银行流水闭环</h2>
+      <div class="flow">
+        <div class="step"><strong>1. 主数据</strong>维护单位、银行、账户、别名。</div>
+        <div class="step"><strong>2. 上传文件</strong>用户上传银行流水。</div>
+        <div class="step"><strong>3. 提取线索</strong>系统读取账号、户名、银行名、开户行、表头。</div>
+        <div class="step"><strong>4. 匹配解析器</strong>找到能读这种文件格式的说明书。</div>
+        <div class="step"><strong>5. 缺失时生成</strong>去银行流水规则页上传样本，Agent 起草，系统试跑。</div>
+        <div class="step"><strong>6. 解析预览</strong>文件被读成可检查的数据表。</div>
+        <div class="step"><strong>7. 归属匹配</strong>系统根据主数据判断单位和账户。</div>
+        <div class="step"><strong>8. 用户确认</strong>异常必须修正后才能提交。</div>
+        <div class="step"><strong>9. 正式数据</strong>确认后写入资金数据，再生成报表。</div>
+      </div>
+      <div class="callout warning">
+        不可省略：先有主数据，先预览再入账，没有线索必须让用户处理。
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>后续开发顺序</h2>
+      <h3>第一阶段：治理污染和口径统一</h3>
+      <p>清掉会误导 AI Coding 工具的旧阶段说法，关闭或改写 GitHub 上仍开放的误导项，明确当前只追真实资金日报闭环。</p>
+      <p><strong>验收：</strong>active docs、测试、样本、脚本、协作任务目录搜索不到旧阶段编号表达；剩余命中只允许是外部接口地址、模型商品名、数据库历史迁移文件名或物理表名。</p>
+
+      <h3>第二阶段：上传结果预览表格可用化</h3>
+      <p>让预览表格像财务人熟悉的 Excel 一样能快速修正数据，支持编辑、复制粘贴、键盘移动、异常筛选和重新校验。</p>
+      <p><strong>验收：</strong>异常未处理时不能提交；多行粘贴不乱位；修改后校验结果能更新。</p>
+
+      <h3>第三阶段：银行流水识别证据可视化</h3>
+      <p>展示系统从文件里提取了什么线索、匹配了哪些主数据、为什么判断为已匹配、有歧义或未匹配。</p>
+      <p><strong>验收：</strong>用户能看懂匹配理由；多个候选账户时系统不自动选；用户修正能沉淀为以后复用的线索。</p>
+
+      <h3>第四阶段：解析器生成流程稳定</h3>
+      <p>银行流水规则页负责维护解析器。上传样本后，Agent 起草读取方案，系统试跑，用户确认后保存启用。</p>
+      <p><strong>验收：</strong>同一银行同一格式的不同账户不需要重复写多套方案；试跑为空、字段错位、金额方向错误时不能保存。</p>
+
+      <h3>第五阶段：报表填写规则执行</h3>
+      <p>让已经确认的资金数据可以填进真实报表模板，并能预览或下载填好的报表。</p>
+      <p><strong>验收：</strong>报表数字能追溯到正式资金数据；模板字段缺失时给出明确错误；失败不会污染正式数据。</p>
+
+      <h3>第六阶段：整体闭环验收</h3>
+      <p>用多银行、多账户、多单位样本证明系统不是演示，而是能承接日常工作。</p>
+      <p><strong>验收：</strong>从上传银行流水到生成报表，全程不需要改代码；错误数据不会绕过预览进入正式资金数据；同类文件第二次上传更省人工。</p>
+    </section>
+
+    <section class="section">
+      <h2>给 AI Coding 工具的任务包</h2>
+      <table>
+        <tbody>
+          <tr><th>目标</th><td>围绕上传银行流水、预览校验、用户确认、正式资金数据、报表生成闭环开发，不新增平行实现。</td></tr>
+          <tr><th>必须读取</th><td><code>docs/README.md</code>、项目状态、产品范围、数据生命周期、前后端地图、银行导入通用化和本文档。</td></tr>
+          <tr><th>先确认事实</th><td>页面是否存在，API 是否被调用，表字段是否真实存在，测试是否覆盖，文档是否与代码冲突。</td></tr>
+          <tr><th>允许修改</th><td>当前任务直接相关的页面、API、service、测试、样本和文档。</td></tr>
+          <tr><th>禁止修改</th><td>不新增专用 Agent，不新增平行上传或报表链路，不跳过预览，不写死单位、账户、银行格式、金额方向。</td></tr>
+          <tr><th>测试方式</th><td>后端单元测试、前端浏览器测试、样本测试、搜索测试。</td></tr>
+          <tr><th>回滚方案</th><td>前后端按文件回退；数据库改动必须有迁移回滚或只读兼容策略；测试数据必须说明清理方式。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="callout ok">
+      <strong>你只需要抓住四个验收问题：</strong>
+      我上传真实文件了吗？我看见识别和匹配理由了吗？我能改、能确认、能阻止错误提交吗？我最终拿到的报表能追溯到确认过的数据吗？
+    </section>
+  </main>
+</body>
+</html>

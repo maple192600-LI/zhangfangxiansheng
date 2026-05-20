@@ -6,7 +6,7 @@ function emptyPreferences() {
 }
 
 export function getPreferenceKey(tableKey) {
-  return `${STORAGE_PREFIX}:${tableKey}:v1`
+  return `${STORAGE_PREFIX}:${tableKey}:current`
 }
 
 export function getPreferences(tableKey) {

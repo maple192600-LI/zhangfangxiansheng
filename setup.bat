@@ -1,6 +1,6 @@
-@echo off
+﻿@echo off
 echo ========================================
-echo   ZhangFang V1 - Setup
+echo   ZhangFang Setup
 echo ========================================
 echo.
 

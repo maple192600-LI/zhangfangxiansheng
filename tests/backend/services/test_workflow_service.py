@@ -216,7 +216,7 @@ def test_list_versions_returns_v1_v2_after_patch(db):
         WorkflowPatchRequest(
             patches=[{"op": "replace_graph", "graph": _graph()}],
             created_by="tester",
-            change_summary="v2",
+            change_summary="second edit",
         ),
     )
     versions = workflow_service.list_workflow_versions(db, created["id"])

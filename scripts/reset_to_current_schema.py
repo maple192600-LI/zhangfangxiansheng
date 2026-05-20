@@ -1,9 +1,9 @@
-"""Reset the local SQLite database to the v3 AI-First schema.
+"""Reset the local SQLite database to the current AI-First schema.
 
-Phase 1 one-shot script:
+One-shot local reset script:
 - keep a dated backup of the current database;
-- drop the current schema, including legacy v2 fund_events columns;
-- run Alembic to rebuild the v3 schema and stamp the head revision.
+- drop the current schema, including legacy fund_events columns;
+- run Alembic to rebuild the current schema and stamp the head revision.
 """
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def main() -> int:
     backup_db()
     drop_current_schema()
     upgrade_to_head()
-    print(f"[OK] SQLite 已重建到 v3 head: {DB_FILE}")
+    print(f"[OK] SQLite 已重建到 current head: {DB_FILE}")
     print(f"[OK] 备份文件: {BACKUP_FILE}")
     return 0
 

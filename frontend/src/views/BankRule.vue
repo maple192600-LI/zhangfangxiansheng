@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="section">
     <div class="section-title">
       <h3>银行流水规则中心</h3>
@@ -63,7 +63,7 @@
 
             <template v-else-if="job.candidate_code && !trialResult">
               <div style="font-size:13px;color:#2f4330;margin-bottom:10px;">
-                智能体已生成一版识别方案，请生成识别结果进行审核。
+                智能体已生成一套识别方案，请生成识别结果进行审核。
               </div>
               <div class="btn-row">
                 <NButton type="primary" @click="runTrial" :loading="trialLoading">生成识别结果</NButton>
@@ -144,7 +144,7 @@
               确认识别结果正确后，为规则命名并保存。保存后银行导入时可自动匹配使用。
             </div>
             <div class="btn-row" style="align-items:center;">
-              <NInput v-model:value="parserName" placeholder="规则名称（如：工商银行标准对账单_v1）" style="max-width: 320px;" />
+              <NInput v-model:value="parserName" placeholder="规则名称（如：工商银行标准对账单）" style="max-width: 320px;" />
               <NButton type="primary" @click="saveRule" :loading="saveLoading" :disabled="!parserName">
                 确认结果正确，保存为可复用规则
               </NButton>
@@ -547,7 +547,7 @@ async function openAgentSession() {
         setTimeout(() => {
           if (chatPanelRef.value) {
             chatPanelRef.value.sendExternal(
-              '请根据当前上传的银行流水样本，先生成一版识别方案。生成后提交到规则中心，我会审核识别结果表。'
+              '请根据当前上传的银行流水样本，先生成一套识别方案。生成后提交到规则中心，我会审核识别结果表。'
             )
           }
         }, 500)

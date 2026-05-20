@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.cleanup_v3_residue import cleanup_v3_residue
+from scripts.cleanup_schema_residue import cleanup_schema_residue
 
 
 def _make_engine(tmp_path):
@@ -14,7 +14,7 @@ def _make_engine(tmp_path):
     return create_engine(f"sqlite:///{db_path}")
 
 
-def test_cleanup_drops_v3_residue_tables_and_writes_log(tmp_path):
+def test_cleanup_drops_schema_residue_tables_and_writes_log(tmp_path):
     engine = _make_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(text("PRAGMA foreign_keys=ON"))
@@ -44,7 +44,7 @@ def test_cleanup_drops_v3_residue_tables_and_writes_log(tmp_path):
             "created_at DATETIME NOT NULL)"
         ))
 
-    dropped = cleanup_v3_residue(engine)
+    dropped = cleanup_schema_residue(engine)
 
     assert dropped == ["parser_artifacts", "rule_artifacts", "template_inference_job"]
     with engine.connect() as conn:
@@ -58,7 +58,7 @@ def test_cleanup_drops_v3_residue_tables_and_writes_log(tmp_path):
         )).one()
 
     assert remaining == []
-    assert log.action == "cleanup_v3_residue"
+    assert log.action == "cleanup_schema_residue"
     assert log.module == "database"
     assert json.loads(log.detail_json) == {
         "dropped_tables": ["parser_artifacts", "rule_artifacts", "template_inference_job"]
@@ -78,7 +78,7 @@ def test_cleanup_is_noop_when_residue_tables_absent(tmp_path):
             "created_at DATETIME NOT NULL)"
         ))
 
-    dropped = cleanup_v3_residue(engine)
+    dropped = cleanup_schema_residue(engine)
 
     assert dropped == []
     with engine.connect() as conn:

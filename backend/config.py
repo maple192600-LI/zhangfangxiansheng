@@ -1,4 +1,4 @@
-"""账房先生 V1 配置"""
+﻿"""账房先生 配置"""
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,7 +17,7 @@ PORT = 8000
 FRONTEND_DIST = os.path.join(BASE_DIR, "..", "frontend", "dist")
 
 # ── 认证配置 ──
-_DEFAULT_SECRET = "zf-v1-default-secret-key-change-in-prod"
+_DEFAULT_SECRET = "zf-default-secret-key-change-in-prod"
 SECRET_KEY = os.environ.get("ZF_SECRET_KEY", _DEFAULT_SECRET)
 TOKEN_EXPIRE_MINUTES = int(os.environ.get("ZF_TOKEN_EXPIRE_MINUTES", "480"))
 

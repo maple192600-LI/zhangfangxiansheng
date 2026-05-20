@@ -162,7 +162,7 @@ def test_get_active_parser_none_when_empty(db_session):
 
 def test_get_active_parser_returns_approved(db_session):
     data = ParserArtifactDraftCreate(
-        name="ICBC_v1", kind=ArtifactKind.bank, account_code="A001",
+        name="ICBC_STANDARD", kind=ArtifactKind.bank, account_code="A001",
         code="#", primitives_imports=[],
     )
     draft = artifact_service.create_parser_draft(db_session, data)
@@ -175,18 +175,18 @@ def test_get_active_parser_returns_approved(db_session):
 
 
 def test_list_parser_versions(db_session):
-    data_v1 = ParserArtifactDraftCreate(
-        name="ICBC_v1", kind=ArtifactKind.bank, account_code="A001",
-        code="# v1", primitives_imports=[],
+    data_old = ParserArtifactDraftCreate(
+        name="ICBC_STANDARD", kind=ArtifactKind.bank, account_code="A001",
+        code="# old", primitives_imports=[],
     )
-    data_v2 = ParserArtifactDraftCreate(
-        name="ICBC_v1", kind=ArtifactKind.bank, account_code="A001",
-        code="# v2", primitives_imports=[],
+    data_current = ParserArtifactDraftCreate(
+        name="ICBC_STANDARD", kind=ArtifactKind.bank, account_code="A001",
+        code="# current", primitives_imports=[],
     )
-    artifact_service.create_parser_draft(db_session, data_v1)
-    artifact_service.create_parser_draft(db_session, data_v2)
+    artifact_service.create_parser_draft(db_session, data_old)
+    artifact_service.create_parser_draft(db_session, data_current)
 
-    versions = artifact_service.list_parser_versions(db_session, "ICBC_v1")
+    versions = artifact_service.list_parser_versions(db_session, "ICBC_STANDARD")
     assert len(versions) == 2
     assert versions[0]["version"] == 2
     assert versions[1]["version"] == 1

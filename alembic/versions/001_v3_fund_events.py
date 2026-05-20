@@ -1,4 +1,4 @@
-﻿"""v3 baseline + CANONICAL_12 fund_events.
+"""baseline + CANONICAL_12 fund_events.
 
 Revision ID: 001_v3_fund_events
 Revises:

@@ -1,4 +1,4 @@
-﻿"""add v3 Fund Agent artifact tables.
+"""add Fund Agent artifact tables.
 
 Revision ID: 002_add_v3_artifacts
 Revises: 001_v3_fund_events

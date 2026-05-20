@@ -1,4 +1,4 @@
-"""Drop v3 residue tables from the current v2 runtime database."""
+"""Drop schema residue tables from the current runtime database."""
 import json
 import os
 import sys
@@ -10,8 +10,8 @@ from sqlalchemy import Engine, create_engine, text
 RESIDUE_TABLES = ("parser_artifacts", "rule_artifacts", "template_inference_job")
 
 
-def cleanup_v3_residue(engine: Engine, tables: Iterable[str] = RESIDUE_TABLES) -> list[str]:
-    """Drop known v3 residue tables and write one operation log when anything changed."""
+def cleanup_schema_residue(engine: Engine, tables: Iterable[str] = RESIDUE_TABLES) -> list[str]:
+    """Drop known schema residue tables and write one operation log when anything changed."""
     table_names = list(tables)
     dropped: list[str] = []
 
@@ -36,7 +36,7 @@ def cleanup_v3_residue(engine: Engine, tables: Iterable[str] = RESIDUE_TABLES) -
                 "(action, module, batch_id, detail_json, created_at) "
                 "VALUES (:action, :module, NULL, :detail_json, :created_at)"
             ), {
-                "action": "cleanup_v3_residue",
+                "action": "cleanup_schema_residue",
                 "module": "database",
                 "detail_json": json.dumps({"dropped_tables": dropped}, ensure_ascii=False),
                 "created_at": datetime.now(),
@@ -56,7 +56,7 @@ def main() -> int:
     from config import DB_PATH
 
     engine = create_engine(f"sqlite:///{DB_PATH}")
-    dropped = cleanup_v3_residue(engine)
+    dropped = cleanup_schema_residue(engine)
     print("dropped:", ", ".join(dropped) if dropped else "none")
     return 0
 

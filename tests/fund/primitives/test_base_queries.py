@@ -167,7 +167,7 @@ def test_account_field_virtual_division_name(primitives_db):
 
 
 def test_account_field_virtual_account_name(primitives_db):
-    # v3 兼容：account_name 对外暴露 = account_alias
+    # 兼容当前结构：account_name 对外暴露 = account_alias
     assert account_field("A001", "account_name") == "工行主户"
 
 

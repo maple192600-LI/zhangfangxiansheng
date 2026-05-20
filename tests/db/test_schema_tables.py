@@ -1,4 +1,4 @@
-"""P0-T2 · v3 新表 DDL + CHECK 约束测试
+"""P0-T2 · 当前结构表 DDL + CHECK 约束测试
 
 覆盖：
     - fund_events §C1 12 列存在且 CANONICAL_12 按契约序
@@ -43,7 +43,7 @@ if str(BACKEND_DIR) not in sys.path:
 def tmp_db_path():
     """临时 SQLite 文件，session 作用域。"""
     with tempfile.TemporaryDirectory() as tmp:
-        yield Path(tmp) / "test_v3.db"
+        yield Path(tmp) / "test_schema.db"
 
 
 @pytest.fixture(scope="module")
@@ -51,9 +51,9 @@ def migrated_engine(tmp_db_path):
     """通过 alembic upgrade head + Base.metadata.create_all 混合建表。
 
     策略：
-        1. 先用 Base.metadata.create_all() 建出 v2 辅助表（entities / accounts / import_batches
+        1. 先用 Base.metadata.create_all() 建出 辅助表（entities / accounts / import_batches
            / report_templates 等 alembic 未覆盖的），否则迁移 001 的 FK 引用 entities 会爆炸。
-        2. 再让 alembic 跑 4 个 v3 迁移，真正落 fund_events / parser_artifacts /
+        2. 再让 alembic 跑 4 个 当前结构迁移，真正落 fund_events / parser_artifacts /
            rule_artifacts / template_inference_job 的契约级 DDL（含 server_default / CHECK）。
 
     好处：raw SQL INSERT 不写 status 也能落 draft 默认值；CHECK 约束与契约严格一致。
@@ -74,13 +74,13 @@ def migrated_engine(tmp_db_path):
         cur.execute("PRAGMA foreign_keys=ON")
         cur.close()
 
-    # 2) 先建所有 ORM 表（含 v2 遗留辅助表 + v3 新表）。随后 alembic 遇到 existing table
+    # 2) 先建所有 ORM 表（含 遗留辅助表 + 当前结构表）。随后 alembic 遇到 existing table
     #    会用 batch_alter_table 重建成契约级 DDL。
     Base.metadata.create_all(engine)
 
-    # 3) 用 alembic 重建 4 张 v3 表，以拿到 server_default 与 CHECK
+    # 3) 用 alembic 重建 4 张 当前结构表，以拿到 server_default 与 CHECK
     # 由于 create_all 已经创建了这些表，我们先 drop 再跑迁移
-    v3_tables = [
+    schema_tables = [
         "template_inference_job",
         "rule_artifacts",
         "parser_artifacts",
@@ -106,7 +106,7 @@ def migrated_engine(tmp_db_path):
         "parser_training_jobs",
     ]
     with engine.begin() as conn:
-        for t in v3_tables:
+        for t in schema_tables:
             conn.execute(text(f"DROP TABLE IF EXISTS {t}"))
 
     from alembic.config import Config
@@ -271,14 +271,14 @@ def test_parser_artifacts_unique_name_version(migrated_engine):
         conn.execute(
             text(
                 "INSERT INTO parser_artifacts (name, kind, version, code, primitives_imports) "
-                "VALUES ('ICBC_v1', 'bank', 1, 'pass', '[]')"
+                "VALUES ('ICBC_STANDARD', 'bank', 1, 'pass', '[]')"
             )
         )
         with pytest.raises(IntegrityError):
             conn.execute(
                 text(
                     "INSERT INTO parser_artifacts (name, kind, version, code, primitives_imports) "
-                    "VALUES ('ICBC_v1', 'bank', 1, 'pass', '[]')"
+                    "VALUES ('ICBC_STANDARD', 'bank', 1, 'pass', '[]')"
                 )
             )
 
@@ -289,7 +289,7 @@ def test_parser_artifacts_unique_name_version(migrated_engine):
 
 
 def test_rule_artifacts_status_enum(migrated_engine):
-    # 先建一个 report_templates 以满足 FK（v2 ORM 的 is_default/status 为 NOT NULL，
+    # 先建一个 report_templates 以满足 FK（legacy ORM 的 is_default/status 为 NOT NULL，
     # ORM-level default 不会转成 SQL server_default，raw INSERT 需显式给值）
     with migrated_engine.begin() as conn:
         conn.execute(

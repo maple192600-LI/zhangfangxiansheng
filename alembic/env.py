@@ -1,4 +1,4 @@
-"""Alembic 运行环境 · 账房先生 v3 baseline
+"""Alembic 运行环境 · 账房先生 current baseline
 
 - 从 backend/config.py 读 DB_PATH
 - 从 backend/db/tables.py 读 metadata（用于 autogenerate 对照）
