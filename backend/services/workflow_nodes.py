@@ -1,4 +1,4 @@
-"""Deterministic workflow node registry."""
+﻿"""Deterministic workflow node registry."""
 from __future__ import annotations
 
 from datetime import date
@@ -259,4 +259,4 @@ node_registry.register("export.excel", _export_excel)
 # data.bank_import   → 依赖 artifact_runtime + 文件上传
 # data.manual_excel  → 依赖 artifact_runtime + 文件上传
 # report.generate    → 依赖 artifact_runtime.run_rule
-# agent.invoke       → V1 禁止
+# agent.invoke       → 当前禁止进入主流程

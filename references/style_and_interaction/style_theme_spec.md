@@ -313,7 +313,7 @@
 
 ## 十四、Design Tokens（从参考原型提取的具体值）
 
-以下色值、间距、圆角、阴影、字体均来自已确认的高保真原型 `templates/frontend/preview_v4_confirmed.html`。前端实现时必须使用这些 CSS 变量，不得硬编码。
+以下色值、间距、圆角、阴影、字体均来自已确认的高保真原型 `templates/frontend/preview_confirmed.html`。前端实现时必须使用这些 CSS 变量，不得硬编码。
 
 ### 1. CSS 变量定义
 

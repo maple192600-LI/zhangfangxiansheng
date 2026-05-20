@@ -1,4 +1,4 @@
-"""报表模板服务 — CRUD + Excel解析 + 默认模板管理"""
+﻿"""报表模板服务 — CRUD + Excel解析 + 默认模板管理"""
 import io
 import json
 import logging
@@ -11,7 +11,7 @@ from sqlalchemy import text
 from db.tables import ReportTemplate
 
 logger = logging.getLogger(__name__)
-logger.info("[report_template_service] xls compat loaded v2")
+logger.info("[report_template_service] xls compat loaded")
 
 
 def _load_workbook_any(file_path: str, data_only: bool = True, read_only: bool = False):

@@ -408,7 +408,7 @@ def test_save_parser_retires_old_active(db_session, tmp_path, monkeypatch):
     parser_training_service.update_candidate_code(db_session, job_code, _WORKING_PARSE_CODE)
     parser_training_service.run_candidate(db_session, job_code)
 
-    result = parser_training_service.save_parser(db_session, job_code, "test_retire_v2")
+    result = parser_training_service.save_parser(db_session, job_code, "test_retire_newer")
     assert result["status"] == "active"
 
     job = db_session.query(ParserTrainingJob).filter(

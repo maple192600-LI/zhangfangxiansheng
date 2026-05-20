@@ -1,4 +1,4 @@
-# 前端地图
+﻿# 前端地图
 
 ## 路由统计
 
@@ -47,19 +47,19 @@
 
 ## Placeholder 路由（26 个）
 
-### V1 禁止（应清理）
+### 当前禁止进入主流程（应清理）
 
 | 路由名 | 路径 | 禁止原因 |
 |--------|------|----------|
-| `ocr-upload` | `/ocr/upload` | OCR 属于 V1 禁止 |
+| `ocr-upload` | `/ocr/upload` | OCR 当前禁止进入主流程 |
 | `ocr-settings` | `/ocr/settings` | 同上 |
-| `invoice-ledger` | `/invoice-ledger` | 发票属 V1 禁止 |
-| `contract-ledger` | `/contract-ledger` | 合同属 V1 禁止 |
-| `loan-ledger` | `/loan-ledger` | 贷款属 V1 禁止 |
+| `invoice-ledger` | `/invoice-ledger` | 发票属 当前禁止进入主流程 |
+| `contract-ledger` | `/contract-ledger` | 合同属 当前禁止进入主流程 |
+| `loan-ledger` | `/loan-ledger` | 贷款当前禁止进入主流程 |
 | `loan-interest` | `/loan-interest` | 同上 |
 | `loan-other-ledger` | `/loan-other-ledger` | 同上 |
 | `loan-other` | `/loan-other` | 同上 |
-| `budget-plan` | `/budget-plan` | 预算属 V1 禁止 |
+| `budget-plan` | `/budget-plan` | 预算当前禁止进入主流程 |
 
 ### 待产品决策
 

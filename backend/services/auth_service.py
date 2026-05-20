@@ -31,7 +31,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_token(user_id: int, username: str) -> str:
     """签发 JWT"""
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "username": username,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRE_MINUTES),
         "iat": datetime.now(timezone.utc),

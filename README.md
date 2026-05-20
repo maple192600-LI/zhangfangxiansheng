@@ -1,4 +1,4 @@
-# 账房先生 ZhangFang V1
+﻿# 账房先生 ZhangFang
 
 面向中国财务人员的本地部署 Agent 驱动财务工作台。
 
@@ -114,7 +114,7 @@ ZF_LOG_LEVEL=INFO
 
 所有开发文档入口：[`docs/README.md`](docs/README.md)
 
-## V1 范围
+## 当前交付范围
 
 **包含：** 主数据中心、银行导入、手工流水双轨、日报生成、导出打印、基础看板、备份回滚、日志、Agent 系统
 

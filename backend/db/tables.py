@@ -470,7 +470,6 @@ class Agent(Base):
     __table_args__ = (Index("idx_agents_v2_status", "status"),)
 
 # 兼容旧代码
-AgentV2 = Agent
 
 
 # ──────────────────────────────────────────
@@ -497,7 +496,6 @@ class Skill(Base):
     __table_args__ = (Index("idx_skills_v2_status", "status"),)
 
 # 兼容旧代码
-SkillV2 = Skill
 
 
 # ──────────────────────────────────────────

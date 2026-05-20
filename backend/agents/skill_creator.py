@@ -55,7 +55,7 @@ def generate_skill_md(
     dependencies: dict = None,
     triggers: list[str] = None,
 ) -> str:
-    """生成标准 SKILL.md 内容（V2 指令式格式）"""
+    """生成标准 SKILL.md 内容（指令式格式）"""
     tools_yaml = "\n".join(f"  - {t}" for t in allowed_tools)
 
     args_yaml = ""

@@ -72,7 +72,7 @@ export const SKINS = {
       '--sidebar-width': '290px'
     }
   },
-  v5: {
+  fresh: {
     label: '新竹',
     cssVars: {
       '--bg': '#f5f2ec',

@@ -8,8 +8,8 @@
       1. 在 tmp dir 创建干净 sqlite
       2. rebind database.engine / SessionLocal
       3. rebind 已 import 的 primitives 模块里的 SessionLocal 变量引用
-      4. 先 Base.metadata.create_all（建 v2 辅助表）
-      5. DROP v3 表 → alembic upgrade head（获得 server_default + CHECK 的真 DDL）
+      4. 先 Base.metadata.create_all（建 辅助表）
+      5. DROP 当前结构表 → alembic upgrade head（获得 server_default + CHECK 的真 DDL）
       6. 播种 divisions / entities / accounts / batch 等父行
 """
 from __future__ import annotations
@@ -78,13 +78,13 @@ def primitives_db(tmp_db_path):
     _ag.SessionLocal = new_sess
 
 
-    # 3) 建 v2 辅助表（create_all）
+    # 3) 建 辅助表（create_all）
     from database import Base  # noqa: F401
     import db.tables  # noqa: F401
     Base.metadata.create_all(new_engine)
 
-    # 4) DROP v3，走 alembic 取得 CHECK + server_default
-    v3_tables = [
+    # 4) DROP current-schema，走 alembic 取得 CHECK + server_default
+    schema_tables = [
         "template_inference_job",
         "rule_artifacts",
         "parser_artifacts",
@@ -111,7 +111,7 @@ def primitives_db(tmp_db_path):
         "parser_training_jobs",
     ]
     with new_engine.begin() as conn:
-        for t in v3_tables:
+        for t in schema_tables:
             conn.execute(text(f"DROP TABLE IF EXISTS {t}"))
 
     from alembic import command

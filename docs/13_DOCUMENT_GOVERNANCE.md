@@ -76,5 +76,5 @@
 - `docs/30_contracts/25_primitives_whitelist.md`
 
 ---
-**校准来源：** `ai_coordination/doc-rebuild/00_master_plan.md`、`AGENTS.md`、`frontend/package.json`、`backend/requirements.txt`、`tools/guards/check_api_inventory.py --list`
+**校准来源：** `AGENTS.md`、`frontend/package.json`、`backend/requirements.txt`、`tools/guards/check_api_inventory.py --list`
 **最后校准：** 2026-05-17

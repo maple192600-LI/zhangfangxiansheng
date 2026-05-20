@@ -1,4 +1,4 @@
-# docs/ · 项目文档主入口
+﻿# docs/ · 项目文档主入口
 
 > **任何 AI 或人类开发者开工前，先读本文件。**
 
@@ -25,7 +25,7 @@
 
 | 文件 | 内容 |
 |------|------|
-| [`01_PRODUCT_SCOPE.md`](01_PRODUCT_SCOPE.md) | 目标用户、V1 包含/禁止、最小闭环边界 |
+| [`01_PRODUCT_SCOPE.md`](01_PRODUCT_SCOPE.md) | 目标用户、当前必须完成/禁止进入主流程、最小闭环边界 |
 
 ### 技术栈
 
@@ -78,6 +78,7 @@
 | 文件 | 内容 |
 |------|------|
 | [`14_BANK_IMPORT_GENERALIZATION.md`](14_BANK_IMPORT_GENERALIZATION.md) | 银行导入通用识别与主数据归属匹配：术语、业务链路、四类文件场景、后续阶段 |
+| [`15_AGENT_IMPORT_DEVELOPMENT_PLAN.md`](15_AGENT_IMPORT_DEVELOPMENT_PLAN.md) | Agent 定位、解析器/规则分工、银行导入闭环后续开发计划 |
 
 ### AI Coding 协作
 

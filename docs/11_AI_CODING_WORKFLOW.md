@@ -112,12 +112,12 @@ Codex                          Claude Code
 
 ```
 ai_coordination/
-└── doc-rebuild/              ← 当前治理工作流
+└── <workstream>/             ← 单次协作工作流
     ├── prompts/              ← 计划文件
     ├── claude_results/       ← 执行结果
     └── codex_reviews/        ← 审查文件（可选）
 ```
 
 ---
-**校准来源：** `ai_coordination/doc-rebuild/00_master_plan.md`、`AGENTS.md`
+**校准来源：** `AGENTS.md`
 **最后校准：** 2026-05-17
