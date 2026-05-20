@@ -106,7 +106,7 @@ def _seed_event(db):
     return entity, account
 
 
-def test_report_queries_use_v2_fund_event_fields_and_relationships():
+def test_report_queries_use_current_fund_event_fields_and_relationships():
     db = _session()
     entity, _account = _seed_event(db)
 
@@ -119,7 +119,7 @@ def test_report_queries_use_v2_fund_event_fields_and_relationships():
     assert income["items"][0]["account_name"] == "基本户"
 
 
-def test_bank_upload_commit_then_daily_report_uses_v2_schema(tmp_path, monkeypatch):
+def test_bank_upload_commit_then_daily_report_uses_current_schema(tmp_path, monkeypatch):
     db = _session()
     entity, account = _seed_event(db)
     db.query(FundEvent).delete()

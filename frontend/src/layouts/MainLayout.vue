@@ -213,7 +213,7 @@ function handleLogout() {
   router.push({ name: 'login' })
 }
 
-// 导航数据 — 严格复刻 preview_v4_confirmed.html 的 navData
+// 导航数据 — 严格复刻 preview_confirmed.html 的 navData
 const navData = {
   '首页': {
     icon: '🏠',

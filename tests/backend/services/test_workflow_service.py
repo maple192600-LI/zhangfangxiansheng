@@ -200,7 +200,7 @@ def test_get_run_nonexistent_returns_none(db):
 # ── list_workflow_versions ─────────────────────
 
 
-def test_list_versions_returns_v1_after_create(db):
+def test_list_versions_returns_initial_revision_after_create(db):
     created = _create(db, code="wf_ver_list")
     versions = workflow_service.list_workflow_versions(db, created["id"])
     assert versions is not None
@@ -208,7 +208,7 @@ def test_list_versions_returns_v1_after_create(db):
     assert versions[0]["version"] == 1
 
 
-def test_list_versions_returns_v1_v2_after_patch(db):
+def test_list_versions_returns_two_revisions_after_patch(db):
     created = _create(db, code="wf_ver_patch")
     workflow_service.apply_workflow_patch(
         db,
